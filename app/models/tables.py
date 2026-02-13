@@ -48,6 +48,18 @@ class SectionOrigin(str, enum.Enum):
     MERGE = "MERGE"
 
 
+class WorkflowRun(Base):
+    __tablename__ = "workflow_run"
+
+    id: Mapped[str] = mapped_column(Text, primary_key=True)
+    project_id: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(Text, nullable=False)
+    sections_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    section_status_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+
+
 class Project(Base):
     __tablename__ = "project"
 

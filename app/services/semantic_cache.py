@@ -4,7 +4,7 @@ import hashlib
 import json
 import threading
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from app.core.config import settings
 
@@ -54,7 +54,7 @@ def get_cache(cache_key: str) -> dict | None:
         record = _CACHE.get(cache_key)
         if not record:
             return None
-        if datetime.utcnow() >= record.expires_at:
+        if datetime.now(UTC) >= record.expires_at:
             _CACHE.pop(cache_key, None)
             return None
         return record.payload
@@ -62,7 +62,10 @@ def get_cache(cache_key: str) -> dict | None:
 
 def set_cache(cache_key: str, payload: dict, ttl_seconds: int = 3600) -> None:
     with _LOCK:
-        _CACHE[cache_key] = CacheRecord(payload=payload, expires_at=datetime.utcnow() + timedelta(seconds=ttl_seconds))
+        _CACHE[cache_key] = CacheRecord(
+            payload=payload,
+            expires_at=datetime.now(UTC) + timedelta(seconds=ttl_seconds),
+        )
 
 
 def invalidate_cache(prefix: str | None = None) -> int:

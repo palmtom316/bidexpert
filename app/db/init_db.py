@@ -8,6 +8,7 @@ def _apply_postgres_runtime_migrations() -> None:
         return
 
     stmts = [
+        "CREATE TABLE IF NOT EXISTS workflow_run (id text PRIMARY KEY, project_id text NOT NULL, status text NOT NULL, sections_json jsonb NOT NULL DEFAULT '{}'::jsonb, section_status_json jsonb NOT NULL DEFAULT '{}'::jsonb, created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now());",
         "ALTER TABLE project ADD COLUMN IF NOT EXISTS sensitivity sensitivity_level NOT NULL DEFAULT 'PUBLIC_OK';",
         "ALTER TABLE project ADD COLUMN IF NOT EXISTS token_budget_total int NOT NULL DEFAULT 500000;",
         "ALTER TABLE project ADD COLUMN IF NOT EXISTS token_budget_used int NOT NULL DEFAULT 0;",

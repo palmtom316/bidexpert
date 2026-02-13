@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import uuid
 
+from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.db.session import SessionLocal
@@ -35,7 +36,8 @@ def reserve_budget_persistent(project_id: str | None, estimated_tokens: int) -> 
 
     try:
         with SessionLocal() as db:
-            project = db.get(Project, project_uuid)
+            stmt = select(Project).where(Project.id == project_uuid).with_for_update()
+            project = db.execute(stmt).scalar_one_or_none()
             if not project:
                 return reserve_budget(project_id, estimated_tokens)
 

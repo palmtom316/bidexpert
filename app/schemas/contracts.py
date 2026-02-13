@@ -93,6 +93,25 @@ class EnqueueIngestResponse(BaseModel):
     status: str
 
 
+class BatchIngestDirectoryRequest(BaseModel):
+    directory: str = Field(min_length=1)
+
+
+class BatchIngestDirectoryResponse(BaseModel):
+    status: str
+    total_files: int
+    task_ids: list[str]
+
+
+class SectionFeedbackUpsertRequest(BaseModel):
+    outline_id: str
+    section_key: str
+    section_title: str
+    expert_doc_id: str
+    content_md: str = Field(min_length=1)
+    industry_tag: str | None = None
+
+
 class TaskStatusResponse(BaseModel):
     task_id: str
     status: str
@@ -134,6 +153,12 @@ class EvidenceSearchResponse(BaseModel):
     hits: list[EvidenceSearchHit]
 
 
+class HistoricalExtractRequest(BaseModel):
+    expert_doc_id: str
+    text: str = Field(min_length=1)
+    industry_tag: str | None = None
+
+
 class DraftGenerationRequest(BaseModel):
     requirement_id: str
     requirement_text: str
@@ -158,6 +183,7 @@ class DraftGenerationResponse(BaseModel):
 
 
 class WorkflowSectionRequest(BaseModel):
+    outline_id: str
     project_id: str
     section_key: str
     section_title: str
@@ -169,6 +195,46 @@ class WorkflowSectionResponse(BaseModel):
     section_key: str
     status: str
     task_ids: dict[str, str]
+
+
+class SectionConfirmRequest(BaseModel):
+    outline_id: str
+    section_key: str
+    approved: bool
+
+
+class SectionConfirmResponse(BaseModel):
+    outline_id: str
+    section_key: str
+    status: str
+
+
+class OutlineSection(BaseModel):
+    section_key: str
+    section_title: str
+    requirement_texts: list[str] = Field(default_factory=list)
+
+
+class OutlineCreateRequest(BaseModel):
+    project_id: str
+    tender_text: str = Field(min_length=1)
+
+
+class OutlineCreateResponse(BaseModel):
+    outline_id: str
+    project_id: str
+    status: str
+    sections: list[OutlineSection]
+
+
+class OutlineConfirmRequest(BaseModel):
+    outline_id: str
+    approved: bool
+
+
+class OutlineConfirmResponse(BaseModel):
+    outline_id: str
+    status: str
 
 
 class HealthResponse(BaseModel):

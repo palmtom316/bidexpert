@@ -5,11 +5,14 @@ import json
 from pathlib import Path
 from uuid import uuid4
 
+from celery.exceptions import CeleryError
 from fastapi import APIRouter, File, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 
 from app.core.config import settings
 from app.schemas.contracts import (
+    BatchIngestDirectoryRequest,
+    BatchIngestDirectoryResponse,
     DraftGenerationRequest,
     DraftGenerationResponse,
     EnqueueIngestResponse,
@@ -19,15 +22,23 @@ from app.schemas.contracts import (
     GateValidationRequest,
     GateValidationResponse,
     HealthResponse,
+    HistoricalExtractRequest,
     IngestUploadResponse,
+    OutlineConfirmRequest,
+    OutlineConfirmResponse,
+    OutlineCreateRequest,
+    OutlineCreateResponse,
     ParseTenderRequest,
     ParseTenderResponse,
     PricingFuseRequest,
     PricingFuseResponse,
     SanitizeRequest,
     SanitizeResponse,
+    SectionFeedbackUpsertRequest,
     RenderWordRequest,
     RenderWordResponse,
+    SectionConfirmRequest,
+    SectionConfirmResponse,
     TaskStatusResponse,
     WorkflowSectionRequest,
     WorkflowSectionResponse,
@@ -40,11 +51,21 @@ from app.services.pricing_guard import detect_pricing_content
 from app.services.qdrant_store import QdrantStore, to_search_hits
 from app.services.semantic_cache import invalidate_cache
 from app.services.tender_parser import parse_tender_requirements
+from app.services.knowledge_standardizer import standardize_section_feedback_chunks
+from app.services.workflow_runs import (
+    confirm_outline_run,
+    confirm_section_run,
+    create_outline_run,
+    get_outline_status,
+    get_section_status,
+    mark_section_pending,
+)
 from app.services.word_renderer import render_word
 from app.workers.tasks import (
     generate_draft_task,
     get_task_result,
     ingest_document_task,
+    extract_upsert_historical_task,
     render_export_task,
     requirement_extract_task,
     section_generate_task,
@@ -53,6 +74,10 @@ from app.workers.tasks import (
 )
 
 router = APIRouter()
+
+
+def _service_unavailable() -> HTTPException:
+    return HTTPException(status_code=503, detail="service temporarily unavailable")
 
 
 @router.get("/health", response_model=HealthResponse)
@@ -68,6 +93,30 @@ def parse_tender(payload: ParseTenderRequest) -> ParseTenderResponse:
 
     parsed = parse_tender_requirements(payload.text)
     return ParseTenderResponse(requirements=parsed.requirements, status=parsed.status)
+
+
+@router.post("/v1/workflow/outline", response_model=OutlineCreateResponse)
+def create_outline(payload: OutlineCreateRequest) -> OutlineCreateResponse:
+    blocked, reasons = detect_pricing_content(payload.tender_text)
+    if blocked:
+        raise HTTPException(status_code=400, detail={"status": "BLOCKED_PRICING_CONTENT", "reasons": reasons})
+
+    outline_id, sections, status = create_outline_run(payload.project_id, payload.tender_text)
+    return OutlineCreateResponse(
+        outline_id=outline_id,
+        project_id=payload.project_id,
+        status=status,
+        sections=sections,
+    )
+
+
+@router.post("/v1/workflow/outline/confirm", response_model=OutlineConfirmResponse)
+def confirm_outline(payload: OutlineConfirmRequest) -> OutlineConfirmResponse:
+    try:
+        status = confirm_outline_run(payload.outline_id, payload.approved)
+        return OutlineConfirmResponse(outline_id=payload.outline_id, status=status)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.post("/v1/tender/ingest-upload", response_model=IngestUploadResponse)
@@ -98,8 +147,31 @@ async def enqueue_ingest(file: UploadFile = File(...)) -> EnqueueIngestResponse:
     try:
         task = ingest_document_task.delay(str(target))
         return EnqueueIngestResponse(task_id=task.id, status="PENDING")
-    except Exception as exc:  # noqa: BLE001
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except CeleryError as exc:
+        raise _service_unavailable() from exc
+    except OSError as exc:
+        raise _service_unavailable() from exc
+
+
+@router.post("/v1/tasks/ingest-directory", response_model=BatchIngestDirectoryResponse)
+def enqueue_ingest_directory(payload: BatchIngestDirectoryRequest) -> BatchIngestDirectoryResponse:
+    directory = Path(payload.directory)
+    if not directory.exists() or not directory.is_dir():
+        raise HTTPException(status_code=400, detail="directory not found")
+
+    pdf_files = [item for item in directory.rglob("*") if item.is_file() and item.suffix.lower() == ".pdf"]
+    if not pdf_files:
+        return BatchIngestDirectoryResponse(status="PENDING", total_files=0, task_ids=[])
+
+    task_ids: list[str] = []
+    try:
+        for file_path in sorted(pdf_files):
+            task = ingest_document_task.delay(str(file_path))
+            task_ids.append(task.id)
+    except (CeleryError, RuntimeError, ConnectionError, TimeoutError, OSError) as exc:
+        raise _service_unavailable() from exc
+
+    return BatchIngestDirectoryResponse(status="PENDING", total_files=len(pdf_files), task_ids=task_ids)
 
 
 @router.get("/v1/tasks/{task_id}", response_model=TaskStatusResponse)
@@ -162,6 +234,18 @@ def validate_generation(payload: GateValidationRequest) -> GateValidationRespons
 
 @router.post("/v1/generation/draft", response_model=DraftGenerationResponse)
 def generate_draft(payload: DraftGenerationRequest) -> DraftGenerationResponse:
+    blocked, reasons = detect_pricing_content(payload.requirement_text)
+    if blocked:
+        return DraftGenerationResponse(
+            generated_text="BLOCKED_PRICING_CONTENT",
+            evidence_ids=[],
+            status="BLOCKED_PRICING_CONTENT",
+            missing_sentences=["pricing_blocked"],
+            coverage=0.0,
+            warnings=reasons,
+            coverage_map={},
+        )
+
     try:
         return generate_draft_with_retrieval(
             requirement_id=payload.requirement_id,
@@ -171,12 +255,18 @@ def generate_draft(payload: DraftGenerationRequest) -> DraftGenerationResponse:
             industry_tag=payload.industry_tag,
             tender_template_id=payload.tender_template_id,
         )
-    except Exception as exc:  # noqa: BLE001
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except (RuntimeError, ConnectionError, TimeoutError, OSError) as exc:
+        raise _service_unavailable() from exc
 
 
 @router.post("/v1/tasks/generate-draft", response_model=EnqueueIngestResponse)
 def enqueue_generate_draft(payload: DraftGenerationRequest) -> EnqueueIngestResponse:
+    blocked, reasons = detect_pricing_content(payload.requirement_text)
+    if blocked:
+        raise HTTPException(status_code=400, detail={"status": "BLOCKED_PRICING_CONTENT", "reasons": reasons})
+
     task = generate_draft_task.delay(
         payload.requirement_id,
         payload.requirement_text,
@@ -190,7 +280,17 @@ def enqueue_generate_draft(payload: DraftGenerationRequest) -> EnqueueIngestResp
 
 @router.post("/v1/workflow/section", response_model=WorkflowSectionResponse)
 def enqueue_section_workflow(payload: WorkflowSectionRequest) -> WorkflowSectionResponse:
+    outline_status = get_outline_status(payload.outline_id)
+    if outline_status is None:
+        raise HTTPException(status_code=404, detail="outline not found")
+    if outline_status != "OUTLINE_CONFIRMED":
+        raise HTTPException(status_code=400, detail="outline not confirmed")
+
     req_text = "。".join(payload.requirement_texts)
+    blocked, reasons = detect_pricing_content(req_text)
+    if blocked:
+        raise HTTPException(status_code=400, detail={"status": "BLOCKED_PRICING_CONTENT", "reasons": reasons})
+
     extract_task = requirement_extract_task.delay(req_text)
     generate_task = section_generate_task.delay(
         payload.project_id,
@@ -200,6 +300,7 @@ def enqueue_section_workflow(payload: WorkflowSectionRequest) -> WorkflowSection
     )
     validate_task = section_validate_task.delay("", [], [])
     render_task = render_export_task.delay([])
+    mark_section_pending(payload.outline_id, payload.section_key)
 
     return WorkflowSectionResponse(
         section_key=payload.section_key,
@@ -213,13 +314,60 @@ def enqueue_section_workflow(payload: WorkflowSectionRequest) -> WorkflowSection
     )
 
 
+@router.post("/v1/workflow/section/confirm", response_model=SectionConfirmResponse)
+def confirm_section(payload: SectionConfirmRequest) -> SectionConfirmResponse:
+    try:
+        status = confirm_section_run(payload.outline_id, payload.section_key, payload.approved)
+        return SectionConfirmResponse(
+            outline_id=payload.outline_id,
+            section_key=payload.section_key,
+            status=status,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
 @router.post("/v1/evidence/upsert", response_model=EnqueueIngestResponse)
 def evidence_upsert(payload: EvidenceUpsertRequest) -> EnqueueIngestResponse:
     try:
         task = upsert_evidence_task.delay(payload.expert_doc_id, [item.model_dump() for item in payload.chunks])
         return EnqueueIngestResponse(task_id=task.id, status="PENDING")
-    except Exception as exc:  # noqa: BLE001
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except (CeleryError, RuntimeError, ConnectionError, TimeoutError, OSError) as exc:
+        raise _service_unavailable() from exc
+
+
+@router.post("/v1/evidence/extract-upsert", response_model=EnqueueIngestResponse)
+def evidence_extract_upsert(payload: HistoricalExtractRequest) -> EnqueueIngestResponse:
+    try:
+        task = extract_upsert_historical_task.delay(payload.expert_doc_id, payload.text, payload.industry_tag)
+        return EnqueueIngestResponse(task_id=task.id, status="PENDING")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except (CeleryError, RuntimeError, ConnectionError, TimeoutError, OSError) as exc:
+        raise _service_unavailable() from exc
+
+
+@router.post("/v1/evidence/feedback-upsert", response_model=EnqueueIngestResponse)
+def feedback_upsert_section(payload: SectionFeedbackUpsertRequest) -> EnqueueIngestResponse:
+    section_status = get_section_status(payload.outline_id, payload.section_key)
+    if section_status != "SECTION_CONFIRMED":
+        raise HTTPException(status_code=400, detail="section not confirmed")
+
+    blocked, reasons = detect_pricing_content(payload.content_md)
+    if blocked:
+        raise HTTPException(status_code=400, detail={"status": "BLOCKED_PRICING_CONTENT", "reasons": reasons})
+
+    chunks = standardize_section_feedback_chunks(
+        outline_id=payload.outline_id,
+        section_key=payload.section_key,
+        section_title=payload.section_title,
+        content_md=payload.content_md,
+        industry_tag=payload.industry_tag,
+    )
+    task = upsert_evidence_task.delay(payload.expert_doc_id, [item.model_dump() for item in chunks])
+    return EnqueueIngestResponse(task_id=task.id, status="PENDING")
 
 
 @router.post("/v1/evidence/search", response_model=EvidenceSearchResponse)
@@ -228,8 +376,10 @@ def evidence_search(payload: EvidenceSearchRequest) -> EvidenceSearchResponse:
         store = QdrantStore()
         hits = store.search(query=payload.query, top_k=payload.top_k, industry_tag=payload.industry_tag)
         return EvidenceSearchResponse(hits=to_search_hits(hits))
-    except Exception as exc:  # noqa: BLE001
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except (RuntimeError, ConnectionError, TimeoutError, OSError) as exc:
+        raise _service_unavailable() from exc
 
 
 @router.post("/v1/cache/invalidate", response_model=PricingFuseResponse)

@@ -114,35 +114,7 @@ def generate_draft_with_retrieval(
         )
 
     ok, budget_remaining = reserve_budget_persistent(project_id=project_id, estimated_tokens=input_tokens + output_tokens)
-    if not ok:
-        log_llm_call(
-            project_id=project_id,
-            model_name=LLM_MODEL,
-            purpose="SECTION_GENERATE",
-            evidence_ids=merged_evidence_ids,
-            prompt_text=requirement_text,
-            input_tokens=input_tokens,
-            output_tokens=0,
-            latency_ms=int((perf_counter() - begin) * 1000),
-            budget_remaining=budget_remaining,
-            retry_count=retry_count,
-            fallback_count=fallback_count,
-            cache_hit=False,
-            pricing_blocked=False,
-        )
-        return DraftGenerationResponse(
-            generated_text="BUDGET_EXCEEDED",
-            evidence_ids=merged_evidence_ids,
-            status="BUDGET_EXCEEDED",
-            llm_provider=LLM_PROVIDER,
-            llm_model=LLM_MODEL,
-            missing_sentences=["budget_exceeded"],
-            coverage=0.0,
-            budget_remaining=budget_remaining,
-            cache_hit=False,
-            warnings=[],
-            coverage_map=coverage_map,
-        )
+    budget_warning = "budget_exceeded_non_blocking" if not ok else None
 
     result = run_three_gates(
         generated_text=generated_text,
@@ -206,7 +178,7 @@ def generate_draft_with_retrieval(
         coverage=result.coverage,
         budget_remaining=budget_remaining,
         cache_hit=False,
-        warnings=warnings + sanitize.warnings,
+        warnings=warnings + sanitize.warnings + ([budget_warning] if budget_warning else []),
         coverage_map=coverage_map,
     )
 

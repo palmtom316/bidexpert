@@ -8,6 +8,7 @@ from app.core.config import settings
 from app.schemas.contracts import EvidenceUpsertItem
 from app.services.evidence_validator import run_three_gates
 from app.services.generation_pipeline import generate_draft_with_retrieval
+from app.services.historical_extractor import extract_evidence_chunks_from_text
 from app.services.pdf_ingest import ingest_pdf_bytes
 from app.services.qdrant_store import QdrantStore
 from app.services.tender_parser import parse_tender_requirements
@@ -92,6 +93,20 @@ def upsert_evidence_task(self, expert_doc_id: str, chunks: list[dict]) -> dict: 
     store = QdrantStore()
     chunk_objs = [EvidenceUpsertItem(**chunk) for chunk in chunks]
     count = store.upsert_chunks(expert_doc_id=expert_doc_id, chunks=chunk_objs)
+    return {"status": "SUCCEEDED", "upserted": count}
+
+
+@celery_app.task(bind=True, name="tasks.extract_upsert_historical", max_retries=settings.task_max_retries)
+def extract_upsert_historical_task(
+    self,
+    expert_doc_id: str,
+    text: str,
+    industry_tag: str | None = None,
+) -> dict:  # type: ignore[no-untyped-def]
+    self.update_state(state="PROGRESS", meta={"stage": "EXTRACT_HISTORICAL"})
+    store = QdrantStore()
+    chunks = extract_evidence_chunks_from_text(text=text, industry_tag=industry_tag)
+    count = store.upsert_chunks(expert_doc_id=expert_doc_id, chunks=chunks)
     return {"status": "SUCCEEDED", "upserted": count}
 
 
