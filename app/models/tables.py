@@ -42,6 +42,12 @@ class JobStatus(str, enum.Enum):
     CANCELLED = "CANCELLED"
 
 
+class SectionOrigin(str, enum.Enum):
+    AI = "AI"
+    HUMAN = "HUMAN"
+    MERGE = "MERGE"
+
+
 class Project(Base):
     __tablename__ = "project"
 
@@ -51,6 +57,11 @@ class Project(Base):
     description: Mapped[str | None] = mapped_column(Text)
     industry_tag: Mapped[str | None] = mapped_column(Text)
     customer_tag: Mapped[str | None] = mapped_column(Text)
+    sensitivity: Mapped[SensitivityLevel] = mapped_column(
+        Enum(SensitivityLevel, name="sensitivity_level"), default=SensitivityLevel.PUBLIC_OK
+    )
+    token_budget_total: Mapped[int] = mapped_column(Integer, default=500000)
+    token_budget_used: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
 
@@ -149,6 +160,11 @@ class EvidenceChunk(Base):
     excerpt_text: Mapped[str] = mapped_column(Text, nullable=False)
     excerpt_hash: Mapped[str | None] = mapped_column(Text)
     location: Mapped[dict | None] = mapped_column(JSON)
+    source_locator: Mapped[dict | None] = mapped_column(JSON)
+    valid_to: Mapped[Date | None] = mapped_column(Date)
+    sensitivity_level: Mapped[SensitivityLevel] = mapped_column(
+        Enum(SensitivityLevel, name="sensitivity_level"), default=SensitivityLevel.PUBLIC_OK
+    )
     quality_score: Mapped[float] = mapped_column(Numeric(5, 2), default=0)
     forbidden_tags: Mapped[list[str]] = mapped_column(ARRAY(Text), default=list)
     qdrant_point_id: Mapped[str | None] = mapped_column(Text)
@@ -200,13 +216,32 @@ class SectionContent(Base):
     version_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("generation_version.id", ondelete="CASCADE"), nullable=False
     )
+    parent_section_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("section_content.id", ondelete="SET NULL")
+    )
     section_key: Mapped[str] = mapped_column(Text, nullable=False)
     section_title: Mapped[str] = mapped_column(Text, nullable=False)
     content_md: Mapped[str] = mapped_column(Text, nullable=False)
     content_json: Mapped[dict | None] = mapped_column(JSON)
     requirement_codes: Mapped[list[str]] = mapped_column(ARRAY(String), default=list)
     evidence_ids: Mapped[list[uuid.UUID]] = mapped_column(ARRAY(UUID(as_uuid=True)), default=list)
+    origin: Mapped[SectionOrigin] = mapped_column(Enum(SectionOrigin, name="section_origin"), default=SectionOrigin.AI)
+    edit_summary: Mapped[str | None] = mapped_column(Text)
+    created_by: Mapped[str | None] = mapped_column(Text)
     has_placeholders: Mapped[bool] = mapped_column(default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+
+
+class SectionRevision(Base):
+    __tablename__ = "section_revision"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    base_section_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("section_content.id", ondelete="CASCADE"), nullable=False
+    )
+    rev_no: Mapped[int] = mapped_column(Integer, nullable=False)
+    editor: Mapped[str] = mapped_column(Text, nullable=False)
+    patch_diff: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
 
 
@@ -237,7 +272,7 @@ class AuditLog(Base):
     actor_user_id: Mapped[str] = mapped_column(Text, nullable=False)
     action: Mapped[str] = mapped_column(Text, nullable=False)
     target_id: Mapped[str | None] = mapped_column(Text)
-    metadata: Mapped[dict] = mapped_column(JSON, default=dict)
+    metadata_json: Mapped[dict] = mapped_column("metadata", JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
 
 
@@ -259,4 +294,9 @@ class LLMCallLog(Base):
     input_tokens: Mapped[int | None] = mapped_column(Integer)
     output_tokens: Mapped[int | None] = mapped_column(Integer)
     latency_ms: Mapped[int | None] = mapped_column(Integer)
+    budget_remaining: Mapped[int | None] = mapped_column(Integer)
+    retry_count: Mapped[int] = mapped_column(Integer, default=0)
+    fallback_count: Mapped[int] = mapped_column(Integer, default=0)
+    cache_hit: Mapped[bool] = mapped_column(default=False)
+    pricing_blocked: Mapped[bool] = mapped_column(default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)

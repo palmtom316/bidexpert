@@ -223,3 +223,45 @@ CREATE TABLE IF NOT EXISTS llm_call_log (
 
 CREATE INDEX IF NOT EXISTS idx_llm_project_time ON llm_call_log(project_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_llm_model_purpose ON llm_call_log(model_name, purpose);
+
+-- v3.2 governance/resilience extensions (idempotent)
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'section_origin') THEN
+    CREATE TYPE section_origin AS ENUM ('AI', 'HUMAN', 'MERGE');
+  END IF;
+END$$;
+
+ALTER TABLE project
+  ADD COLUMN IF NOT EXISTS sensitivity sensitivity_level NOT NULL DEFAULT 'PUBLIC_OK',
+  ADD COLUMN IF NOT EXISTS token_budget_total int NOT NULL DEFAULT 500000,
+  ADD COLUMN IF NOT EXISTS token_budget_used int NOT NULL DEFAULT 0;
+
+ALTER TABLE evidence_chunk
+  ADD COLUMN IF NOT EXISTS source_locator jsonb,
+  ADD COLUMN IF NOT EXISTS valid_to date,
+  ADD COLUMN IF NOT EXISTS sensitivity_level sensitivity_level NOT NULL DEFAULT 'PUBLIC_OK';
+
+ALTER TABLE section_content
+  ADD COLUMN IF NOT EXISTS parent_section_id uuid REFERENCES section_content(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS origin section_origin NOT NULL DEFAULT 'AI',
+  ADD COLUMN IF NOT EXISTS edit_summary text,
+  ADD COLUMN IF NOT EXISTS created_by text;
+
+CREATE TABLE IF NOT EXISTS section_revision (
+  id                 uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  base_section_id    uuid NOT NULL REFERENCES section_content(id) ON DELETE CASCADE,
+  rev_no             int NOT NULL,
+  editor             text NOT NULL,
+  patch_diff         text NOT NULL,
+  created_at         timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_section_revision_base ON section_revision(base_section_id, rev_no DESC);
+
+ALTER TABLE llm_call_log
+  ADD COLUMN IF NOT EXISTS budget_remaining int,
+  ADD COLUMN IF NOT EXISTS retry_count int NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS fallback_count int NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS cache_hit boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS pricing_blocked boolean NOT NULL DEFAULT false;

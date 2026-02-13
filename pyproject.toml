@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "bidexpert"
 version = "0.1.0"
@@ -14,7 +18,14 @@ dependencies = [
   "python-docx>=1.1.2",
   "docxtpl>=0.19.0",
   "python-multipart>=0.0.19",
-  "rapidfuzz>=3.11.0"
+  "rapidfuzz>=3.11.0",
+  "celery>=5.4.0",
+  "redis>=5.2.1",
+  "qdrant-client>=1.12.1",
+  "pypdf>=5.1.0",
+  "pymupdf>=1.25.1",
+  "pillow>=11.0.0",
+  "pytesseract>=0.3.13"
 ]
 
 [project.optional-dependencies]
@@ -31,3 +42,6 @@ pythonpath = ["."]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+
+[tool.setuptools.packages.find]
+include = ["app*"]

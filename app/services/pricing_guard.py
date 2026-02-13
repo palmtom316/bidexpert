@@ -15,8 +15,8 @@ KEYWORDS = {
     "报价表",
 }
 
-CURRENCY_PATTERN = re.compile(r"(?:¥|RMB|USD|CNY|\\$)")
-NUMBER_PATTERN = re.compile(r"\\d+(?:\\.\\d+)?")
+CURRENCY_PATTERN = re.compile(r"(?:¥|RMB|USD|CNY|\$)")
+NUMBER_PATTERN = re.compile(r"\d+(?:\.\d+)?")
 
 
 def detect_pricing_content(text: str) -> tuple[bool, list[str]]:

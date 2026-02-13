@@ -1,44 +1,62 @@
-# BidExpert (Stage 1)
+# BidExpert (v3.2 Enterprise Aligned)
 
-基于 `AI_Tender_System_v2.2_Enhanced_Development_Spec_with_SQL.md` 的第一阶段可运行实现。
+基于 `AI_Tender_System_Technical_Whitepaper_v3.2_Enterprise.md` 的企业级实现。
 
 ## 已实现能力
 
-- PostgreSQL Schema（含版本化、审计、回滚基础）
-- 招标文本分块与 requirement 抽取
-- 报价内容熔断（关键词 + 数值密度）
+- PostgreSQL Schema（版本化、审计、回滚基础）
+- 招标文本拆解与 requirement 抽取
+- 报价熔断（关键词 + 货币 + 数字密度）
 - 三道防幻觉闸门（证据绑定、确定性验证、覆盖率）
-- Word 模板占位符渲染
-- FastAPI API 骨架与核心流程接口
+- Word 模板渲染
+- 真实 PDF/OCR 分块（文本提取 + OCR 回退）
+- Celery 章节级异步任务（REQUIREMENT_EXTRACT/SECTION_GENERATE/SECTION_VALIDATE/RENDER_EXPORT）
+- Qdrant 检索链路（upsert/search + payload 过滤 + 有效期约束）
+- Schema 驱动多步 RAG（Requirement 分解 -> 子问题检索 -> 证据合并 -> 生成 -> 校验）
+- 语义缓存（key: industry/template/requirement/evidence/schema）
+- 项目级预算治理（Budget exceeded 阻断）
+- 证据近到期预警（<=30天触发 NEED_HUMAN_INPUT）
 
-## 快速启动
+## 快速启动（Docker）
+
+```bash
+docker compose up -d --build
+```
+
+服务端点：
+- API: `http://127.0.0.1:8001/docs`
+- Qdrant: `http://127.0.0.1:6333/dashboard`
+- Postgres: `127.0.0.1:5433`
+- Redis: `127.0.0.1:6380`
+
+## 本地运行（非 Docker）
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate
 pip install -e .[dev]
 uvicorn app.main:app --reload
+celery -A app.workers.celery_app.celery_app worker --loglevel=INFO
 ```
 
-访问：`http://127.0.0.1:8000/docs`
+## 关键接口
 
-## 使用 PostgreSQL
+- `POST /v1/tender/ingest-upload`: 同步 PDF 分块与 requirement 提取
+- `POST /v1/tasks/ingest-upload`: 异步 PDF 入库任务
+- `GET /v1/tasks/{task_id}`: 查询任务状态
+- `POST /v1/evidence/upsert`: 异步写入 Qdrant evidence chunk
+- `POST /v1/evidence/search`: 检索 evidence
+- `POST /v1/generation/draft`: 可控多步 RAG 生成 + 三闸验证 + 预算/缓存治理
+- `POST /v1/tasks/generate-draft`: 异步草稿生成
+- `POST /v1/workflow/section`: 章节级异步任务编排入口
+- `POST /v1/cache/invalidate`: 缓存失效操作
 
-1. 创建数据库后执行：`sql/schema.sql`
-2. 设置环境变量：
+## 环境变量
 
-```bash
-export BIDEXPERT_DATABASE_URL='postgresql+psycopg://user:password@localhost:5432/bidexpert'
-```
-
-## Docker Compose（本地开发）
-
-```bash
-docker compose up -d
-```
+见 `.env.example`。
 
 ## 注意
 
-- 当前实现按规范强制保留 `NEED_HUMAN_INPUT` 分支。
-- 报价内容命中熔断时禁止继续处理。
-- 仅包含阶段一基础能力，尚未接入真实 OCR/PDF、Qdrant 与异步 Celery worker。
+- OCR 依赖 `tesseract` 系统二进制；若缺失将自动退回非 OCR 文本提取。
+- 证据不足、证据近到期或验证失败时，系统返回 `NEED_HUMAN_INPUT`。
+- 命中报价熔断时，系统阻断处理。

@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 from rapidfuzz import fuzz
 
-SENTENCE_SPLIT = re.compile(r"[。；;!?！？\\n]+")
+SENTENCE_SPLIT = re.compile(r"[。；;!?！？\n]+")
 
 
 @dataclass
@@ -16,7 +16,7 @@ class GateResult:
 
 
 def _normalize(s: str) -> str:
-    return re.sub(r"\\s+", "", s).lower()
+    return re.sub(r"\s+", "", s).lower()
 
 
 def _extract_fact_sentences(text: str) -> list[str]:

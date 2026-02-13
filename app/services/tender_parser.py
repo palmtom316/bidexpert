@@ -5,10 +5,10 @@ from dataclasses import dataclass
 
 from app.schemas.contracts import ParsedRequirement
 
-SENTENCE_SPLIT = re.compile(r"[。；;\\n]+")
+SENTENCE_SPLIT = re.compile(r"[。；;\n]+")
 MUST_KEYWORDS = ["必须", "应当", "不得", "需", "必须满足"]
-SCORE_PATTERN = re.compile(r"(?:评分|分值|得分)\\D{0,5}(\\d+(?:\\.\\d+)?)")
-ANCHOR_PATTERN = re.compile(r"^\\s*(?:第?[一二三四五六七八九十0-9]+[章节条款、.]|\\d+(?:\\.\\d+)+)")
+SCORE_PATTERN = re.compile(r"(?:评分|分值|得分)\D{0,5}(\d+(?:\.\d+)?)")
+ANCHOR_PATTERN = re.compile(r"^\s*(?:第?[一二三四五六七八九十0-9]+[章节条款、.]|\d+(?:\.\d+)+)")
 
 
 @dataclass
@@ -18,7 +18,7 @@ class ParseResult:
 
 
 def _split_pages(text: str) -> list[str]:
-    pages = [p.strip() for p in text.split("\\f") if p.strip()]
+    pages = [p.strip() for p in text.split("\f") if p.strip()]
     return pages if pages else [text]
 
 
