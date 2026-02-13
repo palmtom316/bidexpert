@@ -1,0 +1,30 @@
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      BIDEXPERT_DATABASE_URL: postgresql+psycopg://bidexpert:bidexpert@postgres:5432/bidexpert
+      BIDEXPERT_MIN_MATRIX_COVERAGE: "0.9"
+    depends_on:
+      - postgres
+
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: bidexpert
+      POSTGRES_PASSWORD: bidexpert
+      POSTGRES_DB: bidexpert
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./sql/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+volumes:
+  pgdata:

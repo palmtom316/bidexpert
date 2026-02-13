@@ -1,0 +1,33 @@
+[project]
+name = "bidexpert"
+version = "0.1.0"
+description = "AI assisted tender system stage-1 implementation"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.116.0",
+  "uvicorn[standard]>=0.35.0",
+  "sqlalchemy>=2.0.36",
+  "psycopg[binary]>=3.2.3",
+  "pydantic>=2.10.0",
+  "pydantic-settings>=2.6.1",
+  "python-docx>=1.1.2",
+  "docxtpl>=0.19.0",
+  "python-multipart>=0.0.19",
+  "rapidfuzz>=3.11.0"
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3.3",
+  "httpx>=0.28.1",
+  "ruff>=0.8.3"
+]
+
+[tool.pytest.ini_options]
+testpaths = ["app/tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
