@@ -12,6 +12,9 @@ from app.services.pii_policy import sanitize_outbound_text
 from app.services.rag_flow import decompose_requirement, merge_retrieval, retrieve_for_subrequirements
 from app.services.semantic_cache import build_cache_key, get_cache, set_cache
 
+LLM_PROVIDER = "Qwen"
+LLM_MODEL = "Qwen3-Max"
+
 
 def _compose_draft(requirement_text: str, evidence_texts: list[str]) -> str:
     if not evidence_texts:
@@ -77,7 +80,7 @@ def generate_draft_with_retrieval(
         response = DraftGenerationResponse(**cached, cache_hit=True)
         log_llm_call(
             project_id=project_id,
-            model_name="Qwen3-Max",
+            model_name=LLM_MODEL,
             purpose="SECTION_GENERATE",
             evidence_ids=response.evidence_ids,
             prompt_text=requirement_text,
@@ -114,7 +117,7 @@ def generate_draft_with_retrieval(
     if not ok:
         log_llm_call(
             project_id=project_id,
-            model_name="Qwen3-Max",
+            model_name=LLM_MODEL,
             purpose="SECTION_GENERATE",
             evidence_ids=merged_evidence_ids,
             prompt_text=requirement_text,
@@ -131,6 +134,8 @@ def generate_draft_with_retrieval(
             generated_text="BUDGET_EXCEEDED",
             evidence_ids=merged_evidence_ids,
             status="BUDGET_EXCEEDED",
+            llm_provider=LLM_PROVIDER,
+            llm_model=LLM_MODEL,
             missing_sentences=["budget_exceeded"],
             coverage=0.0,
             budget_remaining=budget_remaining,
@@ -158,7 +163,7 @@ def generate_draft_with_retrieval(
     if sanitize.pricing_blocked:
         log_llm_call(
             project_id=project_id,
-            model_name="Qwen3-Max",
+            model_name=LLM_MODEL,
             purpose="SECTION_GENERATE",
             evidence_ids=merged_evidence_ids,
             prompt_text=requirement_text,
@@ -175,6 +180,8 @@ def generate_draft_with_retrieval(
             generated_text="BLOCKED_PRICING_CONTENT",
             evidence_ids=merged_evidence_ids,
             status="BLOCKED_PRICING_CONTENT",
+            llm_provider=LLM_PROVIDER,
+            llm_model=LLM_MODEL,
             missing_sentences=["pricing_blocked"],
             coverage=0.0,
             budget_remaining=budget_remaining,
@@ -193,6 +200,8 @@ def generate_draft_with_retrieval(
         generated_text=sanitize.text or "NEED_HUMAN_INPUT",
         evidence_ids=merged_evidence_ids,
         status=status,
+        llm_provider=LLM_PROVIDER,
+        llm_model=LLM_MODEL,
         missing_sentences=result.missing_sentences,
         coverage=result.coverage,
         budget_remaining=budget_remaining,
@@ -203,7 +212,7 @@ def generate_draft_with_retrieval(
 
     log_llm_call(
         project_id=project_id,
-        model_name="Qwen3-Max",
+        model_name=LLM_MODEL,
         purpose="SECTION_GENERATE",
         evidence_ids=merged_evidence_ids,
         prompt_text=requirement_text,

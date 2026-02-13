@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BidExpert 专家库工作台</title>
+    <link rel="stylesheet" href="/ui/styles.css" />
+  </head>
+  <body>
+    <header class="ribbon">
+      <div class="brand">
+        <div class="brand-mark">BE</div>
+        <div>
+          <h1>投标专家库工作台</h1>
+          <p>历史投标文件拆解与专家库沉淀</p>
+        </div>
+      </div>
+      <div class="ribbon-actions">
+        <button id="btnHealth" class="btn btn-outline">连接检测</button>
+        <span id="healthBadge" class="badge badge-neutral">未检测</span>
+      </div>
+    </header>
+
+    <main class="layout">
+      <aside class="panel panel-nav">
+        <h2>处理流程</h2>
+        <ol>
+          <li>上传历史标书 PDF</li>
+          <li>自动拆解 requirement</li>
+          <li>异步任务跟踪</li>
+          <li>专家证据入库</li>
+          <li>检索验证与章节生成</li>
+        </ol>
+        <div class="legend">
+          <h3>状态说明</h3>
+          <p><span class="dot dot-ok"></span> 已完成</p>
+          <p><span class="dot dot-run"></span> 处理中</p>
+          <p><span class="dot dot-warn"></span> 人工介入</p>
+        </div>
+      </aside>
+
+      <section class="panel panel-main">
+        <div class="tabs" role="tablist" aria-label="主流程">
+          <button class="tab active" data-tab="tab-ingest">1. 文件拆解</button>
+          <button class="tab" data-tab="tab-task">2. 任务跟踪</button>
+          <button class="tab" data-tab="tab-expert">3. 专家库入库</button>
+          <button class="tab" data-tab="tab-search">4. 检索与生成</button>
+        </div>
+
+        <div id="tab-ingest" class="tab-panel active">
+          <h2>历史标书拆解</h2>
+          <div class="grid-2">
+            <div>
+              <label>选择 PDF 文件</label>
+              <input id="pdfFile" type="file" accept=".pdf" />
+            </div>
+            <div class="btn-group">
+              <button id="btnIngestSync" class="btn btn-primary">同步拆解（立即查看）</button>
+              <button id="btnIngestAsync" class="btn btn-secondary">异步拆解（后台处理）</button>
+            </div>
+          </div>
+          <div class="result-wrap">
+            <h3>拆解结果</h3>
+            <pre id="ingestResult" class="result">等待执行...</pre>
+          </div>
+        </div>
+
+        <div id="tab-task" class="tab-panel">
+          <h2>任务状态跟踪</h2>
+          <div class="grid-2">
+            <div>
+              <label>任务 ID</label>
+              <input id="taskId" type="text" placeholder="粘贴任务 ID" />
+            </div>
+            <div class="btn-group">
+              <button id="btnTaskQuery" class="btn btn-primary">查询一次</button>
+              <button id="btnTaskStream" class="btn btn-secondary">实时跟踪（SSE）</button>
+            </div>
+          </div>
+          <pre id="taskResult" class="result">等待查询...</pre>
+        </div>
+
+        <div id="tab-expert" class="tab-panel">
+          <h2>专家库证据入库</h2>
+          <div class="grid-2">
+            <div>
+              <label>专家文档 ID</label>
+              <input id="expertDocId" type="text" value="doc-001" />
+            </div>
+            <div>
+              <label>行业标签</label>
+              <input id="industryTag" type="text" value="政企" />
+            </div>
+          </div>
+          <label>证据条目（每行一条）</label>
+          <textarea id="expertLines" rows="6">公司具备国家一级资质，具备大型系统集成经验。
+项目团队实施过多个同类项目并通过验收。</textarea>
+          <button id="btnUpsert" class="btn btn-primary">提交入库任务</button>
+          <pre id="expertResult" class="result">等待入库...</pre>
+        </div>
+
+        <div id="tab-search" class="tab-panel">
+          <h2>检索与章节生成</h2>
+          <div class="grid-2">
+            <div>
+              <label>检索问题</label>
+              <input id="searchQuery" type="text" value="国家一级资质和系统集成能力" />
+            </div>
+            <div>
+              <label>项目 ID（预算治理）</label>
+              <input id="projectId" type="text" placeholder="可选，建议 UUID" />
+            </div>
+          </div>
+          <div class="grid-2 llm-panel">
+            <div>
+              <label>LLM 提供方</label>
+              <select id="llmProvider">
+                <option value="Qwen" selected>Qwen（平台托管）</option>
+              </select>
+            </div>
+            <div>
+              <label>LLM 模型</label>
+              <input id="llmModel" type="text" value="Qwen3-Max" readonly />
+            </div>
+          </div>
+          <div class="btn-group">
+            <button id="btnSearch" class="btn btn-primary">检索证据</button>
+            <button id="btnGenerate" class="btn btn-secondary">生成章节草稿</button>
+            <button id="btnSanitize" class="btn btn-outline">文本脱敏预览</button>
+          </div>
+          <p class="hint">说明：阶段一版本使用平台统一 LLM，当前界面展示实时模型信息并在生成结果中回显。</p>
+          <pre id="searchResult" class="result">等待检索...</pre>
+          <pre id="generateResult" class="result">等待生成...</pre>
+        </div>
+      </section>
+    </main>
+
+    <footer class="statusbar">
+      <span>提示：按钮名称与流程顺序和 Windows 办公软件操作习惯保持一致。</span>
+      <span id="clock"></span>
+    </footer>
+
+    <script src="/ui/app.js"></script>
+  </body>
+</html>

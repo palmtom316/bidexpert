@@ -1,6 +1,8 @@
 import logging
 
 from fastapi import FastAPI
+from fastapi.responses import RedirectResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.api.routes import router
 from app.db.init_db import init_db
@@ -9,6 +11,12 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="BidExpert API", version="0.1.0")
 app.include_router(router)
+app.mount("/ui", StaticFiles(directory="app/ui", html=True), name="ui")
+
+
+@app.get("/", include_in_schema=False)
+def root() -> RedirectResponse:
+    return RedirectResponse(url="/ui")
 
 
 @app.on_event("startup")
