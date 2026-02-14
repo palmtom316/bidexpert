@@ -3,103 +3,63 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>BidExpert | 智能投标专家系统</title>
-    <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+    <title>BidExpert 专家库工作台</title>
     <link rel="stylesheet" href="/ui/styles.css" />
   </head>
   <body>
     <header class="ribbon">
       <div class="brand">
-        <div class="brand-mark">
-          <i class="ri-brain-line"></i>
-        </div>
-        <div class="brand-text">
-          <h1>BidExpert</h1>
-          <p>智能投标专家系统 v3.6</p>
+        <div class="brand-mark">BE</div>
+        <div>
+          <h1>投标专家库工作台</h1>
+          <p>历史投标文件拆解与专家库沉淀</p>
         </div>
       </div>
       <div class="ribbon-actions">
-        <button id="btnHealth" class="btn btn-outline">
-          <i class="ri-pulse-line"></i> 连接检测
-        </button>
+        <button id="btnHealth" class="btn btn-outline">连接检测</button>
         <span id="healthBadge" class="badge badge-neutral">未检测</span>
       </div>
     </header>
 
     <main class="layout">
-      <aside class="panel-nav">
-        <div class="nav-section">
-          <h3>工作流程</h3>
-          <ul class="nav-list">
-            <li class="nav-item">
-              <i class="ri-file-upload-line"></i> 上传历史标书
-            </li>
-            <li class="nav-item">
-              <i class="ri-menu-search-line"></i> 自动拆解分析
-            </li>
-            <li class="nav-item">
-              <i class="ri-task-line"></i> 异步任务跟踪
-            </li>
-            <li class="nav-item">
-              <i class="ri-database-2-line"></i> 专家证据入库
-            </li>
-            <li class="nav-item">
-              <i class="ri-search-eye-line"></i> 检索与生成
-            </li>
-          </ul>
-        </div>
-        
+      <aside class="panel panel-nav">
+        <h2>处理流程</h2>
+        <ol>
+          <li>上传历史标书 PDF</li>
+          <li>自动拆解 requirement</li>
+          <li>异步任务跟踪</li>
+          <li>专家证据入库</li>
+          <li>检索验证与章节生成</li>
+        </ol>
         <div class="legend">
-          <div class="nav-section">
-            <h3>状态说明</h3>
-            <div class="legend-item">
-              <span class="dot dot-ok"></span> <span>已完成 / 正常</span>
-            </div>
-            <div class="legend-item">
-              <span class="dot dot-run"></span> <span>处理中 / 运行</span>
-            </div>
-            <div class="legend-item">
-              <span class="dot dot-warn"></span> <span>需人工 / 警告</span>
-            </div>
-          </div>
+          <h3>状态说明</h3>
+          <p><span class="dot dot-ok"></span> 已完成</p>
+          <p><span class="dot dot-run"></span> 处理中</p>
+          <p><span class="dot dot-warn"></span> 人工介入</p>
         </div>
       </aside>
 
-      <section class="panel-main">
+      <section class="panel panel-main">
         <div class="tabs" role="tablist" aria-label="主流程">
-          <button class="tab" data-tab="tab-byok">
-            <i class="ri-key-2-line"></i> BYOK 配置
-          </button>
-          <button class="tab active" data-tab="tab-ingest">
-            <i class="ri-file-text-line"></i> 1. 文件拆解
-          </button>
-          <button class="tab" data-tab="tab-tender-analysis">
-            <i class="ri-file-search-line"></i> 1.5 招标关键分析
-          </button>
-          <button class="tab" data-tab="tab-task">
-            <i class="ri-loader-4-line"></i> 2. 任务跟踪
-          </button>
-          <button class="tab" data-tab="tab-expert">
-            <i class="ri-archive-line"></i> 3. 专家库入库
-          </button>
-          <button class="tab" data-tab="tab-search">
-            <i class="ri-search-2-line"></i> 4. 检索与生成
-          </button>
-          <button class="tab" data-tab="tab-library">
-            <i class="ri-book-read-line"></i> 5. 本地专家库
-          </button>
+          <button class="tab" data-tab="tab-byok">0. BYOK 配置</button>
+          <button class="tab active" data-tab="tab-ingest">1. 文件拆解</button>
+          <button class="tab" data-tab="tab-tender-analysis">1.5 招标关键分析</button>
+          <button class="tab" data-tab="tab-task">2. 任务跟踪</button>
+          <button class="tab" data-tab="tab-expert">3. 专家库入库</button>
+          <button class="tab" data-tab="tab-search">4. 检索与生成</button>
+          <button class="tab" data-tab="tab-library">5. 本地专家库</button>
         </div>
 
         <div id="tab-byok" class="tab-panel">
-          <h2><i class="ri-shield-key-line"></i> BYOK 模型配置</h2>
+          <h2>BYOK 模型配置</h2>
           <div class="grid-2">
             <div>
               <label>项目 ID（UUID）</label>
               <input id="byokProjectId" type="text" placeholder="输入项目 UUID" />
             </div>
             <div class="btn-group">
-              <button id="btnLoadProfiles" class="btn btn-primary"><i class="ri-download-cloud-line"></i> 加载 Profiles</button>
-              <button id="btnLoadPolicy" class="btn btn-secondary"><i class="ri-settings-4-line"></i> 加载绑定策略</button>
+              <button id="btnLoadProfiles" class="btn btn-primary">加载 Profiles</button>
+              <button id="btnLoadPolicy" class="btn btn-secondary">加载绑定策略</button>
             </div>
           </div>
 
@@ -107,16 +67,14 @@
           <div class="grid-2">
             <div>
               <label>Provider</label>
-              <div class="select-wrapper">
-                <select id="providerName">
-                  <option value="qwen">qwen</option>
-                  <option value="openai">openai</option>
-                  <option value="deepseek">deepseek</option>
-                  <option value="doubao">doubao</option>
-                  <option value="gemini">gemini</option>
-                  <option value="glm">glm</option>
-                </select>
-              </div>
+              <select id="providerName">
+                <option value="qwen">qwen</option>
+                <option value="openai">openai</option>
+                <option value="deepseek">deepseek</option>
+                <option value="doubao">doubao</option>
+                <option value="gemini">gemini</option>
+                <option value="glm">glm</option>
+              </select>
             </div>
             <div>
               <label>默认模型</label>
@@ -139,8 +97,8 @@
           <label>API Key</label>
           <input id="providerApiKey" type="password" placeholder="输入 API Key（不会回显）" />
           <div class="btn-group">
-            <button id="btnCreateProfile" class="btn btn-primary"><i class="ri-add-line"></i> 创建 Profile</button>
-            <button id="btnTestProfile" class="btn btn-outline"><i class="ri-test-tube-line"></i> 测试选中 Profile</button>
+            <button id="btnCreateProfile" class="btn btn-primary">创建 Profile</button>
+            <button id="btnTestProfile" class="btn btn-outline">测试选中 Profile</button>
           </div>
 
           <h3>项目模型绑定策略</h3>
@@ -168,22 +126,22 @@
             </div>
           </div>
           <div class="btn-group">
-            <button id="btnBindPolicy" class="btn btn-secondary"><i class="ri-save-line"></i> 保存绑定策略</button>
-            <button id="btnSyncProjectId" class="btn btn-outline"><i class="ri-arrow-left-right-line"></i> 同步到生成项目 ID</button>
+            <button id="btnBindPolicy" class="btn btn-secondary">保存绑定策略</button>
+            <button id="btnSyncProjectId" class="btn btn-outline">同步到生成项目 ID</button>
           </div>
           <pre id="byokResult" class="result">等待 BYOK 操作...</pre>
         </div>
 
         <div id="tab-ingest" class="tab-panel active">
-          <h2><i class="ri-file-pdf-line"></i> 历史标书拆解</h2>
+          <h2>历史标书拆解</h2>
           <div class="grid-2">
             <div>
               <label>选择 PDF 文件</label>
               <input id="pdfFile" type="file" accept=".pdf" />
             </div>
             <div class="btn-group">
-              <button id="btnIngestSync" class="btn btn-primary"><i class="ri-refresh-line"></i> 同步拆解（立即查看）</button>
-              <button id="btnIngestAsync" class="btn btn-secondary"><i class="ri-timer-line"></i> 异步拆解（后台处理）</button>
+              <button id="btnIngestSync" class="btn btn-primary">同步拆解（立即查看）</button>
+              <button id="btnIngestAsync" class="btn btn-secondary">异步拆解（后台处理）</button>
             </div>
           </div>
           <div class="result-wrap">
@@ -193,7 +151,7 @@
         </div>
 
         <div id="tab-tender-analysis" class="tab-panel">
-          <h2><i class="ri-file-chart-line"></i> 招标文件拆解与关键分析</h2>
+          <h2>招标文件拆解与关键分析</h2>
           <div class="grid-2">
             <div>
               <label>项目 ID（可选，建议 UUID）</label>
@@ -205,8 +163,8 @@
             </div>
           </div>
           <div class="btn-group">
-            <button id="btnTenderAnalyze" class="btn btn-primary"><i class="ri-upload-cloud-line"></i> 上传并分析</button>
-            <button id="btnTenderRuns" class="btn btn-secondary"><i class="ri-history-line"></i> 查询分析记录</button>
+            <button id="btnTenderAnalyze" class="btn btn-primary">上传并分析</button>
+            <button id="btnTenderRuns" class="btn btn-secondary">查询分析记录</button>
           </div>
           <div class="grid-2">
             <div>
@@ -214,8 +172,8 @@
               <select id="analysisRunSelect"></select>
             </div>
             <div class="btn-group">
-              <button id="btnTenderDetail" class="btn btn-outline"><i class="ri-eye-line"></i> 查看分析详情</button>
-              <button id="btnTenderSyncProject" class="btn btn-outline"><i class="ri-arrow-right-line"></i> 同步项目 ID 到生成页</button>
+              <button id="btnTenderDetail" class="btn btn-outline">查看分析详情</button>
+              <button id="btnTenderSyncProject" class="btn btn-outline">同步项目 ID 到生成页</button>
             </div>
           </div>
           <div id="tenderInsightView" class="insight-view hidden"></div>
@@ -223,22 +181,22 @@
         </div>
 
         <div id="tab-task" class="tab-panel">
-          <h2><i class="ri-list-check"></i> 任务状态跟踪</h2>
+          <h2>任务状态跟踪</h2>
           <div class="grid-2">
             <div>
               <label>任务 ID</label>
               <input id="taskId" type="text" placeholder="粘贴任务 ID" />
             </div>
             <div class="btn-group">
-              <button id="btnTaskQuery" class="btn btn-primary"><i class="ri-search-line"></i> 查询一次</button>
-              <button id="btnTaskStream" class="btn btn-secondary"><i class="ri-broadcast-line"></i> 实时跟踪（SSE）</button>
+              <button id="btnTaskQuery" class="btn btn-primary">查询一次</button>
+              <button id="btnTaskStream" class="btn btn-secondary">实时跟踪（SSE）</button>
             </div>
           </div>
           <pre id="taskResult" class="result">等待查询...</pre>
         </div>
 
         <div id="tab-expert" class="tab-panel">
-          <h2><i class="ri-archive-drawer-line"></i> 专家库证据入库</h2>
+          <h2>专家库证据入库</h2>
           <div class="grid-2">
             <div>
               <label>专家文档 ID</label>
@@ -252,14 +210,12 @@
           <label>证据条目（每行一条）</label>
           <textarea id="expertLines" rows="6">公司具备国家一级资质，具备大型系统集成经验。
 项目团队实施过多个同类项目并通过验收。</textarea>
-          <div class="btn-group">
-            <button id="btnUpsert" class="btn btn-primary"><i class="ri-save-3-line"></i> 提交入库任务</button>
-          </div>
+          <button id="btnUpsert" class="btn btn-primary">提交入库任务</button>
           <pre id="expertResult" class="result">等待入库...</pre>
         </div>
 
         <div id="tab-search" class="tab-panel">
-          <h2><i class="ri-search-eye-line"></i> 检索与章节生成</h2>
+          <h2>检索与章节生成</h2>
           <div class="grid-2">
             <div>
               <label>检索问题</label>
@@ -283,18 +239,18 @@
             </div>
           </div>
           <div class="btn-group">
-            <button id="btnSearch" class="btn btn-primary"><i class="ri-search-line"></i> 检索证据</button>
-            <button id="btnGenerate" class="btn btn-secondary"><i class="ri-magic-line"></i> 生成章节草稿</button>
-            <button id="btnSanitize" class="btn btn-outline"><i class="ri-shield-check-line"></i> 文本脱敏预览</button>
+            <button id="btnSearch" class="btn btn-primary">检索证据</button>
+            <button id="btnGenerate" class="btn btn-secondary">生成章节草稿</button>
+            <button id="btnSanitize" class="btn btn-outline">文本脱敏预览</button>
           </div>
           <div id="reviewRiskBanner" class="risk-banner hidden"></div>
-          <p class="hint"><i class="ri-information-line"></i> 说明：阶段一版本使用平台统一 LLM，当前界面展示实时模型信息并在生成结果中回显。</p>
+          <p class="hint">说明：阶段一版本使用平台统一 LLM，当前界面展示实时模型信息并在生成结果中回显。</p>
           <pre id="searchResult" class="result">等待检索...</pre>
           <pre id="generateResult" class="result">等待生成...</pre>
         </div>
 
         <div id="tab-library" class="tab-panel">
-          <h2><i class="ri-book-2-line"></i> 本地专家库（历史投标文件）</h2>
+          <h2>本地专家库（历史投标文件）</h2>
           <div class="grid-2">
             <div>
               <label>项目 ID（可选）</label>
@@ -335,12 +291,12 @@
             </div>
           </div>
           <div class="btn-group">
-            <button id="btnLibraryIngest" class="btn btn-primary"><i class="ri-database-2-line"></i> 入库（拆解 + Embedding）</button>
-            <button id="btnLibraryDocs" class="btn btn-secondary"><i class="ri-list-check-2"></i> 查询文档列表</button>
+            <button id="btnLibraryIngest" class="btn btn-primary">入库（拆解 + Embedding）</button>
+            <button id="btnLibraryDocs" class="btn btn-secondary">查询文档列表</button>
           </div>
 
           <h3>结构化资料入库</h3>
-          <p class="hint"><i class="ri-information-line"></i> 每行一条，可分别导入：规范、公司业绩、公司资质、项目管理人员资质及业绩。</p>
+          <p class="hint">每行一条，可分别导入：规范、公司业绩、公司资质、项目管理人员资质及业绩。</p>
           <div class="grid-2">
             <div>
               <label>规范条目</label>
@@ -362,7 +318,7 @@
             </div>
           </div>
           <div class="btn-group">
-            <button id="btnLibraryStructuredIngest" class="btn btn-primary"><i class="ri-table-line"></i> 结构化资料入库</button>
+            <button id="btnLibraryStructuredIngest" class="btn btn-primary">结构化资料入库</button>
           </div>
 
           <div class="grid-2">
@@ -371,8 +327,8 @@
               <select id="libraryDocSelect"></select>
             </div>
             <div class="btn-group">
-              <button id="btnLibraryChunks" class="btn btn-outline"><i class="ri-file-list-line"></i> 查看文档 Chunks</button>
-              <button id="btnLibrarySyncSearch" class="btn btn-outline"><i class="ri-arrow-right-line"></i> 同步行业标签到检索页</button>
+              <button id="btnLibraryChunks" class="btn btn-outline">查看文档 Chunks</button>
+              <button id="btnLibrarySyncSearch" class="btn btn-outline">同步行业标签到检索页</button>
             </div>
           </div>
           <pre id="libraryResult" class="result">等待专家库操作...</pre>
@@ -381,7 +337,7 @@
     </main>
 
     <footer class="statusbar">
-      <span><i class="ri-information-line"></i> 提示：系统已就绪。所有操作将被审计。</span>
+      <span>提示：按钮名称与流程顺序和 Windows 办公软件操作习惯保持一致。</span>
       <span id="clock"></span>
     </footer>
 

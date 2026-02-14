@@ -66,11 +66,8 @@ function bindTabs() {
 
 function bindClock() {
   const el = document.getElementById("clock");
-  const pad = (n) => String(n).padStart(2, "0");
   setInterval(() => {
-    const now = new Date();
-    const str = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
-    el.textContent = str;
+    el.textContent = new Date().toLocaleString();
   }, 1000);
 }
 
