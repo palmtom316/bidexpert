@@ -1,6 +1,6 @@
-# BidExpert (v3.2 Enterprise Aligned)
+# BidExpert (v3.6 BYOK Aligned)
 
-基于 `AI_Tender_System_Technical_Whitepaper_v3.2_Enterprise.md` 的企业级实现。
+基于 `AI_Tender_System_Technical_Whitepaper_v3.6_Bring_Your_Own_Key.md` 与实施指南的实现。
 
 ## 已实现能力
 
@@ -16,6 +16,10 @@
 - 语义缓存（key: industry/template/requirement/evidence/schema）
 - 项目级预算治理（Budget exceeded 阻断）
 - 证据近到期预警（<=30天触发 NEED_HUMAN_INPUT）
+- BYOK：Provider Profile（项目级）+ 模型策略绑定（generate/review/embed）
+- Key 安全：ENCRYPTED_DB（AES-GCM, `MASTER_KEY_B64`）+ TEMP_REDIS（TTL）
+- 多供应商 Adapter Registry（OpenAI-compatible + Mock fallback）
+- 审查降级：审查模型不可用 -> 备用审查模型（可配置）-> 本地验证器（风险告警）
 
 ## 快速启动（Docker）
 
@@ -50,13 +54,37 @@ celery -A app.workers.celery_app.celery_app worker --loglevel=INFO
 - `POST /v1/tasks/generate-draft`: 异步草稿生成
 - `POST /v1/workflow/section`: 章节级异步任务编排入口
 - `POST /v1/cache/invalidate`: 缓存失效操作
+- `POST /v1/tender/analyze-upload`: 招标 PDF 上传并生成“投标要点/评分要点/符合性要求/加分项/风险提示”
+- `GET /v1/tender/analysis-runs`: 查询招标分析记录
+- `GET /v1/tender/analysis-runs/{run_id}`: 查询单次分析详情（含分组关键项）
+- `POST /v1/expert-library/ingest-upload`: 历史投标文件上传 -> 拆解 -> Embedding -> 本地专家库入库
+- `POST /v1/evidence/extract-upsert`: 文本抽取并入库（可选传 `model_id`）
+- `POST /v1/expert-library/ingest-structured`: 结构化导入规范/公司业绩/公司资质/项目管理人员资质及业绩
+- `GET /v1/expert-library/docs`: 查询本地专家库文档列表
+- `GET /v1/expert-library/docs/{expert_doc_id}/chunks`: 查询文档 chunks
+- `POST /api/provider-profiles`: 创建 BYOK provider profile
+- `GET /api/provider-profiles?project_id=...`: 查询项目 profile
+- `POST /api/provider-profiles/{id}/test`: 测试 profile 连通性
+- `DELETE /api/provider-profiles/{id}`: 删除 profile
+- `PUT /api/projects/{id}/model-policy`: 绑定 generate/review/embed profile
+- `GET /api/projects/{id}/model-policy`: 查询项目模型策略
 
 ## 环境变量
 
-见 `.env.example`。
+核心新增变量：
+- `BIDEXPERT_MASTER_KEY_B64`：32 字节主密钥（base64）
+- `BIDEXPERT_REVIEW_FALLBACK_PROVIDER`：可选，审查备用 provider
+- `BIDEXPERT_REVIEW_FALLBACK_MODEL`：可选，审查备用模型
+- `BIDEXPERT_REVIEW_FALLBACK_BASE_URL`：可选，审查备用 base_url
+- `BIDEXPERT_REVIEW_FALLBACK_API_KEY`：可选，审查备用 key
+- `BIDEXPERT_LANGEXTRACT_DEFAULT_MODEL`：可选，LangExtract 默认模型（接口未传 `model_id` 时使用）
 
 ## 注意
 
 - OCR 依赖 `tesseract` 系统二进制；若缺失将自动退回非 OCR 文本提取。
 - 证据不足、证据近到期或验证失败时，系统返回 `NEED_HUMAN_INPUT`。
 - 命中报价熔断时，系统阻断处理。
+- UI 的“BYOK 配置”页可完成：创建 profile -> 测试 -> 绑定策略 -> 生成验证。
+- UI 的“招标关键分析”页可完成：上传招标文件 -> 自动拆解分析 -> 分类查看关键要求与评分要点。
+- UI 的“本地专家库”页可完成：历史投标文件上传入库 + 结构化资料入库（规范/公司业绩/公司资质/项目管理人员资质及业绩）-> 文档/Chunk 查询。
+- UI 的“本地专家库”上传支持 `LangExtract model_id`（下拉预设 + 可手填；留空走后端默认）。

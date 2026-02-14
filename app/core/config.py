@@ -26,6 +26,12 @@ class Settings(BaseSettings):
     task_max_retries: int = 2
     task_max_fallbacks: int = 1
     max_parallel_sections: int = 4
+    master_key_b64: str | None = None
+    review_fallback_provider: str | None = None
+    review_fallback_model: str | None = None
+    review_fallback_base_url: str | None = None
+    review_fallback_api_key: str | None = None
+    langextract_default_model: str = "gemini-2.5-flash"
 
     model_config = SettingsConfigDict(env_prefix="BIDEXPERT_", extra="ignore")
 

@@ -60,6 +60,7 @@ def log_llm_call(
     project_id: str | None,
     model_name: str,
     purpose: str,
+    provider_profile_id: str | None,
     evidence_ids: list[str],
     prompt_text: str,
     input_tokens: int,
@@ -70,9 +71,11 @@ def log_llm_call(
     fallback_count: int = 0,
     cache_hit: bool = False,
     pricing_blocked: bool = False,
+    blocked_reason: str | None = None,
     actor_user_id: str = "system",
 ) -> None:
     project_uuid = _try_uuid(project_id)
+    profile_uuid = _try_uuid(provider_profile_id)
     prompt_hash = hashlib.sha256(prompt_text.encode("utf-8")).hexdigest()
 
     try:
@@ -84,12 +87,14 @@ def log_llm_call(
                     actor_user_id=actor_user_id,
                     model_name=model_name,
                     purpose=purpose,
+                    provider_profile_id=profile_uuid,
                     evidence_ids=_uuid_list(evidence_ids),
                     prompt_hash=prompt_hash,
                     input_tokens=input_tokens,
                     output_tokens=output_tokens,
                     latency_ms=latency_ms,
                     budget_remaining=budget_remaining,
+                    blocked_reason=blocked_reason,
                     retry_count=retry_count,
                     fallback_count=fallback_count,
                     cache_hit=cache_hit,

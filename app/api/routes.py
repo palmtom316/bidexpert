@@ -6,7 +6,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from celery.exceptions import CeleryError
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 
 from app.core.config import settings
@@ -16,6 +16,11 @@ from app.schemas.contracts import (
     DraftGenerationRequest,
     DraftGenerationResponse,
     EnqueueIngestResponse,
+    ExpertLibraryChunkListResponse,
+    ExpertLibraryDocListResponse,
+    ExpertLibraryIngestResponse,
+    ExpertLibraryStructuredIngestRequest,
+    ExpertLibraryStructuredIngestResponse,
     EvidenceSearchRequest,
     EvidenceSearchResponse,
     EvidenceUpsertRequest,
@@ -30,8 +35,16 @@ from app.schemas.contracts import (
     OutlineCreateResponse,
     ParseTenderRequest,
     ParseTenderResponse,
+    ProjectModelPolicyResponse,
+    ProjectModelPolicyUpsertRequest,
     PricingFuseRequest,
     PricingFuseResponse,
+    ProviderProfileCreateRequest,
+    ProviderProfileCreateResponse,
+    ProviderProfileDeleteResponse,
+    ProviderProfileItem,
+    ProviderProfileListResponse,
+    ProviderProfileTestResponse,
     SanitizeRequest,
     SanitizeResponse,
     SectionFeedbackUpsertRequest,
@@ -40,16 +53,38 @@ from app.schemas.contracts import (
     SectionConfirmRequest,
     SectionConfirmResponse,
     TaskStatusResponse,
+    TenderAnalyzeUploadResponse,
+    TenderAnalysisDetailResponse,
+    TenderAnalysisRunListResponse,
     WorkflowSectionRequest,
     WorkflowSectionResponse,
 )
+from app.services.byok import (
+    create_provider_profile,
+    delete_provider_profile,
+    get_project_model_policy,
+    list_provider_profiles,
+    test_provider_profile,
+    upsert_project_model_policy,
+)
 from app.services.evidence_validator import run_three_gates
+from app.services.expert_library import (
+    ingest_historical_pdf,
+    ingest_structured_expert_knowledge,
+    list_expert_chunks,
+    list_expert_docs,
+)
 from app.services.generation_pipeline import generate_draft_with_retrieval
 from app.services.pdf_ingest import ingest_pdf_bytes
 from app.services.pii_policy import sanitize_outbound_text
 from app.services.pricing_guard import detect_pricing_content
 from app.services.qdrant_store import QdrantStore, to_search_hits
 from app.services.semantic_cache import invalidate_cache
+from app.services.tender_analysis import (
+    analyze_and_persist_tender_pdf,
+    get_tender_analysis_detail,
+    list_tender_analysis_runs,
+)
 from app.services.tender_parser import parse_tender_requirements
 from app.services.knowledge_standardizer import standardize_section_feedback_chunks
 from app.services.workflow_runs import (
@@ -80,9 +115,127 @@ def _service_unavailable() -> HTTPException:
     return HTTPException(status_code=503, detail="service temporarily unavailable")
 
 
+def _profile_to_item(profile) -> ProviderProfileItem:
+    return ProviderProfileItem(
+        id=str(profile.id),
+        scope=str(profile.scope.value if hasattr(profile.scope, "value") else profile.scope),
+        scope_id=str(profile.scope_id),
+        provider=profile.provider,
+        base_url=profile.base_url,
+        default_model=profile.default_model,
+        key_storage=str(profile.key_storage.value if hasattr(profile.key_storage, "value") else profile.key_storage),
+        key_secret_ref=profile.key_secret_ref,
+        allowed_tasks=profile.allowed_tasks or ["*"],
+        created_by=profile.created_by,
+    )
+
+
 @router.get("/health", response_model=HealthResponse)
 def health() -> HealthResponse:
     return HealthResponse(status="ok")
+
+
+@router.post("/api/provider-profiles", response_model=ProviderProfileCreateResponse)
+def create_provider_profile_api(payload: ProviderProfileCreateRequest) -> ProviderProfileCreateResponse:
+    try:
+        profile = create_provider_profile(
+            project_id=payload.project_id,
+            provider=payload.provider,
+            base_url=payload.base_url,
+            default_model=payload.default_model,
+            api_key=payload.api_key,
+            key_storage=payload.key_storage,
+            allowed_tasks=payload.allowed_tasks,
+        )
+        return ProviderProfileCreateResponse(
+            profile_id=str(profile.id),
+            key_storage=str(profile.key_storage.value),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/api/provider-profiles", response_model=ProviderProfileListResponse)
+def list_provider_profiles_api(project_id: str) -> ProviderProfileListResponse:
+    try:
+        items = [_profile_to_item(item) for item in list_provider_profiles(project_id)]
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return ProviderProfileListResponse(items=items)
+
+
+@router.post("/api/provider-profiles/{profile_id}/test", response_model=ProviderProfileTestResponse)
+def test_provider_profile_api(profile_id: str) -> ProviderProfileTestResponse:
+    try:
+        profile, ok, detail = test_provider_profile(profile_id)
+        return ProviderProfileTestResponse(
+            profile_id=str(profile.id),
+            ok=ok,
+            provider=profile.provider,
+            model=profile.default_model,
+            detail=detail,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.delete("/api/provider-profiles/{profile_id}", response_model=ProviderProfileDeleteResponse)
+def delete_provider_profile_api(profile_id: str) -> ProviderProfileDeleteResponse:
+    try:
+        deleted = delete_provider_profile(profile_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not deleted:
+        raise HTTPException(status_code=404, detail="provider profile not found")
+    return ProviderProfileDeleteResponse(profile_id=profile_id, deleted=True)
+
+
+@router.put("/api/projects/{project_id}/model-policy", response_model=ProjectModelPolicyResponse)
+def put_model_policy_api(project_id: str, payload: ProjectModelPolicyUpsertRequest) -> ProjectModelPolicyResponse:
+    try:
+        policy = upsert_project_model_policy(
+            project_id=project_id,
+            generate_profile_id=payload.generate_profile_id,
+            review_profile_id=payload.review_profile_id,
+            embed_profile_id=payload.embed_profile_id,
+            enable_review=payload.enable_review,
+            token_budget_total=payload.token_budget_total,
+            concurrency_limits=payload.concurrency_limits,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return ProjectModelPolicyResponse(
+        project_id=str(policy.project_id),
+        generate_profile_id=str(policy.generate_profile_id) if policy.generate_profile_id else None,
+        review_profile_id=str(policy.review_profile_id) if policy.review_profile_id else None,
+        embed_profile_id=str(policy.embed_profile_id) if policy.embed_profile_id else None,
+        enable_review=policy.enable_review,
+        token_budget_total=int(policy.token_budget_total),
+        token_budget_used=int(policy.token_budget_used),
+        concurrency_limits=policy.concurrency_limits or {"generate": 3, "review": 2, "embed": 2},
+    )
+
+
+@router.get("/api/projects/{project_id}/model-policy", response_model=ProjectModelPolicyResponse)
+def get_model_policy_api(project_id: str) -> ProjectModelPolicyResponse:
+    try:
+        policy = get_project_model_policy(project_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not policy:
+        raise HTTPException(status_code=404, detail="model policy not found")
+
+    return ProjectModelPolicyResponse(
+        project_id=str(policy.project_id),
+        generate_profile_id=str(policy.generate_profile_id) if policy.generate_profile_id else None,
+        review_profile_id=str(policy.review_profile_id) if policy.review_profile_id else None,
+        embed_profile_id=str(policy.embed_profile_id) if policy.embed_profile_id else None,
+        enable_review=policy.enable_review,
+        token_budget_total=int(policy.token_budget_total),
+        token_budget_used=int(policy.token_budget_used),
+        concurrency_limits=policy.concurrency_limits or {"generate": 3, "review": 2, "embed": 2},
+    )
 
 
 @router.post("/v1/tender/parse", response_model=ParseTenderResponse)
@@ -93,6 +246,57 @@ def parse_tender(payload: ParseTenderRequest) -> ParseTenderResponse:
 
     parsed = parse_tender_requirements(payload.text)
     return ParseTenderResponse(requirements=parsed.requirements, status=parsed.status)
+
+
+@router.post("/v1/tender/analyze-upload", response_model=TenderAnalyzeUploadResponse)
+async def analyze_tender_upload(
+    file: UploadFile = File(...),
+    project_id: str | None = Form(default=None),
+    created_by: str = Form(default="system"),
+) -> TenderAnalyzeUploadResponse:
+    filename = file.filename or ""
+    if not filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="only .pdf is supported")
+    try:
+        run, summary = analyze_and_persist_tender_pdf(
+            filename=filename,
+            content=await file.read(),
+            project_id=project_id,
+            created_by=created_by,
+        )
+        return TenderAnalyzeUploadResponse(
+            run_id=run.run_id,
+            project_id=run.project_id,
+            document_id=run.document_id,
+            filename=run.filename,
+            status=run.status,
+            summary=summary,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except (RuntimeError, OSError) as exc:
+        raise _service_unavailable() from exc
+
+
+@router.get("/v1/tender/analysis-runs", response_model=TenderAnalysisRunListResponse)
+def list_tender_analysis_runs_api(project_id: str | None = None, limit: int = 50) -> TenderAnalysisRunListResponse:
+    try:
+        items = list_tender_analysis_runs(project_id=project_id, limit=limit)
+        return TenderAnalysisRunListResponse(items=items)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise _service_unavailable() from exc
+
+
+@router.get("/v1/tender/analysis-runs/{run_id}", response_model=TenderAnalysisDetailResponse)
+def get_tender_analysis_detail_api(run_id: str) -> TenderAnalysisDetailResponse:
+    try:
+        return get_tender_analysis_detail(run_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise _service_unavailable() from exc
 
 
 @router.post("/v1/workflow/outline", response_model=OutlineCreateResponse)
@@ -341,11 +545,92 @@ def evidence_upsert(payload: EvidenceUpsertRequest) -> EnqueueIngestResponse:
 @router.post("/v1/evidence/extract-upsert", response_model=EnqueueIngestResponse)
 def evidence_extract_upsert(payload: HistoricalExtractRequest) -> EnqueueIngestResponse:
     try:
-        task = extract_upsert_historical_task.delay(payload.expert_doc_id, payload.text, payload.industry_tag)
+        task = extract_upsert_historical_task.delay(
+            payload.expert_doc_id,
+            payload.text,
+            payload.industry_tag,
+            (payload.model_id or "").strip() or None,
+        )
         return EnqueueIngestResponse(task_id=task.id, status="PENDING")
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except (CeleryError, RuntimeError, ConnectionError, TimeoutError, OSError) as exc:
+        raise _service_unavailable() from exc
+
+
+@router.post("/v1/expert-library/ingest-upload", response_model=ExpertLibraryIngestResponse)
+async def expert_library_ingest_upload(
+    file: UploadFile = File(...),
+    project_id: str | None = Form(default=None),
+    industry_tag: str | None = Form(default=None),
+    title: str | None = Form(default=None),
+    created_by: str = Form(default="system"),
+    doc_type: str = Form(default="EXPERT_HISTORY"),
+    model_id: str | None = Form(default=None),
+) -> ExpertLibraryIngestResponse:
+    filename = file.filename or ""
+    if not filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="only .pdf is supported")
+    try:
+        return ingest_historical_pdf(
+            filename=filename,
+            content=await file.read(),
+            project_id=project_id,
+            industry_tag=industry_tag,
+            title=title,
+            created_by=created_by,
+            doc_type=doc_type,
+            model_id=(model_id or "").strip() or None,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except (RuntimeError, OSError) as exc:
+        raise _service_unavailable() from exc
+
+
+@router.post("/v1/expert-library/ingest-structured", response_model=ExpertLibraryStructuredIngestResponse)
+def expert_library_ingest_structured(
+    payload: ExpertLibraryStructuredIngestRequest,
+) -> ExpertLibraryStructuredIngestResponse:
+    try:
+        return ingest_structured_expert_knowledge(
+            project_id=payload.project_id,
+            industry_tag=payload.industry_tag,
+            created_by=payload.created_by,
+            standard_items=payload.standard_items,
+            company_performance_items=payload.company_performance_items,
+            company_qualification_items=payload.company_qualification_items,
+            pm_qualification_performance_items=payload.pm_qualification_performance_items,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise _service_unavailable() from exc
+
+
+@router.get("/v1/expert-library/docs", response_model=ExpertLibraryDocListResponse)
+def expert_library_docs(
+    project_id: str | None = None,
+    industry_tag: str | None = None,
+    limit: int = 50,
+) -> ExpertLibraryDocListResponse:
+    try:
+        items = list_expert_docs(project_id=project_id, industry_tag=industry_tag, limit=limit)
+        return ExpertLibraryDocListResponse(items=items)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise _service_unavailable() from exc
+
+
+@router.get("/v1/expert-library/docs/{expert_doc_id}/chunks", response_model=ExpertLibraryChunkListResponse)
+def expert_library_doc_chunks(expert_doc_id: str, limit: int = 200) -> ExpertLibraryChunkListResponse:
+    try:
+        items = list_expert_chunks(expert_doc_id=expert_doc_id, limit=limit)
+        return ExpertLibraryChunkListResponse(expert_doc_id=expert_doc_id, items=items)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
         raise _service_unavailable() from exc
 
 

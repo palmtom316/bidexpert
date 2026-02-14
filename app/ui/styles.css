@@ -231,6 +231,69 @@ textarea {
   color: #385975;
 }
 
+.risk-banner {
+  margin-top: 8px;
+  margin-bottom: 8px;
+  border: 1px solid #d63a3a;
+  background: #ffe7e7;
+  color: #8f1111;
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.hidden {
+  display: none;
+}
+
+.insight-view {
+  margin-top: 10px;
+  display: grid;
+  gap: 10px;
+}
+
+.insight-summary {
+  padding: 8px 10px;
+  border: 1px solid #aac2d8;
+  border-radius: 6px;
+  background: #f1f8ff;
+  font-size: 13px;
+}
+
+.insight-card {
+  border: 1px solid #cbd8e5;
+  border-radius: 6px;
+  background: #fbfdff;
+  padding: 10px;
+}
+
+.insight-card h4 {
+  margin: 0 0 8px 0;
+  font-size: 14px;
+  color: #164870;
+}
+
+.insight-card ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.insight-card li {
+  margin: 6px 0;
+}
+
+.insight-text {
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.insight-meta {
+  margin-top: 2px;
+  font-size: 12px;
+  color: #53708b;
+}
+
 .btn {
   border: 1px solid transparent;
   border-radius: 6px;

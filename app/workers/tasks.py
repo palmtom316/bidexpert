@@ -102,10 +102,15 @@ def extract_upsert_historical_task(
     expert_doc_id: str,
     text: str,
     industry_tag: str | None = None,
+    model_id: str | None = None,
 ) -> dict:  # type: ignore[no-untyped-def]
     self.update_state(state="PROGRESS", meta={"stage": "EXTRACT_HISTORICAL"})
     store = QdrantStore()
-    chunks = extract_evidence_chunks_from_text(text=text, industry_tag=industry_tag)
+    chunks = extract_evidence_chunks_from_text(
+        text=text,
+        industry_tag=industry_tag,
+        model_id=model_id,
+    )
     count = store.upsert_chunks(expert_doc_id=expert_doc_id, chunks=chunks)
     return {"status": "SUCCEEDED", "upserted": count}
 

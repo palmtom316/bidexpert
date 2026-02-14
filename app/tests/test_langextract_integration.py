@@ -48,10 +48,16 @@ def test_evidence_extract_upsert_enqueues_task(monkeypatch: pytest.MonkeyPatch) 
 
     class _Task:
         @staticmethod
-        def delay(expert_doc_id: str, text: str, industry_tag: str | None) -> object:
+        def delay(
+            expert_doc_id: str,
+            text: str,
+            industry_tag: str | None,
+            model_id: str | None,
+        ) -> object:
             captured["expert_doc_id"] = expert_doc_id
             captured["text"] = text
             captured["industry_tag"] = industry_tag
+            captured["model_id"] = model_id
             return type("R", (), {"id": "task-123"})()
 
     monkeypatch.setattr(routes, "extract_upsert_historical_task", _Task)
@@ -60,6 +66,7 @@ def test_evidence_extract_upsert_enqueues_task(monkeypatch: pytest.MonkeyPatch) 
         expert_doc_id="doc-h-1",
         text="招标文件历史样本",
         industry_tag="construction",
+        model_id="gemini-2.5-pro",
     )
     result = routes.evidence_extract_upsert(payload)
 
@@ -69,4 +76,5 @@ def test_evidence_extract_upsert_enqueues_task(monkeypatch: pytest.MonkeyPatch) 
         "expert_doc_id": "doc-h-1",
         "text": "招标文件历史样本",
         "industry_tag": "construction",
+        "model_id": "gemini-2.5-pro",
     }

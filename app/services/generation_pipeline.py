@@ -5,14 +5,17 @@ from time import perf_counter
 
 from app.core.config import settings
 from app.schemas.contracts import DraftGenerationResponse
+from app.services.byok import get_project_model_policy, resolve_profile_for_task
+from app.services.adapters import AdapterUnavailableError
 from app.services.evidence_validator import run_three_gates
 from app.services.governance import estimate_tokens
+from app.services.llm_gateway import generate_with_profile, review_with_profile
 from app.services.llm_audit import log_llm_call, reserve_budget_persistent
 from app.services.pii_policy import sanitize_outbound_text
 from app.services.rag_flow import decompose_requirement, merge_retrieval, retrieve_for_subrequirements
 from app.services.semantic_cache import build_cache_key, get_cache, set_cache
 
-LLM_PROVIDER = "Qwen"
+LLM_PROVIDER = "qwen"
 LLM_MODEL = "Qwen3-Max"
 
 
@@ -59,6 +62,16 @@ def generate_draft_with_retrieval(
 ) -> DraftGenerationResponse:
     begin = perf_counter()
     effective_top_k = max(1, min(top_k, 8))
+    resolved_profile = resolve_profile_for_task(project_id=project_id, task_type="GENERATE")
+    review_profile = resolve_profile_for_task(project_id=project_id, task_type="REVIEW")
+    try:
+        model_policy = get_project_model_policy(project_id) if project_id else None
+    except ValueError:
+        model_policy = None
+    llm_provider = resolved_profile.provider or LLM_PROVIDER
+    llm_model = resolved_profile.model or LLM_MODEL
+    review_enabled = bool(model_policy.enable_review) if model_policy else True
+    cache_scope = f"{tender_template_id or '_'}|p={project_id or '_'}|g={llm_provider}:{llm_model}|r={int(review_enabled)}"
 
     # Step1-3 schema-driven RAG
     sub_requirements = decompose_requirement(requirement_text)
@@ -71,17 +84,22 @@ def generate_draft_with_retrieval(
 
     cache_key = build_cache_key(
         industry_tag=industry_tag,
-        tender_template_id=tender_template_id,
+        tender_template_id=cache_scope,
         requirement_text=requirement_text,
         evidence_ids=merged_evidence_ids,
     )
     cached = get_cache(cache_key)
-    if cached:
-        response = DraftGenerationResponse(**cached, cache_hit=True)
+    if cached and not review_enabled:
+        cached_payload = dict(cached)
+        cached_payload["cache_hit"] = True
+        response = DraftGenerationResponse(**cached_payload)
+        response.llm_provider = llm_provider
+        response.llm_model = llm_model
         log_llm_call(
             project_id=project_id,
-            model_name=LLM_MODEL,
+            model_name=llm_model,
             purpose="SECTION_GENERATE",
+            provider_profile_id=resolved_profile.profile_id,
             evidence_ids=response.evidence_ids,
             prompt_text=requirement_text,
             input_tokens=estimate_tokens(requirement_text),
@@ -92,11 +110,27 @@ def generate_draft_with_retrieval(
             fallback_count=fallback_count,
             cache_hit=True,
             pricing_blocked=False,
+            blocked_reason=None,
         )
         return response
 
     evidence_texts = [hit.text for hit in merged_hits]
-    generated_text = _compose_draft(requirement_text, evidence_texts)
+    warnings = _expiry_warnings([hit.payload for hit in merged_hits])
+    generation_fallback = False
+    try:
+        generated = generate_with_profile(
+            provider=llm_provider,
+            model=llm_model,
+            api_key=resolved_profile.api_key,
+            base_url=resolved_profile.base_url,
+            requirement_text=requirement_text,
+            evidence_texts=evidence_texts,
+        )
+        generated_text = generated.text
+    except AdapterUnavailableError:
+        generation_fallback = True
+        generated_text = _compose_draft(requirement_text, evidence_texts)
+        warnings.append("generate_fallback_local_template")
 
     input_tokens = estimate_tokens(requirement_text + "\n" + "\n".join(evidence_texts))
     output_tokens = estimate_tokens(generated_text)
@@ -125,8 +159,6 @@ def generate_draft_with_retrieval(
         coverage_threshold=settings.min_matrix_coverage,
     )
 
-    warnings = _expiry_warnings([hit.payload for hit in merged_hits])
-
     sanitize = sanitize_outbound_text(
         text=generated_text,
         sensitive_strategy=sensitive_strategy,
@@ -135,8 +167,9 @@ def generate_draft_with_retrieval(
     if sanitize.pricing_blocked:
         log_llm_call(
             project_id=project_id,
-            model_name=LLM_MODEL,
+            model_name=llm_model,
             purpose="SECTION_GENERATE",
+            provider_profile_id=resolved_profile.profile_id,
             evidence_ids=merged_evidence_ids,
             prompt_text=requirement_text,
             input_tokens=input_tokens,
@@ -144,16 +177,17 @@ def generate_draft_with_retrieval(
             latency_ms=int((perf_counter() - begin) * 1000),
             budget_remaining=budget_remaining,
             retry_count=retry_count,
-            fallback_count=fallback_count,
+            fallback_count=fallback_count + (1 if generation_fallback else 0),
             cache_hit=False,
             pricing_blocked=True,
+            blocked_reason="PRICING_BLOCKED",
         )
         return DraftGenerationResponse(
             generated_text="BLOCKED_PRICING_CONTENT",
             evidence_ids=merged_evidence_ids,
             status="BLOCKED_PRICING_CONTENT",
-            llm_provider=LLM_PROVIDER,
-            llm_model=LLM_MODEL,
+            llm_provider=llm_provider,
+            llm_model=llm_model,
             missing_sentences=["pricing_blocked"],
             coverage=0.0,
             budget_remaining=budget_remaining,
@@ -168,12 +202,108 @@ def generate_draft_with_retrieval(
     if any(w.startswith("evidence_near_expiry") for w in warnings):
         status = "NEED_HUMAN_INPUT"
 
+    review_fallback = False
+    review_provider_fallback = False
+    review_issues: list[str] = []
+    if review_enabled:
+        try:
+            review_result = review_with_profile(
+                provider=review_profile.provider,
+                model=review_profile.model,
+                api_key=review_profile.api_key,
+                base_url=review_profile.base_url,
+                draft_text=sanitize.text or generated_text,
+                evidence_texts=evidence_texts,
+            )
+            if not review_result.approved:
+                status = "NEED_HUMAN_INPUT"
+                review_issues = review_result.issues or ["review_rejected"]
+                warnings.extend([f"review_issue:{item}" for item in review_issues])
+            log_llm_call(
+                project_id=project_id,
+                model_name=review_result.model,
+                purpose="SECTION_REVIEW",
+                provider_profile_id=review_profile.profile_id,
+                evidence_ids=merged_evidence_ids,
+                prompt_text=sanitize.text or generated_text,
+                input_tokens=estimate_tokens(sanitize.text or generated_text),
+                output_tokens=0,
+                latency_ms=int((perf_counter() - begin) * 1000),
+                budget_remaining=budget_remaining,
+                retry_count=retry_count,
+                fallback_count=fallback_count,
+                cache_hit=False,
+                pricing_blocked=False,
+                blocked_reason="REVIEW_REJECTED" if review_issues else None,
+            )
+        except AdapterUnavailableError:
+            fallback_provider = (settings.review_fallback_provider or "").strip().lower()
+            fallback_model = (settings.review_fallback_model or "").strip()
+            if fallback_provider and fallback_model:
+                try:
+                    fallback_review = review_with_profile(
+                        provider=fallback_provider,
+                        model=fallback_model,
+                        api_key=settings.review_fallback_api_key,
+                        base_url=settings.review_fallback_base_url,
+                        draft_text=sanitize.text or generated_text,
+                        evidence_texts=evidence_texts,
+                    )
+                    review_provider_fallback = True
+                    warnings.append("review_fallback_provider_used")
+                    if not fallback_review.approved:
+                        status = "NEED_HUMAN_INPUT"
+                        review_issues = fallback_review.issues or ["review_rejected"]
+                        warnings.extend([f"review_issue:{item}" for item in review_issues])
+                    log_llm_call(
+                        project_id=project_id,
+                        model_name=fallback_review.model,
+                        purpose="SECTION_REVIEW",
+                        provider_profile_id=review_profile.profile_id,
+                        evidence_ids=merged_evidence_ids,
+                        prompt_text=sanitize.text or generated_text,
+                        input_tokens=estimate_tokens(sanitize.text or generated_text),
+                        output_tokens=0,
+                        latency_ms=int((perf_counter() - begin) * 1000),
+                        budget_remaining=budget_remaining,
+                        retry_count=retry_count,
+                        fallback_count=fallback_count + 1,
+                        cache_hit=False,
+                        pricing_blocked=False,
+                        blocked_reason="REVIEW_FALLBACK_PROVIDER" if review_issues else None,
+                    )
+                except AdapterUnavailableError:
+                    review_fallback = True
+                    warnings.append("review_fallback_local_validator")
+            else:
+                review_fallback = True
+                warnings.append("review_fallback_local_validator")
+
+            if review_fallback:
+                log_llm_call(
+                    project_id=project_id,
+                    model_name=review_profile.model,
+                    purpose="SECTION_REVIEW",
+                    provider_profile_id=review_profile.profile_id,
+                    evidence_ids=merged_evidence_ids,
+                    prompt_text=sanitize.text or generated_text,
+                    input_tokens=estimate_tokens(sanitize.text or generated_text),
+                    output_tokens=0,
+                    latency_ms=int((perf_counter() - begin) * 1000),
+                    budget_remaining=budget_remaining,
+                    retry_count=retry_count,
+                    fallback_count=fallback_count + 1,
+                    cache_hit=False,
+                    pricing_blocked=False,
+                    blocked_reason="REVIEW_FALLBACK_LOCAL_ONLY",
+                )
+
     response = DraftGenerationResponse(
         generated_text=sanitize.text or "NEED_HUMAN_INPUT",
         evidence_ids=merged_evidence_ids,
         status=status,
-        llm_provider=LLM_PROVIDER,
-        llm_model=LLM_MODEL,
+        llm_provider=llm_provider,
+        llm_model=llm_model,
         missing_sentences=result.missing_sentences,
         coverage=result.coverage,
         budget_remaining=budget_remaining,
@@ -184,8 +314,9 @@ def generate_draft_with_retrieval(
 
     log_llm_call(
         project_id=project_id,
-        model_name=LLM_MODEL,
+        model_name=llm_model,
         purpose="SECTION_GENERATE",
+        provider_profile_id=resolved_profile.profile_id,
         evidence_ids=merged_evidence_ids,
         prompt_text=requirement_text,
         input_tokens=input_tokens,
@@ -193,12 +324,13 @@ def generate_draft_with_retrieval(
         latency_ms=int((perf_counter() - begin) * 1000),
         budget_remaining=budget_remaining,
         retry_count=retry_count,
-        fallback_count=fallback_count,
+        fallback_count=fallback_count + (1 if generation_fallback or review_fallback or review_provider_fallback else 0),
         cache_hit=False,
         pricing_blocked=False,
+        blocked_reason="BUDGET_EXCEEDED" if not ok else None,
     )
 
-    if response.status == "SUPPORTED":
+    if response.status == "SUPPORTED" and not review_enabled:
         set_cache(cache_key=cache_key, payload=response.model_dump(mode="json"), ttl_seconds=3600)
 
     return response

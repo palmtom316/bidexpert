@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import JSON, Date, DateTime, Enum, ForeignKey, Integer, Numeric, String, Text
+from sqlalchemy import JSON, Date, DateTime, Enum, ForeignKey, Integer, LargeBinary, Numeric, String, Text
 from sqlalchemy.dialects.postgresql import ARRAY, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -46,6 +46,26 @@ class SectionOrigin(str, enum.Enum):
     AI = "AI"
     HUMAN = "HUMAN"
     MERGE = "MERGE"
+
+
+class ProviderScope(str, enum.Enum):
+    PROJECT = "PROJECT"
+    USER = "USER"
+    TENANT = "TENANT"
+
+
+class KeyStorage(str, enum.Enum):
+    ENCRYPTED_DB = "ENCRYPTED_DB"
+    TEMP_REDIS = "TEMP_REDIS"
+    VAULT = "VAULT"
+
+
+class TenderKeyCategory(str, enum.Enum):
+    BIDDING_POINTS = "BIDDING_POINTS"
+    SCORING_POINTS = "SCORING_POINTS"
+    COMPLIANCE_REQUIREMENTS = "COMPLIANCE_REQUIREMENTS"
+    BONUS_POINTS = "BONUS_POINTS"
+    RISK_ALERTS = "RISK_ALERTS"
 
 
 class WorkflowRun(Base):
@@ -288,6 +308,54 @@ class AuditLog(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
 
 
+class ProviderProfile(Base):
+    __tablename__ = "provider_profile"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    scope: Mapped[ProviderScope] = mapped_column(
+        Enum(ProviderScope, name="provider_scope"), default=ProviderScope.PROJECT, nullable=False
+    )
+    scope_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    provider: Mapped[str] = mapped_column(Text, nullable=False)
+    base_url: Mapped[str | None] = mapped_column(Text)
+    default_model: Mapped[str] = mapped_column(Text, nullable=False)
+    key_storage: Mapped[KeyStorage] = mapped_column(
+        Enum(KeyStorage, name="key_storage"), default=KeyStorage.ENCRYPTED_DB, nullable=False
+    )
+    key_secret_ref: Mapped[str] = mapped_column(Text, nullable=False)
+    encrypted_key: Mapped[bytes | None] = mapped_column(LargeBinary)
+    allowed_tasks: Mapped[list[str]] = mapped_column(JSON, default=lambda: ["*"])
+    created_by: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+
+
+class ProjectModelPolicy(Base):
+    __tablename__ = "project_model_policy"
+
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("project.id", ondelete="CASCADE"), primary_key=True
+    )
+    generate_profile_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("provider_profile.id", ondelete="SET NULL")
+    )
+    review_profile_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("provider_profile.id", ondelete="SET NULL")
+    )
+    embed_profile_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("provider_profile.id", ondelete="SET NULL")
+    )
+    enable_review: Mapped[bool] = mapped_column(default=True)
+    token_budget_total: Mapped[int] = mapped_column(Integer, default=500000)
+    token_budget_used: Mapped[int] = mapped_column(Integer, default=0)
+    concurrency_limits: Mapped[dict] = mapped_column(
+        JSON,
+        default=lambda: {"generate": 3, "review": 2, "embed": 2},
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+
+
 class LLMCallLog(Base):
     __tablename__ = "llm_call_log"
 
@@ -301,14 +369,63 @@ class LLMCallLog(Base):
     actor_user_id: Mapped[str] = mapped_column(Text, nullable=False)
     model_name: Mapped[str] = mapped_column(Text, nullable=False)
     purpose: Mapped[str] = mapped_column(Text, nullable=False)
+    provider_profile_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("provider_profile.id", ondelete="SET NULL")
+    )
     evidence_ids: Mapped[list[uuid.UUID]] = mapped_column(ARRAY(UUID(as_uuid=True)), default=list)
     prompt_hash: Mapped[str | None] = mapped_column(Text)
     input_tokens: Mapped[int | None] = mapped_column(Integer)
     output_tokens: Mapped[int | None] = mapped_column(Integer)
     latency_ms: Mapped[int | None] = mapped_column(Integer)
     budget_remaining: Mapped[int | None] = mapped_column(Integer)
+    blocked_reason: Mapped[str | None] = mapped_column(Text)
     retry_count: Mapped[int] = mapped_column(Integer, default=0)
     fallback_count: Mapped[int] = mapped_column(Integer, default=0)
     cache_hit: Mapped[bool] = mapped_column(default=False)
     pricing_blocked: Mapped[bool] = mapped_column(default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+
+
+class TenderAnalysisRun(Base):
+    __tablename__ = "tender_analysis_run"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("project.id", ondelete="SET NULL")
+    )
+    document_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("document.id", ondelete="SET NULL")
+    )
+    filename: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(Text, nullable=False)
+    summary_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_by: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+
+
+class TenderKeyInfo(Base):
+    __tablename__ = "tender_key_info"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    run_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tender_analysis_run.id", ondelete="CASCADE"), nullable=False
+    )
+    project_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("project.id", ondelete="SET NULL")
+    )
+    document_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("document.id", ondelete="SET NULL")
+    )
+    category: Mapped[TenderKeyCategory] = mapped_column(
+        Enum(TenderKeyCategory, name="tender_key_category"), nullable=False
+    )
+    title: Mapped[str | None] = mapped_column(Text)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    page_no: Mapped[int | None] = mapped_column(Integer)
+    section_anchor: Mapped[str | None] = mapped_column(Text)
+    score_weight: Mapped[float | None] = mapped_column(Numeric(6, 2))
+    is_must: Mapped[bool] = mapped_column(default=False)
+    importance: Mapped[int] = mapped_column(Integer, default=50)
+    source_quote: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)

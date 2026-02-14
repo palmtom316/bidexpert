@@ -41,10 +41,95 @@
 
       <section class="panel panel-main">
         <div class="tabs" role="tablist" aria-label="主流程">
+          <button class="tab" data-tab="tab-byok">0. BYOK 配置</button>
           <button class="tab active" data-tab="tab-ingest">1. 文件拆解</button>
+          <button class="tab" data-tab="tab-tender-analysis">1.5 招标关键分析</button>
           <button class="tab" data-tab="tab-task">2. 任务跟踪</button>
           <button class="tab" data-tab="tab-expert">3. 专家库入库</button>
           <button class="tab" data-tab="tab-search">4. 检索与生成</button>
+          <button class="tab" data-tab="tab-library">5. 本地专家库</button>
+        </div>
+
+        <div id="tab-byok" class="tab-panel">
+          <h2>BYOK 模型配置</h2>
+          <div class="grid-2">
+            <div>
+              <label>项目 ID（UUID）</label>
+              <input id="byokProjectId" type="text" placeholder="输入项目 UUID" />
+            </div>
+            <div class="btn-group">
+              <button id="btnLoadProfiles" class="btn btn-primary">加载 Profiles</button>
+              <button id="btnLoadPolicy" class="btn btn-secondary">加载绑定策略</button>
+            </div>
+          </div>
+
+          <h3>创建 Provider Profile</h3>
+          <div class="grid-2">
+            <div>
+              <label>Provider</label>
+              <select id="providerName">
+                <option value="qwen">qwen</option>
+                <option value="openai">openai</option>
+                <option value="deepseek">deepseek</option>
+                <option value="doubao">doubao</option>
+                <option value="gemini">gemini</option>
+                <option value="glm">glm</option>
+              </select>
+            </div>
+            <div>
+              <label>默认模型</label>
+              <input id="providerModel" type="text" value="qwen-max" />
+            </div>
+          </div>
+          <div class="grid-2">
+            <div>
+              <label>Base URL（可选）</label>
+              <input id="providerBaseUrl" type="text" placeholder="https://api.example.com/v1" />
+            </div>
+            <div>
+              <label>Key 存储策略</label>
+              <select id="providerStorage">
+                <option value="ENCRYPTED_DB">ENCRYPTED_DB</option>
+                <option value="TEMP_REDIS">TEMP_REDIS</option>
+              </select>
+            </div>
+          </div>
+          <label>API Key</label>
+          <input id="providerApiKey" type="password" placeholder="输入 API Key（不会回显）" />
+          <div class="btn-group">
+            <button id="btnCreateProfile" class="btn btn-primary">创建 Profile</button>
+            <button id="btnTestProfile" class="btn btn-outline">测试选中 Profile</button>
+          </div>
+
+          <h3>项目模型绑定策略</h3>
+          <div class="grid-2">
+            <div>
+              <label>Generate Profile</label>
+              <select id="generateProfileId"></select>
+            </div>
+            <div>
+              <label>Review Profile</label>
+              <select id="reviewProfileId"></select>
+            </div>
+          </div>
+          <div class="grid-2">
+            <div>
+              <label>Embed Profile</label>
+              <select id="embedProfileId"></select>
+            </div>
+            <div>
+              <label>是否启用审查</label>
+              <select id="enableReview">
+                <option value="true" selected>true</option>
+                <option value="false">false</option>
+              </select>
+            </div>
+          </div>
+          <div class="btn-group">
+            <button id="btnBindPolicy" class="btn btn-secondary">保存绑定策略</button>
+            <button id="btnSyncProjectId" class="btn btn-outline">同步到生成项目 ID</button>
+          </div>
+          <pre id="byokResult" class="result">等待 BYOK 操作...</pre>
         </div>
 
         <div id="tab-ingest" class="tab-panel active">
@@ -63,6 +148,36 @@
             <h3>拆解结果</h3>
             <pre id="ingestResult" class="result">等待执行...</pre>
           </div>
+        </div>
+
+        <div id="tab-tender-analysis" class="tab-panel">
+          <h2>招标文件拆解与关键分析</h2>
+          <div class="grid-2">
+            <div>
+              <label>项目 ID（可选，建议 UUID）</label>
+              <input id="analysisProjectId" type="text" placeholder="用于按项目管理分析结果" />
+            </div>
+            <div>
+              <label>招标 PDF 文件</label>
+              <input id="analysisPdfFile" type="file" accept=".pdf" />
+            </div>
+          </div>
+          <div class="btn-group">
+            <button id="btnTenderAnalyze" class="btn btn-primary">上传并分析</button>
+            <button id="btnTenderRuns" class="btn btn-secondary">查询分析记录</button>
+          </div>
+          <div class="grid-2">
+            <div>
+              <label>选择分析记录</label>
+              <select id="analysisRunSelect"></select>
+            </div>
+            <div class="btn-group">
+              <button id="btnTenderDetail" class="btn btn-outline">查看分析详情</button>
+              <button id="btnTenderSyncProject" class="btn btn-outline">同步项目 ID 到生成页</button>
+            </div>
+          </div>
+          <div id="tenderInsightView" class="insight-view hidden"></div>
+          <pre id="tenderAnalysisResult" class="result">等待招标分析...</pre>
         </div>
 
         <div id="tab-task" class="tab-panel">
@@ -128,9 +243,95 @@
             <button id="btnGenerate" class="btn btn-secondary">生成章节草稿</button>
             <button id="btnSanitize" class="btn btn-outline">文本脱敏预览</button>
           </div>
+          <div id="reviewRiskBanner" class="risk-banner hidden"></div>
           <p class="hint">说明：阶段一版本使用平台统一 LLM，当前界面展示实时模型信息并在生成结果中回显。</p>
           <pre id="searchResult" class="result">等待检索...</pre>
           <pre id="generateResult" class="result">等待生成...</pre>
+        </div>
+
+        <div id="tab-library" class="tab-panel">
+          <h2>本地专家库（历史投标文件）</h2>
+          <div class="grid-2">
+            <div>
+              <label>项目 ID（可选）</label>
+              <input id="libraryProjectId" type="text" placeholder="建议填写 UUID 便于隔离管理" />
+            </div>
+            <div>
+              <label>行业标签</label>
+              <input id="libraryIndustryTag" type="text" value="政企" />
+            </div>
+          </div>
+          <div class="grid-2">
+            <div>
+              <label>历史标书 PDF</label>
+              <input id="libraryPdfFile" type="file" accept=".pdf" />
+            </div>
+            <div>
+              <label>文档标题（可选）</label>
+              <input id="libraryTitle" type="text" placeholder="例如：2024年XX项目投标文件" />
+            </div>
+          </div>
+          <div class="grid-2">
+            <div>
+              <label>LangExtract 模型预设</label>
+              <select id="libraryModelPreset">
+                <option value="" selected>使用后端默认模型</option>
+                <option value="gemini-2.5-flash">gemini-2.5-flash</option>
+                <option value="gemini-2.5-pro">gemini-2.5-pro</option>
+                <option value="gpt-4o-mini">gpt-4o-mini</option>
+                <option value="gpt-4.1-mini">gpt-4.1-mini</option>
+                <option value="qwen-plus">qwen-plus</option>
+                <option value="qwen-max">qwen-max</option>
+                <option value="custom">自定义（手填）</option>
+              </select>
+            </div>
+            <div>
+              <label>自定义模型 ID（仅“自定义”生效）</label>
+              <input id="libraryModelCustom" type="text" placeholder="例如：ollama/qwen3:8b" disabled />
+            </div>
+          </div>
+          <div class="btn-group">
+            <button id="btnLibraryIngest" class="btn btn-primary">入库（拆解 + Embedding）</button>
+            <button id="btnLibraryDocs" class="btn btn-secondary">查询文档列表</button>
+          </div>
+
+          <h3>结构化资料入库</h3>
+          <p class="hint">每行一条，可分别导入：规范、公司业绩、公司资质、项目管理人员资质及业绩。</p>
+          <div class="grid-2">
+            <div>
+              <label>规范条目</label>
+              <textarea id="structuredStandard" rows="5" placeholder="例如：应符合 GB/T 19001-2016 质量管理体系要求"></textarea>
+            </div>
+            <div>
+              <label>公司业绩条目</label>
+              <textarea id="structuredCompanyPerformance" rows="5" placeholder="例如：近三年完成省级以上同类项目 8 个"></textarea>
+            </div>
+          </div>
+          <div class="grid-2">
+            <div>
+              <label>公司资质条目</label>
+              <textarea id="structuredCompanyQualification" rows="5" placeholder="例如：具备电子与智能化工程专业承包一级资质"></textarea>
+            </div>
+            <div>
+              <label>项目管理人员资质及业绩条目</label>
+              <textarea id="structuredPmQualificationPerformance" rows="5" placeholder="例如：项目经理张三，一级建造师，主持过 XX 项目"></textarea>
+            </div>
+          </div>
+          <div class="btn-group">
+            <button id="btnLibraryStructuredIngest" class="btn btn-primary">结构化资料入库</button>
+          </div>
+
+          <div class="grid-2">
+            <div>
+              <label>选择专家文档查看 Chunks</label>
+              <select id="libraryDocSelect"></select>
+            </div>
+            <div class="btn-group">
+              <button id="btnLibraryChunks" class="btn btn-outline">查看文档 Chunks</button>
+              <button id="btnLibrarySyncSearch" class="btn btn-outline">同步行业标签到检索页</button>
+            </div>
+          </div>
+          <pre id="libraryResult" class="result">等待专家库操作...</pre>
         </div>
       </section>
     </main>

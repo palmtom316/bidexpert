@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 from typing import Any
 
+from app.core.config import settings
 from app.schemas.contracts import EvidenceUpsertItem
 
 _PROMPT_DESCRIPTION = (
@@ -55,12 +56,13 @@ def extract_evidence_chunks_from_text(
     text: str,
     industry_tag: str | None = None,
     doc_type: str = "EXPERT_HISTORY",
-    model_id: str = "gemini-2.5-flash",
+    model_id: str | None = None,
 ) -> list[EvidenceUpsertItem]:
     if not text.strip():
         raise ValueError("text must not be empty")
 
-    raw = _run_langextract(text=text, model_id=model_id)
+    resolved_model_id = (model_id or "").strip() or settings.langextract_default_model
+    raw = _run_langextract(text=text, model_id=resolved_model_id)
     chunks: list[EvidenceUpsertItem] = []
     for index, item in enumerate(raw, start=1):
         extraction_text = str(_field(item, "extraction_text", "")).strip()
