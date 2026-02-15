@@ -316,6 +316,41 @@ class ProjectModelPolicyResponse(BaseModel):
     concurrency_limits: dict
 
 
+class CompletedBidCreateRequest(BaseModel):
+    project_id: str | None = None
+    project_name: str = Field(min_length=1)
+    engineering_category: str | None = None
+    tenderer: str | None = None
+    bid_result: str = "WON"
+    file_name: str = Field(min_length=1)
+    file_info: str | None = None
+    completed_date: str | None = None
+    created_by: str | None = "system"
+
+
+class CompletedBidItem(BaseModel):
+    id: str
+    project_id: str | None = None
+    project_name: str
+    engineering_category: str | None = None
+    tenderer: str | None = None
+    bid_result: str
+    file_name: str
+    file_info: str | None = None
+    completed_date: str | None = None
+    created_by: str | None = None
+    created_at: str
+
+
+class CompletedBidListResponse(BaseModel):
+    items: list[CompletedBidItem]
+
+
+class CompletedBidDeleteResponse(BaseModel):
+    record_id: str
+    deleted: bool
+
+
 class ExpertLibraryIngestResponse(BaseModel):
     status: str
     expert_doc_id: str

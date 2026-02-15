@@ -376,6 +376,23 @@ class ProjectModelPolicy(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+class CompletedBid(Base):
+    __tablename__ = "completed_bid"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[str | None] = mapped_column(Text)
+    project_name: Mapped[str] = mapped_column(Text, nullable=False)
+    engineering_category: Mapped[str | None] = mapped_column(Text)
+    tenderer: Mapped[str | None] = mapped_column(Text)
+    bid_result: Mapped[str] = mapped_column(Text, nullable=False, default="WON")
+    file_name: Mapped[str] = mapped_column(Text, nullable=False)
+    file_info: Mapped[str | None] = mapped_column(Text)
+    completed_date: Mapped[Date | None] = mapped_column(Date)
+    created_by: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class LLMCallLog(Base):
     __tablename__ = "llm_call_log"
 

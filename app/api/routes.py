@@ -15,6 +15,10 @@ from app.core.config import settings
 from app.schemas.contracts import (
     BatchIngestDirectoryRequest,
     BatchIngestDirectoryResponse,
+    CompletedBidCreateRequest,
+    CompletedBidDeleteResponse,
+    CompletedBidItem,
+    CompletedBidListResponse,
     DraftGenerationRequest,
     DraftGenerationResponse,
     EnqueueIngestResponse,
@@ -69,6 +73,7 @@ from app.services.byok import (
     test_provider_profile,
     upsert_project_model_policy,
 )
+from app.services.completed_bids import create_completed_bid, delete_completed_bid, list_completed_bids
 from app.services.evidence_validator import run_three_gates
 from app.services.expert_library import (
     ingest_historical_pdf,
@@ -129,6 +134,22 @@ def _profile_to_item(profile) -> ProviderProfileItem:
         key_secret_ref=profile.key_secret_ref,
         allowed_tasks=profile.allowed_tasks or ["*"],
         created_by=profile.created_by,
+    )
+
+
+def _completed_bid_to_item(record) -> CompletedBidItem:
+    return CompletedBidItem(
+        id=str(record.id),
+        project_id=record.project_id,
+        project_name=record.project_name,
+        engineering_category=record.engineering_category,
+        tenderer=record.tenderer,
+        bid_result=record.bid_result,
+        file_name=record.file_name,
+        file_info=record.file_info,
+        completed_date=record.completed_date.isoformat() if record.completed_date else None,
+        created_by=record.created_by,
+        created_at=record.created_at.isoformat() if record.created_at else "",
     )
 
 
@@ -263,6 +284,51 @@ def get_model_policy_api(project_id: str) -> ProjectModelPolicyResponse:
             "program_support": 1,
         },
     )
+
+
+@router.post("/api/completed-bids", response_model=CompletedBidItem)
+def create_completed_bid_api(payload: CompletedBidCreateRequest) -> CompletedBidItem:
+    try:
+        record = create_completed_bid(
+            project_id=payload.project_id,
+            project_name=payload.project_name,
+            engineering_category=payload.engineering_category,
+            tenderer=payload.tenderer,
+            bid_result=payload.bid_result,
+            file_name=payload.file_name,
+            file_info=payload.file_info,
+            completed_date=payload.completed_date,
+            created_by=payload.created_by,
+        )
+        return _completed_bid_to_item(record)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise _service_unavailable() from exc
+
+
+@router.get("/api/completed-bids", response_model=CompletedBidListResponse)
+def list_completed_bids_api(project_id: str | None = None, limit: int = 200) -> CompletedBidListResponse:
+    try:
+        records = list_completed_bids(project_id=project_id, limit=limit)
+        return CompletedBidListResponse(items=[_completed_bid_to_item(item) for item in records])
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise _service_unavailable() from exc
+
+
+@router.delete("/api/completed-bids/{record_id}", response_model=CompletedBidDeleteResponse)
+def delete_completed_bid_api(record_id: str) -> CompletedBidDeleteResponse:
+    try:
+        deleted = delete_completed_bid(record_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise _service_unavailable() from exc
+    if not deleted:
+        raise HTTPException(status_code=404, detail="completed bid record not found")
+    return CompletedBidDeleteResponse(record_id=record_id, deleted=True)
 
 
 @router.post("/v1/tender/parse", response_model=ParseTenderResponse)

@@ -109,7 +109,7 @@ def default_model_for_role(role: str | ModelRole) -> tuple[str, str]:
     chain = get_fallback_chain(role)
     if chain:
         return chain[0]
-    return "qwen", "qwen3-max"
+    return "qwen", "qwen3"
 
 
 def get_registry_entry(provider: str, model_name: str) -> ModelRegistryEntry | None:

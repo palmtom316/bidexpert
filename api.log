@@ -1,0 +1,131 @@
+INFO:     Will watch for changes in these directories: ['/Users/palmtom/Projects/bidexpert']
+INFO:     Uvicorn running on http://0.0.0.0:8001 (Press CTRL+C to quit)
+INFO:     Started reloader process [29622] using WatchFiles
+INFO:     Started server process [29633]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     127.0.0.1:57580 - "HEAD /ui HTTP/1.1" 307 Temporary Redirect
+INFO:     127.0.0.1:57607 - "GET /ui HTTP/1.1" 307 Temporary Redirect
+INFO:     127.0.0.1:57607 - "GET /ui/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57607 - "GET /ui/styles.css HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57609 - "GET /ui/app.js HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57609 - "GET /favicon.ico HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:57683 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59549 - "GET /ui HTTP/1.1" 307 Temporary Redirect
+INFO:     127.0.0.1:59549 - "GET /ui/ HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:59549 - "GET /ui/styles.css HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:59556 - "GET /ui/app.js HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:59556 - "GET /favicon.ico HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:60738 - "GET /ui/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60739 - "GET /ui/app.js HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60738 - "GET /ui/styles.css HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60738 - "GET /favicon.ico HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:62597 - "GET /ui/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63398 - "GET /ui/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63640 - "GET /ui/ HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:63641 - "GET /ui/ HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:64038 - "GET /ui/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64039 - "GET /ui/ HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:64107 - "GET /ui/ HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:64490 - "GET /ui/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64491 - "GET /ui/ HTTP/1.1" 304 Not Modified
+WARNING:  WatchFiles detected changes in 'app/llm/model_registry.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [29633]
+INFO:     Started server process [50171]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     127.0.0.1:64601 - "GET /ui/index.html HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64601 - "GET /ui/styles.css HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64602 - "GET /ui/app.js HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64602 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64603 - "GET /v1/tender/analysis-runs?limit=50&project_id=26155bfa-0ae5-4714-a4a7-28c82b36d5be HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64601 - "GET /v1/expert-library/docs?limit=80&project_id=26155bfa-0ae5-4714-a4a7-28c82b36d5be&industry_tag=%E6%94%BF%E4%BC%81%E5%B7%A5%E7%A8%8B HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64603 - "GET /favicon.ico HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:64616 - "GET /api/provider-profiles?project_id=26155bfa-0ae5-4714-a4a7-28c82b36d5be HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64616 - "GET /api/projects/26155bfa-0ae5-4714-a4a7-28c82b36d5be/model-policy HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:64858 - "GET /ui/index.html HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64859 - "GET /ui/app.js HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64858 - "GET /ui/styles.css HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64859 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64860 - "GET /v1/tender/analysis-runs?limit=50&project_id=26155bfa-0ae5-4714-a4a7-28c82b36d5be HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64858 - "GET /v1/expert-library/docs?limit=80&project_id=26155bfa-0ae5-4714-a4a7-28c82b36d5be&industry_tag=%E6%94%BF%E4%BC%81%E5%B7%A5%E7%A8%8B HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65115 - "GET /ui/index.html HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:65115 - "GET /ui/styles.css HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:65115 - "GET /ui/app.js HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:65115 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65117 - "GET /v1/tender/analysis-runs?limit=50&project_id=26155bfa-0ae5-4714-a4a7-28c82b36d5be HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65116 - "GET /v1/expert-library/docs?limit=80&project_id=26155bfa-0ae5-4714-a4a7-28c82b36d5be&industry_tag=%E6%94%BF%E4%BC%81%E5%B7%A5%E7%A8%8B HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65510 - "GET /ui/index.html HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65510 - "GET /ui/styles.css HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65511 - "GET /ui/app.js HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65511 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65512 - "GET /v1/tender/analysis-runs?limit=50&project_id=26155bfa-0ae5-4714-a4a7-28c82b36d5be HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65510 - "GET /v1/expert-library/docs?limit=80&project_id=26155bfa-0ae5-4714-a4a7-28c82b36d5be HTTP/1.1" 200 OK
+WARNING:  WatchFiles detected changes in 'app/models/tables.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [50171]
+INFO:     Started server process [70093]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'app/services/completed_bids.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [70093]
+INFO:     Started server process [70315]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'app/db/init_db.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [70315]
+INFO:     Started server process [70543]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'app/schemas/contracts.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [70543]
+INFO:     Started server process [70689]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'app/api/routes.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [70689]
+INFO:     Started server process [70949]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'app/services/completed_bids.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [70949]
+INFO:     Started server process [71083]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'app/tests/test_completed_bids_api.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [71083]
+INFO:     Started server process [71401]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     127.0.0.1:49314 - "GET /api/provider-profiles?project_id=26155bfa-0ae5-4714-a4a7-28c82b36d5be HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49314 - "GET /api/projects/26155bfa-0ae5-4714-a4a7-28c82b36d5be/model-policy HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:49609 - "GET /ui/index.html HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49610 - "GET /ui/app.js HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49609 - "GET /ui/styles.css HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49610 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49609 - "GET /v1/expert-library/docs?limit=80&project_id=26155bfa-0ae5-4714-a4a7-28c82b36d5be HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49611 - "GET /v1/tender/analysis-runs?limit=50&project_id=26155bfa-0ae5-4714-a4a7-28c82b36d5be HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49612 - "GET /api/completed-bids?limit=300 HTTP/1.1" 200 OK
