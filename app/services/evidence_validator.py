@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from rapidfuzz import fuzz
 
 SENTENCE_SPLIT = re.compile(r"[。；;!?！？\n]+")
+MUST_PATTERN = re.compile(r"(必须|应当|不得|需|须|满足)")
 
 
 @dataclass
@@ -58,6 +59,7 @@ def run_three_gates(
     requirement_mapped: int = 1,
     requirement_total: int = 1,
     coverage_threshold: float = 0.9,
+    requirement_text: str | None = None,
 ) -> GateResult:
     if not gate1_evidence_binding(evidence_ids):
         return GateResult("NEED_HUMAN_INPUT", ["missing_evidence_ids"], 0.0)
@@ -69,5 +71,7 @@ def run_three_gates(
     coverage = gate3_matrix_coverage(requirement_mapped, requirement_total)
     if coverage < coverage_threshold:
         return GateResult("NEED_HUMAN_INPUT", ["coverage_below_threshold"], coverage)
+    if requirement_text and MUST_PATTERN.search(requirement_text) and coverage < 1.0:
+        return GateResult("NEED_HUMAN_INPUT", ["must_clause_coverage_insufficient"], coverage)
 
     return GateResult("SUPPORTED", [], coverage)

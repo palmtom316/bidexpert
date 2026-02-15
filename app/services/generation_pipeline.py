@@ -14,9 +14,12 @@ from app.services.llm_audit import log_llm_call, reserve_budget_persistent
 from app.services.pii_policy import sanitize_outbound_text
 from app.services.rag_flow import decompose_requirement, merge_retrieval, retrieve_for_subrequirements
 from app.services.semantic_cache import build_cache_key, get_cache, set_cache
+from app.validator import build_generation_payload, flatten_generation_payload, validate_generation_payload
 
-LLM_PROVIDER = "qwen"
-LLM_MODEL = "Qwen3-Max"
+
+def _schema_evidence_ids(evidence_ids: list[str]) -> list[str]:
+    # Schema 要求 evidence_ids 非空；检索为空时保留占位并由 gate1 判定 NEED_HUMAN_INPUT。
+    return evidence_ids or ["NEED_EVIDENCE"]
 
 
 def _compose_draft(requirement_text: str, evidence_texts: list[str]) -> str:
@@ -68,18 +71,23 @@ def generate_draft_with_retrieval(
         model_policy = get_project_model_policy(project_id) if project_id else None
     except ValueError:
         model_policy = None
-    llm_provider = resolved_profile.provider or LLM_PROVIDER
-    llm_model = resolved_profile.model or LLM_MODEL
+    llm_provider = resolved_profile.provider
+    llm_model = resolved_profile.model
     review_enabled = bool(model_policy.enable_review) if model_policy else True
     cache_scope = f"{tender_template_id or '_'}|p={project_id or '_'}|g={llm_provider}:{llm_model}|r={int(review_enabled)}"
 
     # Step1-3 schema-driven RAG
     sub_requirements = decompose_requirement(requirement_text)
-    retrieval = retrieve_for_subrequirements(
+    retrieval_result = retrieve_for_subrequirements(
         sub_requirements=sub_requirements,
         top_k=effective_top_k,
         industry_tag=industry_tag,
+        project_id=project_id,
     )
+    if isinstance(retrieval_result, tuple):
+        retrieval, retrieval_log = retrieval_result
+    else:
+        retrieval, retrieval_log = retrieval_result, []
     merged_evidence_ids, coverage_map, merged_hits = merge_retrieval(retrieval)
 
     cache_key = build_cache_key(
@@ -95,6 +103,8 @@ def generate_draft_with_retrieval(
         response = DraftGenerationResponse(**cached_payload)
         response.llm_provider = llm_provider
         response.llm_model = llm_model
+        if not response.retrieval_log:
+            response.retrieval_log = retrieval_log
         log_llm_call(
             project_id=project_id,
             model_name=llm_model,
@@ -117,6 +127,7 @@ def generate_draft_with_retrieval(
     evidence_texts = [hit.text for hit in merged_hits]
     warnings = _expiry_warnings([hit.payload for hit in merged_hits])
     generation_fallback = False
+    generation_payload = build_generation_payload("NEED_HUMAN_INPUT", _schema_evidence_ids(merged_evidence_ids))
     try:
         generated = generate_with_profile(
             provider=llm_provider,
@@ -125,12 +136,23 @@ def generate_draft_with_retrieval(
             base_url=resolved_profile.base_url,
             requirement_text=requirement_text,
             evidence_texts=evidence_texts,
+            evidence_ids=merged_evidence_ids,
         )
-        generated_text = generated.text
+        try:
+            if generated.content_json:
+                generation_payload = validate_generation_payload(generated.content_json)
+            else:
+                generation_payload = build_generation_payload(generated.text, _schema_evidence_ids(merged_evidence_ids))
+                warnings.append("generate_schema_wrapped_from_text")
+        except ValueError:
+            generation_payload = build_generation_payload("NEED_HUMAN_INPUT", _schema_evidence_ids(merged_evidence_ids))
+            warnings.append("generate_schema_validation_failed")
     except AdapterUnavailableError:
         generation_fallback = True
-        generated_text = _compose_draft(requirement_text, evidence_texts)
+        generated_text_fallback = _compose_draft(requirement_text, evidence_texts) or "NEED_HUMAN_INPUT"
+        generation_payload = build_generation_payload(generated_text_fallback, _schema_evidence_ids(merged_evidence_ids))
         warnings.append("generate_fallback_local_template")
+    generated_text = flatten_generation_payload(generation_payload)
 
     input_tokens = estimate_tokens(requirement_text + "\n" + "\n".join(evidence_texts))
     output_tokens = estimate_tokens(generated_text)
@@ -145,6 +167,8 @@ def generate_draft_with_retrieval(
             cache_hit=False,
             warnings=[f"input_tokens={input_tokens}", f"output_tokens={output_tokens}"],
             coverage_map=coverage_map,
+            retrieval_log=retrieval_log,
+            generation_json=generation_payload.model_dump(mode="json"),
         )
 
     ok, budget_remaining = reserve_budget_persistent(project_id=project_id, estimated_tokens=input_tokens + output_tokens)
@@ -157,6 +181,7 @@ def generate_draft_with_retrieval(
         requirement_mapped=sum(1 for ids in coverage_map.values() if ids),
         requirement_total=max(len(coverage_map), 1),
         coverage_threshold=settings.min_matrix_coverage,
+        requirement_text=requirement_text,
     )
 
     sanitize = sanitize_outbound_text(
@@ -194,6 +219,8 @@ def generate_draft_with_retrieval(
             cache_hit=False,
             warnings=warnings + sanitize.warnings,
             coverage_map=coverage_map,
+            retrieval_log=retrieval_log,
+            generation_json=generation_payload.model_dump(mode="json"),
         )
 
     status = result.status
@@ -205,6 +232,7 @@ def generate_draft_with_retrieval(
     review_fallback = False
     review_provider_fallback = False
     review_issues: list[str] = []
+    review_report: dict | None = None
     if review_enabled:
         try:
             review_result = review_with_profile(
@@ -215,6 +243,7 @@ def generate_draft_with_retrieval(
                 draft_text=sanitize.text or generated_text,
                 evidence_texts=evidence_texts,
             )
+            review_report = review_result.report
             if not review_result.approved:
                 status = "NEED_HUMAN_INPUT"
                 review_issues = review_result.issues or ["review_rejected"]
@@ -251,6 +280,7 @@ def generate_draft_with_retrieval(
                     )
                     review_provider_fallback = True
                     warnings.append("review_fallback_provider_used")
+                    review_report = fallback_review.report
                     if not fallback_review.approved:
                         status = "NEED_HUMAN_INPUT"
                         review_issues = fallback_review.issues or ["review_rejected"]
@@ -280,6 +310,15 @@ def generate_draft_with_retrieval(
                 warnings.append("review_fallback_local_validator")
 
             if review_fallback:
+                review_report = {
+                    "missing_requirements": [],
+                    "logical_inconsistencies": [],
+                    "risk_points": ["review_fallback_local_validator"],
+                    "coverage_estimate": 0.0,
+                    "score_estimate": 0.0,
+                    "approved": False,
+                    "issues": ["review_fallback_local_validator"],
+                }
                 log_llm_call(
                     project_id=project_id,
                     model_name=review_profile.model,
@@ -310,6 +349,9 @@ def generate_draft_with_retrieval(
         cache_hit=False,
         warnings=warnings + sanitize.warnings + ([budget_warning] if budget_warning else []),
         coverage_map=coverage_map,
+        retrieval_log=retrieval_log,
+        generation_json=generation_payload.model_dump(mode="json"),
+        review_json=review_report,
     )
 
     log_llm_call(

@@ -336,6 +336,9 @@ class ProjectModelPolicy(Base):
     project_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("project.id", ondelete="CASCADE"), primary_key=True
     )
+    extract_profile_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("provider_profile.id", ondelete="SET NULL")
+    )
     generate_profile_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("provider_profile.id", ondelete="SET NULL")
     )
@@ -345,12 +348,25 @@ class ProjectModelPolicy(Base):
     embed_profile_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("provider_profile.id", ondelete="SET NULL")
     )
+    query_rewrite_profile_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("provider_profile.id", ondelete="SET NULL")
+    )
+    program_support_profile_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("provider_profile.id", ondelete="SET NULL")
+    )
     enable_review: Mapped[bool] = mapped_column(default=True)
     token_budget_total: Mapped[int] = mapped_column(Integer, default=500000)
     token_budget_used: Mapped[int] = mapped_column(Integer, default=0)
     concurrency_limits: Mapped[dict] = mapped_column(
         JSON,
-        default=lambda: {"generate": 3, "review": 2, "embed": 2},
+        default=lambda: {
+            "extract": 2,
+            "generate": 3,
+            "review": 2,
+            "embed": 2,
+            "query_rewrite": 2,
+            "program_support": 1,
+        },
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)

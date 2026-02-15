@@ -195,9 +195,12 @@ def put_model_policy_api(project_id: str, payload: ProjectModelPolicyUpsertReque
     try:
         policy = upsert_project_model_policy(
             project_id=project_id,
+            extract_profile_id=payload.extract_profile_id,
             generate_profile_id=payload.generate_profile_id,
             review_profile_id=payload.review_profile_id,
             embed_profile_id=payload.embed_profile_id,
+            query_rewrite_profile_id=payload.query_rewrite_profile_id,
+            program_support_profile_id=payload.program_support_profile_id,
             enable_review=payload.enable_review,
             token_budget_total=payload.token_budget_total,
             concurrency_limits=payload.concurrency_limits,
@@ -207,13 +210,24 @@ def put_model_policy_api(project_id: str, payload: ProjectModelPolicyUpsertReque
 
     return ProjectModelPolicyResponse(
         project_id=str(policy.project_id),
+        extract_profile_id=str(policy.extract_profile_id) if policy.extract_profile_id else None,
         generate_profile_id=str(policy.generate_profile_id) if policy.generate_profile_id else None,
         review_profile_id=str(policy.review_profile_id) if policy.review_profile_id else None,
         embed_profile_id=str(policy.embed_profile_id) if policy.embed_profile_id else None,
+        query_rewrite_profile_id=str(policy.query_rewrite_profile_id) if policy.query_rewrite_profile_id else None,
+        program_support_profile_id=str(policy.program_support_profile_id) if policy.program_support_profile_id else None,
         enable_review=policy.enable_review,
         token_budget_total=int(policy.token_budget_total),
         token_budget_used=int(policy.token_budget_used),
-        concurrency_limits=policy.concurrency_limits or {"generate": 3, "review": 2, "embed": 2},
+        concurrency_limits=policy.concurrency_limits
+        or {
+            "extract": 2,
+            "generate": 3,
+            "review": 2,
+            "embed": 2,
+            "query_rewrite": 2,
+            "program_support": 1,
+        },
     )
 
 
@@ -228,13 +242,24 @@ def get_model_policy_api(project_id: str) -> ProjectModelPolicyResponse:
 
     return ProjectModelPolicyResponse(
         project_id=str(policy.project_id),
+        extract_profile_id=str(policy.extract_profile_id) if policy.extract_profile_id else None,
         generate_profile_id=str(policy.generate_profile_id) if policy.generate_profile_id else None,
         review_profile_id=str(policy.review_profile_id) if policy.review_profile_id else None,
         embed_profile_id=str(policy.embed_profile_id) if policy.embed_profile_id else None,
+        query_rewrite_profile_id=str(policy.query_rewrite_profile_id) if policy.query_rewrite_profile_id else None,
+        program_support_profile_id=str(policy.program_support_profile_id) if policy.program_support_profile_id else None,
         enable_review=policy.enable_review,
         token_budget_total=int(policy.token_budget_total),
         token_budget_used=int(policy.token_budget_used),
-        concurrency_limits=policy.concurrency_limits or {"generate": 3, "review": 2, "embed": 2},
+        concurrency_limits=policy.concurrency_limits
+        or {
+            "extract": 2,
+            "generate": 3,
+            "review": 2,
+            "embed": 2,
+            "query_rewrite": 2,
+            "program_support": 1,
+        },
     )
 
 

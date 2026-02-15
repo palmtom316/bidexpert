@@ -6,6 +6,7 @@ import uuid
 
 from app.core.config import settings
 from app.schemas.contracts import EvidenceSearchHit, EvidenceUpsertItem
+from app.services.byok import resolve_profile_for_task
 from app.services.embedding import embed_text
 
 
@@ -50,9 +51,10 @@ class QdrantStore:
                 vectors_config=VectorParams(size=self.vector_size, distance=Distance.COSINE),
             )
 
-    def upsert_chunks(self, expert_doc_id: str, chunks: list[EvidenceUpsertItem]) -> int:
+    def upsert_chunks(self, expert_doc_id: str, chunks: list[EvidenceUpsertItem], project_id: str | None = None) -> int:
         from qdrant_client.http.models import PointStruct
 
+        embed_profile = resolve_profile_for_task(project_id=project_id, task_type="EMBED")
         points: list[PointStruct] = []
         for chunk in chunks:
             payload = {
@@ -67,11 +69,13 @@ class QdrantStore:
                 "quality_score": chunk.quality_score,
                 "source_locator": chunk.source_locator,
                 "text": chunk.text,
+                "embed_provider": embed_profile.provider,
+                "embed_model": embed_profile.model,
             }
             points.append(
                 PointStruct(
                     id=str(uuid.uuid5(uuid.NAMESPACE_URL, f"{expert_doc_id}:{chunk.chunk_id}")),
-                    vector=embed_text(chunk.text, self.vector_size),
+                    vector=embed_text(chunk.text, self.vector_size, model_id=embed_profile.model),
                     payload=payload,
                 )
             )
@@ -80,9 +84,16 @@ class QdrantStore:
             self.client.upsert(collection_name=self.collection, points=points, wait=True)
         return len(points)
 
-    def search(self, query: str, top_k: int = 5, industry_tag: str | None = None) -> list[RetrievedEvidence]:
+    def search(
+        self,
+        query: str,
+        top_k: int = 5,
+        industry_tag: str | None = None,
+        project_id: str | None = None,
+    ) -> list[RetrievedEvidence]:
         from qdrant_client.http.models import FieldCondition, Filter, MatchValue
 
+        embed_profile = resolve_profile_for_task(project_id=project_id, task_type="EMBED")
         must = [FieldCondition(key="sensitivity_level", match=MatchValue(value="PUBLIC_OK"))]
         if industry_tag:
             must.append(FieldCondition(key="industry_tag", match=MatchValue(value=industry_tag)))
@@ -90,7 +101,7 @@ class QdrantStore:
         must_not = [FieldCondition(key="forbidden_tags", match=MatchValue(value="PRICING_RELATED"))]
 
         query_filter = Filter(must=must, must_not=must_not)
-        query_vector = embed_text(query, self.vector_size)
+        query_vector = embed_text(query, self.vector_size, model_id=embed_profile.model)
         if hasattr(self.client, "query_points"):
             response = self.client.query_points(
                 collection_name=self.collection,

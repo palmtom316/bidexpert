@@ -140,6 +140,7 @@ def ingest_historical_pdf(
                 industry_tag=industry_tag,
                 doc_type=doc_type,
                 model_id=model_id,
+                project_id=parsed_project.project_raw,
             )
         except Exception:  # noqa: BLE001
             chunks = _fallback_chunks_from_blocks(
@@ -224,7 +225,7 @@ def ingest_historical_pdf(
         raise RuntimeError(f"failed to persist expert library records: {exc}") from exc
 
     store = QdrantStore()
-    upserted = store.upsert_chunks(str(expert_doc_id), chunks)
+    upserted = store.upsert_chunks(str(expert_doc_id), chunks, project_id=parsed_project.project_raw)
 
     return ExpertLibraryIngestResponse(
         status="SUCCEEDED",
@@ -340,6 +341,7 @@ def _build_structured_chunks(
 def _persist_structured_category(
     *,
     project_uuid: uuid.UUID | None,
+    project_id: str | None,
     industry_tag: str | None,
     created_by: str,
     category_key: str,
@@ -406,7 +408,7 @@ def _persist_structured_category(
         raise RuntimeError(f"failed to persist structured expert library records: {exc}") from exc
 
     store = QdrantStore()
-    upserted = store.upsert_chunks(expert_doc_id, chunks)
+    upserted = store.upsert_chunks(expert_doc_id, chunks, project_id=project_id)
     return ExpertLibraryStructuredIngestItem(
         category=category_key,
         expert_doc_id=expert_doc_id,
@@ -451,6 +453,7 @@ def ingest_structured_expert_knowledge(
         )
         item = _persist_structured_category(
             project_uuid=parsed_project.project_uuid,
+            project_id=parsed_project.project_raw,
             industry_tag=industry_tag,
             created_by=created_by,
             category_key=category_key,

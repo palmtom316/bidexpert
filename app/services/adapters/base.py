@@ -12,6 +12,7 @@ class GenerationRequest:
     model: str
     requirement_text: str
     evidence_texts: list[str]
+    evidence_ids: list[str]
     api_key: str | None
     base_url: str | None
 
@@ -21,6 +22,7 @@ class GenerationResult:
     text: str
     provider: str
     model: str
+    content_json: dict | None = None
 
 
 @dataclass
@@ -38,6 +40,22 @@ class ReviewResult:
     issues: list[str]
     provider: str
     model: str
+    report: dict | None = None
+
+
+@dataclass
+class QueryRewriteRequest:
+    model: str
+    query: str
+    api_key: str | None
+    base_url: str | None
+
+
+@dataclass
+class QueryRewriteResult:
+    rewritten_query: str
+    provider: str
+    model: str
 
 
 class LLMAdapter:
@@ -47,4 +65,7 @@ class LLMAdapter:
         raise NotImplementedError
 
     def review(self, payload: ReviewRequest) -> ReviewResult:
+        raise NotImplementedError
+
+    def rewrite_query(self, payload: QueryRewriteRequest) -> QueryRewriteResult:
         raise NotImplementedError

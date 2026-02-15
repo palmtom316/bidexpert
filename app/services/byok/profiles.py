@@ -11,12 +11,9 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.config import settings
 from app.db.session import SessionLocal
+from app.llm import default_model_for_role, get_fallback_chain, normalize_role
 from app.models.tables import KeyStorage, ProjectModelPolicy, ProviderProfile, ProviderScope
 from app.secrets.crypto import decrypt, encrypt, load_master_key
-
-DEFAULT_PROVIDER = "qwen"
-DEFAULT_MODEL = "Qwen3-Max"
-
 
 def _try_uuid(value: str) -> uuid.UUID:
     try:
@@ -52,6 +49,12 @@ class ResolvedProfile:
     model: str
     api_key: str | None
     base_url: str | None
+
+
+def _default_profile(task_type: str) -> ResolvedProfile:
+    role = normalize_role(task_type)
+    provider, model = default_model_for_role(role)
+    return ResolvedProfile(None, provider, model, None, None)
 
 
 def create_provider_profile(
@@ -152,9 +155,12 @@ def _task_allowed(profile: ProviderProfile, task_type: str) -> bool:
 def upsert_project_model_policy(
     *,
     project_id: str,
+    extract_profile_id: str | None,
     generate_profile_id: str | None,
     review_profile_id: str | None,
     embed_profile_id: str | None,
+    query_rewrite_profile_id: str | None,
+    program_support_profile_id: str | None,
     enable_review: bool,
     token_budget_total: int | None,
     concurrency_limits: dict | None,
@@ -170,9 +176,12 @@ def upsert_project_model_policy(
         if not policy:
             policy = ProjectModelPolicy(project_id=project_uuid)
 
+        policy.extract_profile_id = _opt_uuid(extract_profile_id)
         policy.generate_profile_id = _opt_uuid(generate_profile_id)
         policy.review_profile_id = _opt_uuid(review_profile_id)
         policy.embed_profile_id = _opt_uuid(embed_profile_id)
+        policy.query_rewrite_profile_id = _opt_uuid(query_rewrite_profile_id)
+        policy.program_support_profile_id = _opt_uuid(program_support_profile_id)
         policy.enable_review = enable_review
         if token_budget_total is not None:
             policy.token_budget_total = max(0, int(token_budget_total))
@@ -193,37 +202,44 @@ def get_project_model_policy(project_id: str) -> ProjectModelPolicy | None:
 
 
 def resolve_profile_for_task(project_id: str | None, task_type: str) -> ResolvedProfile:
+    role = normalize_role(task_type)
+    fallback_profile = _default_profile(role.value)
     if not project_id:
-        return ResolvedProfile(None, DEFAULT_PROVIDER, DEFAULT_MODEL, None, None)
+        return fallback_profile
 
-    role = task_type.strip().upper()
     try:
         project_uuid = _try_uuid(project_id)
     except ValueError:
-        return ResolvedProfile(None, DEFAULT_PROVIDER, DEFAULT_MODEL, None, None)
+        return fallback_profile
 
     with SessionLocal() as db:
         policy = db.execute(
             select(ProjectModelPolicy).where(ProjectModelPolicy.project_id == project_uuid)
         ).scalar_one_or_none()
         if not policy:
-            return ResolvedProfile(None, DEFAULT_PROVIDER, DEFAULT_MODEL, None, None)
+            return fallback_profile
 
         profile_id: uuid.UUID | None
-        if role == "REVIEW":
+        if role.value == "EXTRACT":
+            profile_id = policy.extract_profile_id
+        elif role.value == "REVIEW":
             profile_id = policy.review_profile_id
-        elif role == "EMBED":
+        elif role.value == "EMBED":
             profile_id = policy.embed_profile_id
+        elif role.value == "QUERY_REWRITE":
+            profile_id = policy.query_rewrite_profile_id
+        elif role.value == "PROGRAM_SUPPORT":
+            profile_id = policy.program_support_profile_id
         else:
             profile_id = policy.generate_profile_id
         if not profile_id:
-            return ResolvedProfile(None, DEFAULT_PROVIDER, DEFAULT_MODEL, None, None)
+            return fallback_profile
 
         profile = db.execute(select(ProviderProfile).where(ProviderProfile.id == profile_id)).scalar_one_or_none()
         if not profile:
-            return ResolvedProfile(None, DEFAULT_PROVIDER, DEFAULT_MODEL, None, None)
-        if not _task_allowed(profile, role):
-            return ResolvedProfile(None, DEFAULT_PROVIDER, DEFAULT_MODEL, None, None)
+            return fallback_profile
+        if not _task_allowed(profile, role.value):
+            return fallback_profile
 
     api_key = _resolve_api_key(profile)
     return ResolvedProfile(
@@ -233,6 +249,20 @@ def resolve_profile_for_task(project_id: str | None, task_type: str) -> Resolved
         api_key=api_key,
         base_url=profile.base_url,
     )
+
+
+def resolve_profile_chain_for_task(project_id: str | None, task_type: str) -> list[ResolvedProfile]:
+    role = normalize_role(task_type)
+    primary = resolve_profile_for_task(project_id=project_id, task_type=role.value)
+    chain = [primary]
+    seen = {(primary.provider.lower(), primary.model)}
+    for provider, model in get_fallback_chain(role):
+        key = (provider.lower(), model)
+        if key in seen:
+            continue
+        chain.append(ResolvedProfile(None, provider, model, None, None))
+        seen.add(key)
+    return chain
 
 
 def test_provider_profile(profile_id: str) -> tuple[ProviderProfile, bool, str]:

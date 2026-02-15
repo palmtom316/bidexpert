@@ -5,6 +5,7 @@ from typing import Any
 
 from app.core.config import settings
 from app.schemas.contracts import EvidenceUpsertItem
+from app.services.byok import resolve_profile_chain_for_task
 
 _PROMPT_DESCRIPTION = (
     "从投标文件中提取可复用的专家知识片段。"
@@ -57,12 +58,34 @@ def extract_evidence_chunks_from_text(
     industry_tag: str | None = None,
     doc_type: str = "EXPERT_HISTORY",
     model_id: str | None = None,
+    project_id: str | None = None,
 ) -> list[EvidenceUpsertItem]:
     if not text.strip():
         raise ValueError("text must not be empty")
 
-    resolved_model_id = (model_id or "").strip() or settings.langextract_default_model
-    raw = _run_langextract(text=text, model_id=resolved_model_id)
+    model_candidates: list[str] = []
+    preferred_model = (model_id or "").strip()
+    if preferred_model:
+        model_candidates.append(preferred_model)
+    for profile in resolve_profile_chain_for_task(project_id=project_id, task_type="EXTRACT"):
+        if profile.model not in model_candidates:
+            model_candidates.append(profile.model)
+    if settings.langextract_default_model not in model_candidates:
+        model_candidates.append(settings.langextract_default_model)
+
+    raw: list[Any] = []
+    last_error: Exception | None = None
+    for candidate in model_candidates:
+        try:
+            raw = _run_langextract(text=text, model_id=candidate)
+            last_error = None
+            break
+        except Exception as exc:  # noqa: BLE001
+            last_error = exc
+            continue
+    if last_error is not None and not raw:
+        raise last_error
+
     chunks: list[EvidenceUpsertItem] = []
     for index, item in enumerate(raw, start=1):
         extraction_text = str(_field(item, "extraction_text", "")).strip()

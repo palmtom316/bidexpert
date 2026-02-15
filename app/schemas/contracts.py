@@ -181,6 +181,9 @@ class DraftGenerationResponse(BaseModel):
     cache_hit: bool = False
     warnings: list[str] = Field(default_factory=list)
     coverage_map: dict[str, list[str]] = Field(default_factory=dict)
+    retrieval_log: list[dict] = Field(default_factory=list)
+    generation_json: dict = Field(default_factory=dict)
+    review_json: dict | None = None
 
 
 class WorkflowSectionRequest(BaseModel):
@@ -288,9 +291,12 @@ class ProviderProfileTestResponse(BaseModel):
 
 
 class ProjectModelPolicyUpsertRequest(BaseModel):
+    extract_profile_id: str | None = None
     generate_profile_id: str | None = None
     review_profile_id: str | None = None
     embed_profile_id: str | None = None
+    query_rewrite_profile_id: str | None = None
+    program_support_profile_id: str | None = None
     enable_review: bool = True
     token_budget_total: int | None = None
     concurrency_limits: dict | None = None
@@ -298,9 +304,12 @@ class ProjectModelPolicyUpsertRequest(BaseModel):
 
 class ProjectModelPolicyResponse(BaseModel):
     project_id: str
+    extract_profile_id: str | None = None
     generate_profile_id: str | None = None
     review_profile_id: str | None = None
     embed_profile_id: str | None = None
+    query_rewrite_profile_id: str | None = None
+    program_support_profile_id: str | None = None
     enable_review: bool
     token_budget_total: int
     token_budget_used: int

@@ -4,20 +4,15 @@ from app.services.adapters import (
     AdapterUnavailableError,
     GenerationRequest,
     GenerationResult,
-    MockAdapter,
-    OpenAICompatibleAdapter,
+    QueryRewriteRequest,
+    QueryRewriteResult,
     ReviewRequest,
     ReviewResult,
+    create_adapter,
 )
 
-_OPENAI_COMPATIBLE = {"openai", "qwen", "deepseek", "doubao", "gemini", "glm"}
-
-
 def _select_adapter(provider: str):
-    normalized = (provider or "").strip().lower()
-    if normalized in _OPENAI_COMPATIBLE:
-        return OpenAICompatibleAdapter(provider=normalized)
-    return MockAdapter()
+    return create_adapter(provider)
 
 
 def generate_with_profile(
@@ -28,12 +23,14 @@ def generate_with_profile(
     base_url: str | None,
     requirement_text: str,
     evidence_texts: list[str],
+    evidence_ids: list[str],
 ) -> GenerationResult:
     adapter = _select_adapter(provider)
     payload = GenerationRequest(
         model=model,
         requirement_text=requirement_text,
         evidence_texts=evidence_texts,
+        evidence_ids=evidence_ids,
         api_key=api_key,
         base_url=base_url,
     )
@@ -60,8 +57,27 @@ def review_with_profile(
     return adapter.review(payload)
 
 
+def rewrite_query_with_profile(
+    *,
+    provider: str,
+    model: str,
+    api_key: str | None,
+    base_url: str | None,
+    query: str,
+) -> QueryRewriteResult:
+    adapter = _select_adapter(provider)
+    payload = QueryRewriteRequest(
+        model=model,
+        query=query,
+        api_key=api_key,
+        base_url=base_url,
+    )
+    return adapter.rewrite_query(payload)
+
+
 __all__ = [
     "AdapterUnavailableError",
     "generate_with_profile",
+    "rewrite_query_with_profile",
     "review_with_profile",
 ]

@@ -309,16 +309,24 @@ CREATE INDEX IF NOT EXISTS idx_provider_profile_scope ON provider_profile(scope,
 
 CREATE TABLE IF NOT EXISTS project_model_policy (
   project_id         uuid PRIMARY KEY REFERENCES project(id) ON DELETE CASCADE,
+  extract_profile_id uuid REFERENCES provider_profile(id) ON DELETE SET NULL,
   generate_profile_id uuid REFERENCES provider_profile(id) ON DELETE SET NULL,
   review_profile_id  uuid REFERENCES provider_profile(id) ON DELETE SET NULL,
   embed_profile_id   uuid REFERENCES provider_profile(id) ON DELETE SET NULL,
+  query_rewrite_profile_id uuid REFERENCES provider_profile(id) ON DELETE SET NULL,
+  program_support_profile_id uuid REFERENCES provider_profile(id) ON DELETE SET NULL,
   enable_review      boolean NOT NULL DEFAULT true,
   token_budget_total bigint NOT NULL DEFAULT 500000,
   token_budget_used  bigint NOT NULL DEFAULT 0,
-  concurrency_limits jsonb NOT NULL DEFAULT '{"generate":3,"review":2,"embed":2}'::jsonb,
+  concurrency_limits jsonb NOT NULL DEFAULT '{"extract":2,"generate":3,"review":2,"embed":2,"query_rewrite":2,"program_support":1}'::jsonb,
   created_at         timestamptz NOT NULL DEFAULT now(),
   updated_at         timestamptz NOT NULL DEFAULT now()
 );
+
+ALTER TABLE project_model_policy
+  ADD COLUMN IF NOT EXISTS extract_profile_id uuid REFERENCES provider_profile(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS query_rewrite_profile_id uuid REFERENCES provider_profile(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS program_support_profile_id uuid REFERENCES provider_profile(id) ON DELETE SET NULL;
 
 ALTER TABLE llm_call_log
   ADD COLUMN IF NOT EXISTS provider_profile_id uuid REFERENCES provider_profile(id) ON DELETE SET NULL,

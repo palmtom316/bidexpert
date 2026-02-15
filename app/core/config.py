@@ -17,7 +17,7 @@ class Settings(BaseSettings):
 
     upload_dir: str = "data/uploads"
     enable_ocr_fallback: bool = True
-    schema_version: str = "v3.2"
+    schema_version: str = "v3.7"
     top_k_default: int = 6
     evidence_expiry_warning_days: int = 30
     project_token_budget_default: int = 500000
@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     review_fallback_model: str | None = None
     review_fallback_base_url: str | None = None
     review_fallback_api_key: str | None = None
-    langextract_default_model: str = "gemini-2.5-flash"
+    langextract_default_model: str = "gemini-3-pro"
 
     model_config = SettingsConfigDict(env_prefix="BIDEXPERT_", extra="ignore")
 

@@ -1,6 +1,6 @@
-# BidExpert (v3.6 BYOK Aligned)
+# BidExpert (v3.7 Quality Matrix Aligned)
 
-基于 `AI_Tender_System_Technical_Whitepaper_v3.6_Bring_Your_Own_Key.md` 与实施指南的实现。
+基于 `AI_Tender_System_Technical_Whitepaper_v3.7_Quality_Maximized.md` 与 `AI_Programming_Prompt_v3.7_Quality_Maximized.md` 的实现。
 
 ## 已实现能力
 
@@ -17,9 +17,12 @@
 - 项目级预算治理（Budget exceeded 阻断）
 - 证据近到期预警（<=30天触发 NEED_HUMAN_INPUT）
 - BYOK：Provider Profile（项目级）+ 模型策略绑定（generate/review/embed）
+- v3.7 六角色模型策略（extract/embed/generate/review/query_rewrite/program_support）
+- Model Registry（`app/config/model_registry.yaml`）+ role 默认链路/fallback
 - Key 安全：ENCRYPTED_DB（AES-GCM, `MASTER_KEY_B64`）+ TEMP_REDIS（TTL）
-- 多供应商 Adapter Registry（OpenAI-compatible + Mock fallback）
+- 多供应商 Adapter Registry（OpenAI/Gemini/Qwen/DeepSeek + OpenAI-compatible fallback）
 - 审查降级：审查模型不可用 -> 备用审查模型（可配置）-> 本地验证器（风险告警）
+- 生成/审查 JSON Schema 强校验（章节 `content_blocks` + 审查结构化报告）
 
 ## 快速启动（Docker）
 

@@ -7,14 +7,16 @@ import re
 TOKEN_PATTERN = re.compile(r"[\w\u4e00-\u9fff]+", re.UNICODE)
 
 
-def embed_text(text: str, vector_size: int = 256) -> list[float]:
+def embed_text(text: str, vector_size: int = 256, model_id: str | None = None) -> list[float]:
     vec = [0.0] * vector_size
     tokens = TOKEN_PATTERN.findall(text.lower())
     if not tokens:
         return vec
 
+    salt = (model_id or "").strip().lower()
     for token in tokens:
-        digest = hashlib.sha1(token.encode("utf-8")).hexdigest()
+        payload = f"{salt}:{token}" if salt else token
+        digest = hashlib.sha1(payload.encode("utf-8")).hexdigest()
         idx = int(digest[:8], 16) % vector_size
         sign = 1.0 if (int(digest[8:10], 16) % 2 == 0) else -1.0
         vec[idx] += sign
