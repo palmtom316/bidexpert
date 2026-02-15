@@ -8,7 +8,8 @@ RUN apt-get update \
        tesseract-ocr-chi-sim \
     && rm -rf /var/lib/apt/lists/*
 
-COPY pyproject.toml README.md ./
+COPY pyproject.toml ./
+COPY docs ./docs
 COPY app ./app
 COPY sql ./sql
 
