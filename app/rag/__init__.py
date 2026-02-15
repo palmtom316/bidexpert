@@ -1,4 +1,4 @@
-from app.services.rag_flow import (
+from app.rag.rag_flow import (
     RetrievalLogItem,
     SubRequirement,
     decompose_requirement,
@@ -13,4 +13,3 @@ __all__ = [
     "merge_retrieval",
     "retrieve_for_subrequirements",
 ]
-

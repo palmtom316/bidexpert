@@ -29,7 +29,7 @@ from app.schemas.contracts import (
 )
 from app.services.pdf_ingest import extract_pages
 from app.services.pricing_guard import detect_pricing_content
-from app.services.tender_parser import ANCHOR_PATTERN, SCORE_PATTERN
+from app.extract.tender_parser import ANCHOR_PATTERN, SCORE_PATTERN
 
 _SENTENCE_SPLIT = re.compile(r"[。；;\n]+")
 _MUST_PATTERN = re.compile(r"(必须|应当|不得|须|需|符合|满足|提交|提供)")

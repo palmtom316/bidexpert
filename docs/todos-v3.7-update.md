@@ -41,5 +41,5 @@
   文件：`app/api/routes.py`
 - [x] `P2-5` 草稿响应默认模型改为 v3.7 首选  
   文件：`app/schemas/contracts.py`
-- [x] `P2-6` 目录兼容性核查（`worker/extract/rag` 保持统一出口）  
-  文件：`app/worker/__init__.py`、`app/extract/__init__.py`、`app/rag/__init__.py`
+- [x] `P2-6` 目录结构重构完成（`worker/extract/rag` 承载主实现，旧路径兼容转发）  
+  文件：`app/worker/*.py`、`app/extract/*.py`、`app/rag/*.py`、`app/workers/*.py`、`app/services/{historical_extractor,tender_parser,rag_flow}.py`

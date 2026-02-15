@@ -12,6 +12,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.config import settings
 from app.db.session import SessionLocal
+from app.extract.historical_extractor import extract_evidence_chunks_from_text
 from app.models.tables import DocKind, Document, EvidenceChunk, ExpertDoc, Project, SensitivityLevel
 from app.schemas.contracts import (
     ExpertLibraryChunkItem,
@@ -21,7 +22,6 @@ from app.schemas.contracts import (
     ExpertLibraryStructuredIngestResponse,
     EvidenceUpsertItem,
 )
-from app.services.historical_extractor import extract_evidence_chunks_from_text
 from app.services.pdf_ingest import build_doc_blocks, extract_pages
 from app.services.pricing_guard import detect_pricing_content
 from app.services.qdrant_store import QdrantStore

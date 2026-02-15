@@ -1,6 +1,6 @@
 from app.services.evidence_validator import run_three_gates
 from app.services.pricing_guard import detect_pricing_content
-from app.services.tender_parser import parse_tender_requirements
+from app.extract.tender_parser import parse_tender_requirements
 
 
 def test_pricing_guard_blocks_pricing_text() -> None:

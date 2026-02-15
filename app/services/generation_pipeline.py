@@ -13,7 +13,7 @@ from app.services.governance import estimate_tokens
 from app.services.llm_audit import log_llm_call, reserve_budget_persistent
 from app.services.llm_gateway import generate_with_fallback_chain, review_with_fallback_chain
 from app.services.pii_policy import sanitize_outbound_text
-from app.services.rag_flow import decompose_requirement, merge_retrieval, retrieve_for_subrequirements
+from app.rag.rag_flow import decompose_requirement, merge_retrieval, retrieve_for_subrequirements
 from app.services.semantic_cache import build_cache_key, get_cache, set_cache
 from app.validator import build_generation_payload, flatten_generation_payload, validate_generation_payload
 

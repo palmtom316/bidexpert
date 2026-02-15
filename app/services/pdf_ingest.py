@@ -4,9 +4,9 @@ import io
 import re
 from dataclasses import dataclass
 
+from app.extract.tender_parser import parse_tender_requirements
 from app.schemas.contracts import DocBlockItem, IngestUploadResponse
 from app.services.pricing_guard import detect_pricing_content
-from app.services.tender_parser import parse_tender_requirements
 
 SECTION_PATTERN = re.compile(r"^\s*(第[一二三四五六七八九十0-9]+[章节条款]|\d+(?:\.\d+)+)")
 

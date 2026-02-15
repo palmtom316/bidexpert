@@ -4,9 +4,9 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 from app.db.session import SessionLocal, engine
+from app.extract.tender_parser import parse_tender_requirements
 from app.models.tables import WorkflowRun
 from app.schemas.contracts import OutlineSection
-from app.services.tender_parser import parse_tender_requirements
 
 
 def _ensure_table() -> None:

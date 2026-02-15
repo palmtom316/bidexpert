@@ -3,8 +3,8 @@ from __future__ import annotations
 import pytest
 
 from app.api import routes
+from app.extract import historical_extractor
 from app.schemas.contracts import HistoricalExtractRequest
-from app.services import historical_extractor
 
 
 def test_extract_evidence_chunks_maps_langextract_output(monkeypatch: pytest.MonkeyPatch) -> None:

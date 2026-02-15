@@ -87,7 +87,7 @@ from app.services.tender_analysis import (
     get_tender_analysis_detail,
     list_tender_analysis_runs,
 )
-from app.services.tender_parser import parse_tender_requirements
+from app.extract.tender_parser import parse_tender_requirements
 from app.services.knowledge_standardizer import standardize_section_feedback_chunks
 from app.services.workflow_runs import (
     confirm_outline_run,
@@ -98,7 +98,7 @@ from app.services.workflow_runs import (
     mark_section_pending,
 )
 from app.services.word_renderer import render_word
-from app.workers.tasks import (
+from app.worker.tasks import (
     generate_draft_task,
     get_task_result,
     ingest_document_task,
