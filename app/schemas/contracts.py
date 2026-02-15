@@ -173,8 +173,8 @@ class DraftGenerationResponse(BaseModel):
     generated_text: str
     evidence_ids: list[str]
     status: str
-    llm_provider: str = "Qwen"
-    llm_model: str = "Qwen3-Max"
+    llm_provider: str = "gemini"
+    llm_model: str = "gemini-3-pro"
     missing_sentences: list[str]
     coverage: float
     budget_remaining: int | None = None

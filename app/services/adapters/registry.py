@@ -10,6 +10,7 @@ from app.services.adapters.providers import (
     OpenAIAdapter,
     OpenAICompatibleAdapter,
     QwenAdapter,
+    VoyageAdapter,
 )
 
 AdapterFactory = Callable[[], LLMAdapter]
@@ -19,6 +20,7 @@ ADAPTER_REGISTRY: dict[str, AdapterFactory] = {
     "gemini": GeminiAdapter,
     "qwen": QwenAdapter,
     "deepseek": DeepSeekAdapter,
+    "voyage": VoyageAdapter,
 }
 
 _OPENAI_COMPATIBLE_FALLBACK = {"doubao", "glm"}
@@ -36,4 +38,3 @@ def create_adapter(provider: str) -> LLMAdapter:
 
 def list_registered_providers() -> list[str]:
     return sorted(ADAPTER_REGISTRY.keys())
-

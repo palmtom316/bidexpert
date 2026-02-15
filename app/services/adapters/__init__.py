@@ -14,6 +14,7 @@ from app.services.adapters.providers import (
     OpenAIAdapter,
     OpenAICompatibleAdapter,
     QwenAdapter,
+    VoyageAdapter,
 )
 from app.services.adapters.registry import create_adapter, list_registered_providers
 
@@ -33,4 +34,5 @@ __all__ = [
     "OpenAIAdapter",
     "OpenAICompatibleAdapter",
     "QwenAdapter",
+    "VoyageAdapter",
 ]

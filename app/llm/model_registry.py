@@ -21,12 +21,20 @@ class ModelRegistryEntry:
 
 @lru_cache(maxsize=1)
 def _load_registry_payload() -> dict:
-    registry_path = Path(__file__).resolve().parent.parent / "config" / "model_registry.yaml"
-    raw = registry_path.read_text(encoding="utf-8")
-    payload = json.loads(raw)
-    if not isinstance(payload, dict):
-        raise ValueError("model registry payload must be an object")
-    return payload
+    config_dir = Path(__file__).resolve().parent.parent / "config"
+    candidate_paths = [
+        config_dir / "model_registry.json",
+        config_dir / "model_registry.yaml",  # backward compatibility
+    ]
+    for registry_path in candidate_paths:
+        if not registry_path.exists():
+            continue
+        raw = registry_path.read_text(encoding="utf-8")
+        payload = json.loads(raw)
+        if not isinstance(payload, dict):
+            raise ValueError("model registry payload must be an object")
+        return payload
+    raise ValueError("model registry file is missing")
 
 
 @lru_cache(maxsize=1)
@@ -126,4 +134,3 @@ __all__ = [
     "list_models_for_role",
     "list_registry_entries",
 ]
-

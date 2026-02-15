@@ -1,12 +1,16 @@
 import enum
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 
 from sqlalchemy import JSON, Date, DateTime, Enum, ForeignKey, Integer, LargeBinary, Numeric, String, Text
 from sqlalchemy.dialects.postgresql import ARRAY, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
+
+
+def utcnow() -> datetime:
+    return datetime.now(UTC)
 
 
 class DocKind(str, enum.Enum):
@@ -76,8 +80,8 @@ class WorkflowRun(Base):
     status: Mapped[str] = mapped_column(Text, nullable=False)
     sections_json: Mapped[dict] = mapped_column(JSON, default=dict)
     section_status_json: Mapped[dict] = mapped_column(JSON, default=dict)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
 class Project(Base):
@@ -94,8 +98,8 @@ class Project(Base):
     )
     token_budget_total: Mapped[int] = mapped_column(Integer, default=500000)
     token_budget_used: Mapped[int] = mapped_column(Integer, default=0)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
 class Document(Base):
@@ -116,7 +120,7 @@ class Document(Base):
         Enum(SensitivityLevel, name="sensitivity_level"), default=SensitivityLevel.PUBLIC_OK
     )
     created_by: Mapped[str] = mapped_column(Text, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
 class DocBlock(Base):
@@ -133,7 +137,7 @@ class DocBlock(Base):
     content_json: Mapped[dict | None] = mapped_column(JSON)
     char_start: Mapped[int | None] = mapped_column(Integer)
     char_end: Mapped[int | None] = mapped_column(Integer)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
 class Requirement(Base):
@@ -157,7 +161,7 @@ class Requirement(Base):
     location_anchor: Mapped[str | None] = mapped_column(Text)
     constraints: Mapped[dict | None] = mapped_column(JSON)
     deliverables: Mapped[dict | None] = mapped_column(JSON)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
 class ExpertDoc(Base):
@@ -178,7 +182,7 @@ class ExpertDoc(Base):
     valid_to: Mapped[Date | None] = mapped_column(Date)
     forbidden_tags: Mapped[list[str]] = mapped_column(ARRAY(Text), default=list)
     created_by: Mapped[str] = mapped_column(Text, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
 class EvidenceChunk(Base):
@@ -200,7 +204,7 @@ class EvidenceChunk(Base):
     quality_score: Mapped[float] = mapped_column(Numeric(5, 2), default=0)
     forbidden_tags: Mapped[list[str]] = mapped_column(ARRAY(Text), default=list)
     qdrant_point_id: Mapped[str | None] = mapped_column(Text)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
 class ComplianceMatrix(Base):
@@ -219,7 +223,7 @@ class ComplianceMatrix(Base):
     planned_section: Mapped[str | None] = mapped_column(Text)
     evidence_ids: Mapped[list[uuid.UUID]] = mapped_column(ARRAY(UUID(as_uuid=True)), default=list)
     notes: Mapped[str | None] = mapped_column(Text)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
 class GenerationVersion(Base):
@@ -232,7 +236,7 @@ class GenerationVersion(Base):
     version_no: Mapped[int] = mapped_column(Integer, nullable=False)
     status: Mapped[JobStatus] = mapped_column(Enum(JobStatus, name="job_status"), default=JobStatus.PENDING)
     created_by: Mapped[str] = mapped_column(Text, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     model_used: Mapped[str | None] = mapped_column(Text)
     config: Mapped[dict | None] = mapped_column(JSON)
     output_doc_object_uri: Mapped[str | None] = mapped_column(Text)
@@ -261,7 +265,7 @@ class SectionContent(Base):
     edit_summary: Mapped[str | None] = mapped_column(Text)
     created_by: Mapped[str | None] = mapped_column(Text)
     has_placeholders: Mapped[bool] = mapped_column(default=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
 class SectionRevision(Base):
@@ -274,7 +278,7 @@ class SectionRevision(Base):
     rev_no: Mapped[int] = mapped_column(Integer, nullable=False)
     editor: Mapped[str] = mapped_column(Text, nullable=False)
     patch_diff: Mapped[str] = mapped_column(Text, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
 class IngestJob(Base):
@@ -290,7 +294,7 @@ class IngestJob(Base):
     status: Mapped[JobStatus] = mapped_column(Enum(JobStatus, name="job_status"), default=JobStatus.PENDING)
     report_json: Mapped[dict | None] = mapped_column(JSON)
     created_by: Mapped[str] = mapped_column(Text, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
@@ -305,7 +309,7 @@ class AuditLog(Base):
     action: Mapped[str] = mapped_column(Text, nullable=False)
     target_id: Mapped[str | None] = mapped_column(Text)
     metadata_json: Mapped[dict] = mapped_column("metadata", JSON, default=dict)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
 class ProviderProfile(Base):
@@ -326,8 +330,8 @@ class ProviderProfile(Base):
     encrypted_key: Mapped[bytes | None] = mapped_column(LargeBinary)
     allowed_tasks: Mapped[list[str]] = mapped_column(JSON, default=lambda: ["*"])
     created_by: Mapped[str | None] = mapped_column(Text)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
 class ProjectModelPolicy(Base):
@@ -368,8 +372,8 @@ class ProjectModelPolicy(Base):
             "program_support": 1,
         },
     )
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
 class LLMCallLog(Base):
@@ -399,7 +403,7 @@ class LLMCallLog(Base):
     fallback_count: Mapped[int] = mapped_column(Integer, default=0)
     cache_hit: Mapped[bool] = mapped_column(default=False)
     pricing_blocked: Mapped[bool] = mapped_column(default=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
 class TenderAnalysisRun(Base):
@@ -416,8 +420,8 @@ class TenderAnalysisRun(Base):
     status: Mapped[str] = mapped_column(Text, nullable=False)
     summary_json: Mapped[dict] = mapped_column(JSON, default=dict)
     created_by: Mapped[str] = mapped_column(Text, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
 class TenderKeyInfo(Base):
@@ -444,4 +448,4 @@ class TenderKeyInfo(Base):
     is_must: Mapped[bool] = mapped_column(default=False)
     importance: Mapped[int] = mapped_column(Integer, default=50)
     source_quote: Mapped[str | None] = mapped_column(Text)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import json
 import re
-from urllib import error, request
 
+import httpx
+
+from app.core.config import settings
 from app.services.adapters.base import (
     AdapterUnavailableError,
     GenerationRequest,
@@ -93,21 +95,24 @@ class OpenAICompatibleAdapter(LLMAdapter):
             "messages": [{"role": "user", "content": prompt}],
             "temperature": 0.2,
         }
-        req = request.Request(
-            url,
-            method="POST",
-            headers={
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {api_key}",
-            },
-            data=json.dumps(body).encode("utf-8"),
-        )
+        timeout = httpx.Timeout(float(settings.llm_http_timeout_seconds))
         try:
-            with request.urlopen(req, timeout=12) as resp:  # noqa: S310
-                raw = json.loads(resp.read().decode("utf-8"))
-        except error.URLError as exc:
-            raise AdapterUnavailableError(f"provider unavailable: {exc.reason}") from exc
-        except (TimeoutError, OSError, json.JSONDecodeError) as exc:
+            with httpx.Client(timeout=timeout) as client:
+                resp = client.post(
+                    url,
+                    headers={
+                        "Content-Type": "application/json",
+                        "Authorization": f"Bearer {api_key}",
+                    },
+                    json=body,
+                )
+                resp.raise_for_status()
+                raw = resp.json()
+        except httpx.TimeoutException as exc:
+            raise AdapterUnavailableError("provider timeout") from exc
+        except httpx.HTTPStatusError as exc:
+            raise AdapterUnavailableError(f"provider returned {exc.response.status_code}") from exc
+        except (httpx.HTTPError, json.JSONDecodeError) as exc:
             raise AdapterUnavailableError("provider unavailable") from exc
 
         choices = raw.get("choices") if isinstance(raw, dict) else None
@@ -245,3 +250,16 @@ class QwenAdapter(OpenAICompatibleAdapter):
 class DeepSeekAdapter(OpenAICompatibleAdapter):
     def __init__(self) -> None:
         super().__init__(provider="deepseek")
+
+
+class VoyageAdapter(LLMAdapter):
+    provider = "voyage"
+
+    def generate(self, payload: GenerationRequest) -> GenerationResult:
+        raise AdapterUnavailableError("voyage provider only supports embedding tasks")
+
+    def review(self, payload: ReviewRequest) -> ReviewResult:
+        raise AdapterUnavailableError("voyage provider only supports embedding tasks")
+
+    def rewrite_query(self, payload: QueryRewriteRequest) -> QueryRewriteResult:
+        raise AdapterUnavailableError("voyage provider only supports embedding tasks")

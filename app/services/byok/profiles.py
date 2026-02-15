@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from datetime import datetime
-from urllib import error, request
+from datetime import UTC, datetime
 
+import httpx
 import redis
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
@@ -14,6 +14,7 @@ from app.db.session import SessionLocal
 from app.llm import default_model_for_role, get_fallback_chain, normalize_role
 from app.models.tables import KeyStorage, ProjectModelPolicy, ProviderProfile, ProviderScope
 from app.secrets.crypto import decrypt, encrypt, load_master_key
+
 
 def _try_uuid(value: str) -> uuid.UUID:
     try:
@@ -82,7 +83,7 @@ def create_provider_profile(
         encrypted_key=None,
         allowed_tasks=allowed_tasks or ["*"],
         created_by=created_by,
-        updated_at=datetime.utcnow(),
+        updated_at=datetime.now(UTC),
     )
 
     if storage == KeyStorage.ENCRYPTED_DB:
@@ -187,7 +188,7 @@ def upsert_project_model_policy(
             policy.token_budget_total = max(0, int(token_budget_total))
         if concurrency_limits:
             policy.concurrency_limits = concurrency_limits
-        policy.updated_at = datetime.utcnow()
+        policy.updated_at = datetime.now(UTC)
         db.add(policy)
         db.commit()
         db.refresh(policy)
@@ -275,14 +276,10 @@ def test_provider_profile(profile_id: str) -> tuple[ProviderProfile, bool, str]:
         return profile, True, "credential resolved"
 
     health_url = f"{profile.base_url.rstrip('/')}/health"
-    req = request.Request(health_url, method="GET")
     try:
-        with request.urlopen(req, timeout=5) as resp:  # noqa: S310
-            code = int(resp.getcode())
-            if 200 <= code < 400:
-                return profile, True, f"health endpoint reachable ({code})"
-            return profile, False, f"health endpoint returned {code}"
-    except error.URLError as exc:
-        return profile, False, f"health endpoint unreachable: {exc.reason}"
-    except (OSError, TimeoutError, SQLAlchemyError) as exc:
+        resp = httpx.get(health_url, timeout=5.0)
+        if 200 <= resp.status_code < 400:
+            return profile, True, f"health endpoint reachable ({resp.status_code})"
+        return profile, False, f"health endpoint returned {resp.status_code}"
+    except (httpx.HTTPError, OSError, TimeoutError, SQLAlchemyError) as exc:
         return profile, False, f"health endpoint unreachable: {exc}"

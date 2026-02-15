@@ -21,6 +21,7 @@ dependencies = [
   "rapidfuzz>=3.11.0",
   "celery>=5.4.0",
   "redis>=5.2.1",
+  "httpx>=0.28.1",
   "qdrant-client>=1.12.1",
   "cryptography>=45.0.0",
   "pypdf>=5.1.0",
@@ -33,7 +34,6 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
   "pytest>=8.3.3",
-  "httpx>=0.28.1",
   "ruff>=0.8.3"
 ]
 

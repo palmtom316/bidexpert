@@ -5,12 +5,13 @@ from time import perf_counter
 
 from app.core.config import settings
 from app.schemas.contracts import DraftGenerationResponse
-from app.services.byok import get_project_model_policy, resolve_profile_for_task
 from app.services.adapters import AdapterUnavailableError
+from app.services.byok import get_project_model_policy, resolve_profile_chain_for_task, resolve_profile_for_task
+from app.services.context_compressor import compress_evidence_context
 from app.services.evidence_validator import run_three_gates
 from app.services.governance import estimate_tokens
-from app.services.llm_gateway import generate_with_profile, review_with_profile
 from app.services.llm_audit import log_llm_call, reserve_budget_persistent
+from app.services.llm_gateway import generate_with_fallback_chain, review_with_fallback_chain
 from app.services.pii_policy import sanitize_outbound_text
 from app.services.rag_flow import decompose_requirement, merge_retrieval, retrieve_for_subrequirements
 from app.services.semantic_cache import build_cache_key, get_cache, set_cache
@@ -51,6 +52,12 @@ def _expiry_warnings(payloads: list[dict]) -> list[str]:
     return warnings
 
 
+def _safe_generation_json(payload) -> dict:
+    if hasattr(payload, "model_dump"):
+        return payload.model_dump(mode="json")
+    return dict(payload)
+
+
 def generate_draft_with_retrieval(
     requirement_id: str,
     requirement_text: str,
@@ -63,20 +70,26 @@ def generate_draft_with_retrieval(
     retry_count: int = 0,
     fallback_count: int = 0,
 ) -> DraftGenerationResponse:
+    del requirement_id
+
     begin = perf_counter()
     effective_top_k = max(1, min(top_k, 8))
     resolved_profile = resolve_profile_for_task(project_id=project_id, task_type="GENERATE")
-    review_profile = resolve_profile_for_task(project_id=project_id, task_type="REVIEW")
+    gen_chain = resolve_profile_chain_for_task(project_id=project_id, task_type="GENERATE")
+    review_chain = resolve_profile_chain_for_task(project_id=project_id, task_type="REVIEW")
+
     try:
         model_policy = get_project_model_policy(project_id) if project_id else None
     except ValueError:
         model_policy = None
+
     llm_provider = resolved_profile.provider
     llm_model = resolved_profile.model
     review_enabled = bool(model_policy.enable_review) if model_policy else True
-    cache_scope = f"{tender_template_id or '_'}|p={project_id or '_'}|g={llm_provider}:{llm_model}|r={int(review_enabled)}"
+    cache_scope = (
+        f"{tender_template_id or '_'}|p={project_id or '_'}|g={llm_provider}:{llm_model}|r={int(review_enabled)}"
+    )
 
-    # Step1-3 schema-driven RAG
     sub_requirements = decompose_requirement(requirement_text)
     retrieval_result = retrieve_for_subrequirements(
         sub_requirements=sub_requirements,
@@ -88,6 +101,7 @@ def generate_draft_with_retrieval(
         retrieval, retrieval_log = retrieval_result
     else:
         retrieval, retrieval_log = retrieval_result, []
+
     merged_evidence_ids, coverage_map, merged_hits = merge_retrieval(retrieval)
 
     cache_key = build_cache_key(
@@ -125,19 +139,31 @@ def generate_draft_with_retrieval(
         return response
 
     evidence_texts = [hit.text for hit in merged_hits]
+    compressed_context = compress_evidence_context(requirement_text=requirement_text, evidence_texts=evidence_texts)
+    generation_evidence_texts = compressed_context.evidence_texts
+
     warnings = _expiry_warnings([hit.payload for hit in merged_hits])
-    generation_fallback = False
+    if compressed_context.compressed:
+        warnings.append(
+            f"context_compressed:{compressed_context.original_chars}->{compressed_context.compressed_chars}"
+        )
+        if compressed_context.dropped_count > 0:
+            warnings.append(f"context_compression_dropped={compressed_context.dropped_count}")
+
+    generation_fallback_index = 0
     generation_payload = build_generation_payload("NEED_HUMAN_INPUT", _schema_evidence_ids(merged_evidence_ids))
     try:
-        generated = generate_with_profile(
-            provider=llm_provider,
-            model=llm_model,
-            api_key=resolved_profile.api_key,
-            base_url=resolved_profile.base_url,
+        generated, generation_fallback_index = generate_with_fallback_chain(
+            profile_chain=gen_chain,
+            project_id=project_id,
             requirement_text=requirement_text,
-            evidence_texts=evidence_texts,
+            evidence_texts=generation_evidence_texts,
             evidence_ids=merged_evidence_ids,
         )
+        llm_provider = generated.provider
+        llm_model = generated.model
+        if generation_fallback_index > 0:
+            warnings.append(f"generate_fallback_index={generation_fallback_index}")
         try:
             if generated.content_json:
                 generation_payload = validate_generation_payload(generated.content_json)
@@ -148,33 +174,39 @@ def generate_draft_with_retrieval(
             generation_payload = build_generation_payload("NEED_HUMAN_INPUT", _schema_evidence_ids(merged_evidence_ids))
             warnings.append("generate_schema_validation_failed")
     except AdapterUnavailableError:
-        generation_fallback = True
-        generated_text_fallback = _compose_draft(requirement_text, evidence_texts) or "NEED_HUMAN_INPUT"
+        generation_fallback_index = len(gen_chain)
+        generated_text_fallback = _compose_draft(requirement_text, generation_evidence_texts) or "NEED_HUMAN_INPUT"
         generation_payload = build_generation_payload(generated_text_fallback, _schema_evidence_ids(merged_evidence_ids))
-        warnings.append("generate_fallback_local_template")
-    generated_text = flatten_generation_payload(generation_payload)
+        warnings.append("generate_all_providers_failed_local_template")
 
-    input_tokens = estimate_tokens(requirement_text + "\n" + "\n".join(evidence_texts))
+    generated_text = flatten_generation_payload(generation_payload)
+    input_tokens = estimate_tokens(requirement_text + "\n" + "\n".join(generation_evidence_texts))
     output_tokens = estimate_tokens(generated_text)
+
     if input_tokens > settings.section_max_input_tokens or output_tokens > settings.section_max_output_tokens:
         return DraftGenerationResponse(
             generated_text="NEED_HUMAN_INPUT",
             evidence_ids=merged_evidence_ids,
             status="NEED_HUMAN_INPUT",
+            llm_provider=llm_provider,
+            llm_model=llm_model,
             missing_sentences=["section_token_limit_exceeded"],
             coverage=0.0,
             budget_remaining=None,
             cache_hit=False,
-            warnings=[f"input_tokens={input_tokens}", f"output_tokens={output_tokens}"],
+            warnings=warnings + [f"input_tokens={input_tokens}", f"output_tokens={output_tokens}"],
             coverage_map=coverage_map,
             retrieval_log=retrieval_log,
-            generation_json=generation_payload.model_dump(mode="json"),
+            generation_json=_safe_generation_json(generation_payload),
         )
 
-    ok, budget_remaining = reserve_budget_persistent(project_id=project_id, estimated_tokens=input_tokens + output_tokens)
+    ok, budget_remaining = reserve_budget_persistent(
+        project_id=project_id,
+        estimated_tokens=input_tokens + output_tokens,
+    )
     budget_warning = "budget_exceeded_non_blocking" if not ok else None
 
-    result = run_three_gates(
+    gate_result = run_three_gates(
         generated_text=generated_text,
         evidence_ids=merged_evidence_ids,
         evidence_texts=evidence_texts,
@@ -189,7 +221,9 @@ def generate_draft_with_retrieval(
         sensitive_strategy=sensitive_strategy,
         allowlist=allowlist,
     )
+
     if sanitize.pricing_blocked:
+        total_fallbacks = fallback_count + generation_fallback_index
         log_llm_call(
             project_id=project_id,
             model_name=llm_model,
@@ -202,7 +236,7 @@ def generate_draft_with_retrieval(
             latency_ms=int((perf_counter() - begin) * 1000),
             budget_remaining=budget_remaining,
             retry_count=retry_count,
-            fallback_count=fallback_count + (1 if generation_fallback else 0),
+            fallback_count=total_fallbacks,
             cache_hit=False,
             pricing_blocked=True,
             blocked_reason="PRICING_BLOCKED",
@@ -220,39 +254,42 @@ def generate_draft_with_retrieval(
             warnings=warnings + sanitize.warnings,
             coverage_map=coverage_map,
             retrieval_log=retrieval_log,
-            generation_json=generation_payload.model_dump(mode="json"),
+            generation_json=_safe_generation_json(generation_payload),
         )
 
-    status = result.status
+    status = gate_result.status
     if not sanitize.text:
         status = "NEED_HUMAN_INPUT"
     if any(w.startswith("evidence_near_expiry") for w in warnings):
         status = "NEED_HUMAN_INPUT"
 
-    review_fallback = False
-    review_provider_fallback = False
+    review_fallback_index = 0
     review_issues: list[str] = []
     review_report: dict | None = None
+
     if review_enabled:
         try:
-            review_result = review_with_profile(
-                provider=review_profile.provider,
-                model=review_profile.model,
-                api_key=review_profile.api_key,
-                base_url=review_profile.base_url,
+            review_result, review_fallback_index = review_with_fallback_chain(
+                profile_chain=review_chain,
+                project_id=project_id,
                 draft_text=sanitize.text or generated_text,
-                evidence_texts=evidence_texts,
+                evidence_texts=generation_evidence_texts,
             )
             review_report = review_result.report
+            if review_fallback_index > 0:
+                warnings.append(f"review_fallback_index={review_fallback_index}")
             if not review_result.approved:
                 status = "NEED_HUMAN_INPUT"
                 review_issues = review_result.issues or ["review_rejected"]
                 warnings.extend([f"review_issue:{item}" for item in review_issues])
+            review_profile_id = None
+            if 0 <= review_fallback_index < len(review_chain):
+                review_profile_id = review_chain[review_fallback_index].profile_id
             log_llm_call(
                 project_id=project_id,
                 model_name=review_result.model,
                 purpose="SECTION_REVIEW",
-                provider_profile_id=review_profile.profile_id,
+                provider_profile_id=review_profile_id,
                 evidence_ids=merged_evidence_ids,
                 prompt_text=sanitize.text or generated_text,
                 input_tokens=estimate_tokens(sanitize.text or generated_text),
@@ -260,82 +297,43 @@ def generate_draft_with_retrieval(
                 latency_ms=int((perf_counter() - begin) * 1000),
                 budget_remaining=budget_remaining,
                 retry_count=retry_count,
-                fallback_count=fallback_count,
+                fallback_count=fallback_count + generation_fallback_index + review_fallback_index,
                 cache_hit=False,
                 pricing_blocked=False,
                 blocked_reason="REVIEW_REJECTED" if review_issues else None,
             )
         except AdapterUnavailableError:
-            fallback_provider = (settings.review_fallback_provider or "").strip().lower()
-            fallback_model = (settings.review_fallback_model or "").strip()
-            if fallback_provider and fallback_model:
-                try:
-                    fallback_review = review_with_profile(
-                        provider=fallback_provider,
-                        model=fallback_model,
-                        api_key=settings.review_fallback_api_key,
-                        base_url=settings.review_fallback_base_url,
-                        draft_text=sanitize.text or generated_text,
-                        evidence_texts=evidence_texts,
-                    )
-                    review_provider_fallback = True
-                    warnings.append("review_fallback_provider_used")
-                    review_report = fallback_review.report
-                    if not fallback_review.approved:
-                        status = "NEED_HUMAN_INPUT"
-                        review_issues = fallback_review.issues or ["review_rejected"]
-                        warnings.extend([f"review_issue:{item}" for item in review_issues])
-                    log_llm_call(
-                        project_id=project_id,
-                        model_name=fallback_review.model,
-                        purpose="SECTION_REVIEW",
-                        provider_profile_id=review_profile.profile_id,
-                        evidence_ids=merged_evidence_ids,
-                        prompt_text=sanitize.text or generated_text,
-                        input_tokens=estimate_tokens(sanitize.text or generated_text),
-                        output_tokens=0,
-                        latency_ms=int((perf_counter() - begin) * 1000),
-                        budget_remaining=budget_remaining,
-                        retry_count=retry_count,
-                        fallback_count=fallback_count + 1,
-                        cache_hit=False,
-                        pricing_blocked=False,
-                        blocked_reason="REVIEW_FALLBACK_PROVIDER" if review_issues else None,
-                    )
-                except AdapterUnavailableError:
-                    review_fallback = True
-                    warnings.append("review_fallback_local_validator")
-            else:
-                review_fallback = True
-                warnings.append("review_fallback_local_validator")
+            review_fallback_index = len(review_chain)
+            warnings.append("review_all_providers_failed_local_validator")
+            status = "NEED_HUMAN_INPUT"
+            review_report = {
+                "missing_requirements": [],
+                "logical_inconsistencies": [],
+                "risk_points": ["review_all_providers_failed"],
+                "coverage_estimate": 0.0,
+                "score_estimate": 0.0,
+                "approved": False,
+                "issues": ["review_all_providers_failed"],
+            }
+            log_llm_call(
+                project_id=project_id,
+                model_name=review_chain[0].model if review_chain else "unknown",
+                purpose="SECTION_REVIEW",
+                provider_profile_id=review_chain[0].profile_id if review_chain else None,
+                evidence_ids=merged_evidence_ids,
+                prompt_text=sanitize.text or generated_text,
+                input_tokens=estimate_tokens(sanitize.text or generated_text),
+                output_tokens=0,
+                latency_ms=int((perf_counter() - begin) * 1000),
+                budget_remaining=budget_remaining,
+                retry_count=retry_count,
+                fallback_count=fallback_count + generation_fallback_index + review_fallback_index,
+                cache_hit=False,
+                pricing_blocked=False,
+                blocked_reason="REVIEW_ALL_PROVIDERS_FAILED",
+            )
 
-            if review_fallback:
-                review_report = {
-                    "missing_requirements": [],
-                    "logical_inconsistencies": [],
-                    "risk_points": ["review_fallback_local_validator"],
-                    "coverage_estimate": 0.0,
-                    "score_estimate": 0.0,
-                    "approved": False,
-                    "issues": ["review_fallback_local_validator"],
-                }
-                log_llm_call(
-                    project_id=project_id,
-                    model_name=review_profile.model,
-                    purpose="SECTION_REVIEW",
-                    provider_profile_id=review_profile.profile_id,
-                    evidence_ids=merged_evidence_ids,
-                    prompt_text=sanitize.text or generated_text,
-                    input_tokens=estimate_tokens(sanitize.text or generated_text),
-                    output_tokens=0,
-                    latency_ms=int((perf_counter() - begin) * 1000),
-                    budget_remaining=budget_remaining,
-                    retry_count=retry_count,
-                    fallback_count=fallback_count + 1,
-                    cache_hit=False,
-                    pricing_blocked=False,
-                    blocked_reason="REVIEW_FALLBACK_LOCAL_ONLY",
-                )
+    total_fallbacks = fallback_count + generation_fallback_index + review_fallback_index
 
     response = DraftGenerationResponse(
         generated_text=sanitize.text or "NEED_HUMAN_INPUT",
@@ -343,14 +341,14 @@ def generate_draft_with_retrieval(
         status=status,
         llm_provider=llm_provider,
         llm_model=llm_model,
-        missing_sentences=result.missing_sentences,
-        coverage=result.coverage,
+        missing_sentences=gate_result.missing_sentences,
+        coverage=gate_result.coverage,
         budget_remaining=budget_remaining,
         cache_hit=False,
         warnings=warnings + sanitize.warnings + ([budget_warning] if budget_warning else []),
         coverage_map=coverage_map,
         retrieval_log=retrieval_log,
-        generation_json=generation_payload.model_dump(mode="json"),
+        generation_json=_safe_generation_json(generation_payload),
         review_json=review_report,
     )
 
@@ -366,7 +364,7 @@ def generate_draft_with_retrieval(
         latency_ms=int((perf_counter() - begin) * 1000),
         budget_remaining=budget_remaining,
         retry_count=retry_count,
-        fallback_count=fallback_count + (1 if generation_fallback or review_fallback or review_provider_fallback else 0),
+        fallback_count=total_fallbacks,
         cache_hit=False,
         pricing_blocked=False,
         blocked_reason="BUDGET_EXCEEDED" if not ok else None,

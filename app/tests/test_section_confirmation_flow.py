@@ -31,15 +31,11 @@ def test_section_generation_requires_confirmed_outline() -> None:
 
 
 def test_section_generation_allowed_after_outline_confirm(monkeypatch: pytest.MonkeyPatch) -> None:
-    class _Task:
-        @staticmethod
-        def delay(*_: object) -> object:
+    class _Chain:
+        def apply_async(self) -> object:
             return type("R", (), {"id": "task-demo"})()
 
-    monkeypatch.setattr(routes, "requirement_extract_task", _Task)
-    monkeypatch.setattr(routes, "section_generate_task", _Task)
-    monkeypatch.setattr(routes, "section_validate_task", _Task)
-    monkeypatch.setattr(routes, "render_export_task", _Task)
+    monkeypatch.setattr(routes, "chain", lambda *_args, **_kwargs: _Chain())
 
     created = routes.create_outline(
         OutlineCreateRequest(project_id="p-sec-2", tender_text="第二章 技术规范。应当满足施工方案。")
@@ -57,7 +53,7 @@ def test_section_generation_allowed_after_outline_confirm(monkeypatch: pytest.Mo
 
     assert result.status == "PENDING"
     assert result.section_key == "S-001"
-    assert result.task_ids["SECTION_GENERATE"] == "task-demo"
+    assert result.task_ids["SECTION_PIPELINE"] == "task-demo"
 
 
 def test_section_confirm_marks_user_approved() -> None:

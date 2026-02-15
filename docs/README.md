@@ -18,7 +18,7 @@
 - 证据近到期预警（<=30天触发 NEED_HUMAN_INPUT）
 - BYOK：Provider Profile（项目级）+ 模型策略绑定（generate/review/embed）
 - v3.7 六角色模型策略（extract/embed/generate/review/query_rewrite/program_support）
-- Model Registry（`app/config/model_registry.yaml`）+ role 默认链路/fallback
+- Model Registry（`app/config/model_registry.json`）+ role 默认链路/fallback
 - Key 安全：ENCRYPTED_DB（AES-GCM, `MASTER_KEY_B64`）+ TEMP_REDIS（TTL）
 - 多供应商 Adapter Registry（OpenAI/Gemini/Qwen/DeepSeek + OpenAI-compatible fallback）
 - 审查降级：审查模型不可用 -> 备用审查模型（可配置）-> 本地验证器（风险告警）

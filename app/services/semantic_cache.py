@@ -5,6 +5,10 @@ import json
 import threading
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from functools import lru_cache
+
+import redis
+from redis.exceptions import RedisError
 
 from app.core.config import settings
 
@@ -17,6 +21,16 @@ class CacheRecord:
 
 _CACHE: dict[str, CacheRecord] = {}
 _LOCK = threading.Lock()
+_CACHE_PREFIX = "semantic_cache:"
+
+
+@lru_cache(maxsize=1)
+def _redis_client() -> redis.Redis:
+    return redis.Redis.from_url(settings.redis_url, decode_responses=True)
+
+
+def _redis_key(cache_key: str) -> str:
+    return f"{_CACHE_PREFIX}{cache_key}"
 
 
 def _sha256_text(text: str) -> str:
@@ -49,7 +63,7 @@ def build_cache_key(
     )
 
 
-def get_cache(cache_key: str) -> dict | None:
+def _get_cache_local(cache_key: str) -> dict | None:
     with _LOCK:
         record = _CACHE.get(cache_key)
         if not record:
@@ -57,24 +71,52 @@ def get_cache(cache_key: str) -> dict | None:
         if datetime.now(UTC) >= record.expires_at:
             _CACHE.pop(cache_key, None)
             return None
-        return record.payload
+        return dict(record.payload)
 
 
-def set_cache(cache_key: str, payload: dict, ttl_seconds: int = 3600) -> None:
+def get_cache(cache_key: str) -> dict | None:
+    try:
+        value = _redis_client().get(_redis_key(cache_key))
+        if value is None:
+            return _get_cache_local(cache_key)
+        parsed = json.loads(value)
+        return parsed if isinstance(parsed, dict) else None
+    except (RedisError, json.JSONDecodeError):
+        return _get_cache_local(cache_key)
+
+
+def _set_cache_local(cache_key: str, payload: dict, ttl_seconds: int) -> None:
     with _LOCK:
         _CACHE[cache_key] = CacheRecord(
-            payload=payload,
+            payload=dict(payload),
             expires_at=datetime.now(UTC) + timedelta(seconds=ttl_seconds),
         )
 
 
+def set_cache(cache_key: str, payload: dict, ttl_seconds: int = 3600) -> None:
+    try:
+        _redis_client().set(_redis_key(cache_key), json.dumps(payload, ensure_ascii=False), ex=ttl_seconds)
+    except RedisError:
+        _set_cache_local(cache_key, payload, ttl_seconds)
+
+
 def invalidate_cache(prefix: str | None = None) -> int:
+    count = 0
+    pattern = f"{_CACHE_PREFIX}{prefix or ''}*"
+    try:
+        client = _redis_client()
+        keys = list(client.scan_iter(match=pattern, count=500))
+        if keys:
+            count += int(client.delete(*keys))
+    except RedisError:
+        pass
+
     with _LOCK:
         if prefix is None:
-            count = len(_CACHE)
+            count += len(_CACHE)
             _CACHE.clear()
             return count
         keys = [k for k in _CACHE if k.startswith(prefix)]
         for key in keys:
             _CACHE.pop(key, None)
-        return len(keys)
+        return count + len(keys)

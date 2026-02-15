@@ -3,8 +3,10 @@ from __future__ import annotations
 import asyncio
 import json
 from pathlib import Path
+from typing import AsyncGenerator
 from uuid import uuid4
 
+from celery import chain
 from celery.exceptions import CeleryError
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
@@ -101,10 +103,10 @@ from app.workers.tasks import (
     get_task_result,
     ingest_document_task,
     extract_upsert_historical_task,
-    render_export_task,
-    requirement_extract_task,
-    section_generate_task,
-    section_validate_task,
+    section_extract_stage_task,
+    section_generate_stage_task,
+    section_render_stage_task,
+    section_validate_stage_task,
     upsert_evidence_task,
 )
 
@@ -410,7 +412,7 @@ def task_status(task_id: str) -> TaskStatusResponse:
 
 @router.get("/v1/tasks/{task_id}/stream")
 async def task_status_stream(task_id: str) -> StreamingResponse:
-    async def events() -> str:
+    async def events() -> AsyncGenerator[str, None]:
         terminal = {"SUCCESS", "FAILURE", "REVOKED"}
         while True:
             result = get_task_result(task_id)
@@ -520,25 +522,28 @@ def enqueue_section_workflow(payload: WorkflowSectionRequest) -> WorkflowSection
     if blocked:
         raise HTTPException(status_code=400, detail={"status": "BLOCKED_PRICING_CONTENT", "reasons": reasons})
 
-    extract_task = requirement_extract_task.delay(req_text)
-    generate_task = section_generate_task.delay(
-        payload.project_id,
-        payload.section_key,
-        req_text,
-        payload.industry_tag,
-    )
-    validate_task = section_validate_task.delay("", [], [])
-    render_task = render_export_task.delay([])
+    try:
+        stage_chain = chain(
+            section_extract_stage_task.s(
+                payload.project_id,
+                payload.section_key,
+                req_text,
+                payload.industry_tag,
+            ),
+            section_generate_stage_task.s(),
+            section_validate_stage_task.s(),
+            section_render_stage_task.s(),
+        )
+        pipeline_task = stage_chain.apply_async()
+    except (CeleryError, RuntimeError, ConnectionError, TimeoutError, OSError) as exc:
+        raise _service_unavailable() from exc
     mark_section_pending(payload.outline_id, payload.section_key)
 
     return WorkflowSectionResponse(
         section_key=payload.section_key,
         status="PENDING",
         task_ids={
-            "REQUIREMENT_EXTRACT": extract_task.id,
-            "SECTION_GENERATE": generate_task.id,
-            "SECTION_VALIDATE": validate_task.id,
-            "RENDER_EXPORT": render_task.id,
+            "SECTION_PIPELINE": pipeline_task.id,
         },
     )
 
@@ -700,9 +705,12 @@ def cache_invalidate(prefix: str | None = None) -> PricingFuseResponse:
 
 @router.post("/v1/render/word", response_model=RenderWordResponse)
 def render_doc(payload: RenderWordRequest) -> RenderWordResponse:
-    output = render_word(
-        output_path=payload.output_path,
-        placeholders=payload.placeholders,
-        template_path=payload.template_path,
-    )
-    return RenderWordResponse(output_path=output)
+    try:
+        output = render_word(
+            output_path=payload.output_path,
+            placeholders=payload.placeholders,
+            template_path=payload.template_path,
+        )
+        return RenderWordResponse(output_path=output)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc

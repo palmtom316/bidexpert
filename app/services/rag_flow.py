@@ -54,6 +54,7 @@ def retrieve_for_subrequirements(
         warning: str | None = None
         try:
             rewritten = rewrite_query_with_profile(
+                project_id=project_id,
                 provider=resolved.provider,
                 model=resolved.model,
                 api_key=resolved.api_key,

@@ -4,7 +4,7 @@ import hashlib
 import re
 import uuid
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 from sqlalchemy import select
@@ -297,7 +297,7 @@ def analyze_and_persist_tender_pdf(
                 document_id=str(source_doc.id),
                 filename=filename,
                 status=status,
-                created_at=run.created_at.isoformat() if run.created_at else datetime.utcnow().isoformat(),
+                created_at=run.created_at.isoformat() if run.created_at else datetime.now(UTC).isoformat(),
             )
             return run_item, summary
     except SQLAlchemyError as exc:

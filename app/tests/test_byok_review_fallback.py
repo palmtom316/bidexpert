@@ -33,12 +33,22 @@ def _mock_retrieval(monkeypatch) -> None:
 
 
 def _mock_profiles(monkeypatch) -> None:
-    def _resolver(*, project_id, task_type):  # noqa: ANN001
-        if task_type == "REVIEW":
-            return ResolvedProfile("00000000-0000-0000-0000-000000000001", "openai", "gpt-review", "k", "http://x")
-        return ResolvedProfile("00000000-0000-0000-0000-000000000002", "qwen", "qwen-gen", "k", "http://x")
+    gen_primary = ResolvedProfile("00000000-0000-0000-0000-000000000002", "qwen", "qwen-gen", "k", "http://x")
+    review_primary = ResolvedProfile("00000000-0000-0000-0000-000000000001", "openai", "gpt-review", "k", "http://x")
+    review_secondary = ResolvedProfile("00000000-0000-0000-0000-000000000003", "deepseek", "ds-review", "k", "http://x")
 
-    monkeypatch.setattr("app.services.generation_pipeline.resolve_profile_for_task", _resolver)
+    def _resolve_profile(*, project_id, task_type):  # noqa: ANN001
+        del project_id
+        return review_primary if task_type == "REVIEW" else gen_primary
+
+    def _resolve_chain(*, project_id, task_type):  # noqa: ANN001
+        del project_id
+        if task_type == "REVIEW":
+            return [review_primary, review_secondary]
+        return [gen_primary]
+
+    monkeypatch.setattr("app.services.generation_pipeline.resolve_profile_for_task", _resolve_profile)
+    monkeypatch.setattr("app.services.generation_pipeline.resolve_profile_chain_for_task", _resolve_chain)
     monkeypatch.setattr(
         "app.services.generation_pipeline.get_project_model_policy",
         lambda _: SimpleNamespace(enable_review=True),
@@ -49,11 +59,11 @@ def test_review_fallback_to_local_validator(monkeypatch) -> None:
     _mock_retrieval(monkeypatch)
     _mock_profiles(monkeypatch)
     monkeypatch.setattr(
-        "app.services.generation_pipeline.generate_with_profile",
-        lambda **_: GenerationResult(text="这是生成草稿内容，覆盖需求。", provider="qwen", model="qwen-gen"),
+        "app.services.generation_pipeline.generate_with_fallback_chain",
+        lambda **_: (GenerationResult(text="这是生成草稿内容，覆盖需求。", provider="qwen", model="qwen-gen"), 0),
     )
     monkeypatch.setattr(
-        "app.services.generation_pipeline.review_with_profile",
+        "app.services.generation_pipeline.review_with_fallback_chain",
         lambda **_: (_ for _ in ()).throw(AdapterUnavailableError("down")),
     )
 
@@ -63,23 +73,26 @@ def test_review_fallback_to_local_validator(monkeypatch) -> None:
         project_id="00000000-0000-0000-0000-000000000010",
     )
 
-    assert "review_fallback_local_validator" in result.warnings
+    assert "review_all_providers_failed_local_validator" in result.warnings
 
 
 def test_review_reject_sets_need_human_input(monkeypatch) -> None:
     _mock_retrieval(monkeypatch)
     _mock_profiles(monkeypatch)
     monkeypatch.setattr(
-        "app.services.generation_pipeline.generate_with_profile",
-        lambda **_: GenerationResult(text="这是生成草稿内容，覆盖需求。", provider="qwen", model="qwen-gen"),
+        "app.services.generation_pipeline.generate_with_fallback_chain",
+        lambda **_: (GenerationResult(text="这是生成草稿内容，覆盖需求。", provider="qwen", model="qwen-gen"), 0),
     )
     monkeypatch.setattr(
-        "app.services.generation_pipeline.review_with_profile",
-        lambda **_: ReviewResult(
-            approved=False,
-            issues=["insufficient_evidence"],
-            provider="openai",
-            model="gpt-review",
+        "app.services.generation_pipeline.review_with_fallback_chain",
+        lambda **_: (
+            ReviewResult(
+                approved=False,
+                issues=["insufficient_evidence"],
+                provider="openai",
+                model="gpt-review",
+            ),
+            0,
         ),
     )
 
@@ -97,23 +110,13 @@ def test_review_fallback_provider_used(monkeypatch) -> None:
     _mock_retrieval(monkeypatch)
     _mock_profiles(monkeypatch)
     monkeypatch.setattr(
-        "app.services.generation_pipeline.generate_with_profile",
-        lambda **_: GenerationResult(text="这是生成草稿内容，覆盖需求。", provider="qwen", model="qwen-gen"),
+        "app.services.generation_pipeline.generate_with_fallback_chain",
+        lambda **_: (GenerationResult(text="这是生成草稿内容，覆盖需求。", provider="qwen", model="qwen-gen"), 0),
     )
-
-    calls = {"count": 0}
-
-    def _review(**_kwargs):
-        calls["count"] += 1
-        if calls["count"] == 1:
-            raise AdapterUnavailableError("down")
-        return ReviewResult(approved=True, issues=[], provider="deepseek", model="ds-review")
-
-    monkeypatch.setattr("app.services.generation_pipeline.review_with_profile", _review)
-    monkeypatch.setattr("app.services.generation_pipeline.settings.review_fallback_provider", "deepseek")
-    monkeypatch.setattr("app.services.generation_pipeline.settings.review_fallback_model", "ds-review")
-    monkeypatch.setattr("app.services.generation_pipeline.settings.review_fallback_base_url", "http://x")
-    monkeypatch.setattr("app.services.generation_pipeline.settings.review_fallback_api_key", "k")
+    monkeypatch.setattr(
+        "app.services.generation_pipeline.review_with_fallback_chain",
+        lambda **_: (ReviewResult(approved=True, issues=[], provider="deepseek", model="ds-review"), 1),
+    )
 
     result = generate_draft_with_retrieval(
         requirement_id="REQ-1",
@@ -121,4 +124,4 @@ def test_review_fallback_provider_used(monkeypatch) -> None:
         project_id="00000000-0000-0000-0000-000000000010",
     )
 
-    assert "review_fallback_provider_used" in result.warnings
+    assert "review_fallback_index=1" in result.warnings

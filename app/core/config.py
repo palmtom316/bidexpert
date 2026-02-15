@@ -13,9 +13,15 @@ class Settings(BaseSettings):
 
     qdrant_url: str = "http://localhost:6333"
     qdrant_collection: str = "expert_chunks_v1"
-    qdrant_vector_size: int = 256
+    qdrant_vector_size: int = 3072
+    qdrant_hybrid_candidate_limit: int = 128
+    qdrant_rrf_k: int = 60
+
+    llm_http_timeout_seconds: int = 120
 
     upload_dir: str = "data/uploads"
+    render_output_dir: str = "data/exports"
+    render_template_dir: str = "templates"
     enable_ocr_fallback: bool = True
     schema_version: str = "v3.7"
     top_k_default: int = 6
@@ -32,6 +38,9 @@ class Settings(BaseSettings):
     review_fallback_base_url: str | None = None
     review_fallback_api_key: str | None = None
     langextract_default_model: str = "gemini-3-pro"
+    context_compression_max_items: int = 6
+    context_compression_max_chars: int = 4000
+    context_compression_snippet_chars: int = 800
 
     model_config = SettingsConfigDict(env_prefix="BIDEXPERT_", extra="ignore")
 
