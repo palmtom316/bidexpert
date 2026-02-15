@@ -3,3 +3,10 @@ __pycache__/
 .venv/
 .env
 .DS_Store
+*.log
+*.db
+*.sqlite*
+*.egg-info/
+data/uploads/*
+!data/uploads/.gitkeep
+dummy.pdf
