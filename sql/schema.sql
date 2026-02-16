@@ -366,3 +366,43 @@ CREATE TABLE IF NOT EXISTS tender_key_info (
 
 CREATE INDEX IF NOT EXISTS idx_tender_key_info_run_category
   ON tender_key_info(run_id, category);
+
+CREATE TABLE IF NOT EXISTS review_report (
+  id                 uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  project_id         uuid NOT NULL REFERENCES project(id) ON DELETE CASCADE,
+  section_key        text NOT NULL,
+  outline_id         text NOT NULL,
+  status             text NOT NULL,
+  report_json        jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_at         timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_review_report_project ON review_report(project_id);
+CREATE INDEX IF NOT EXISTS idx_review_report_section ON review_report(project_id, section_key);
+
+CREATE TABLE IF NOT EXISTS scoring_report (
+  id                 uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  project_id         uuid NOT NULL REFERENCES project(id) ON DELETE CASCADE,
+  score_total        numeric(6,2),
+  details_json       jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_at         timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_scoring_report_project ON scoring_report(project_id);
+
+CREATE TABLE IF NOT EXISTS completed_bid (
+  id                 uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  project_id         text,
+  project_name       text NOT NULL,
+  engineering_category text,
+  tenderer           text,
+  bid_result         text NOT NULL DEFAULT 'WON',
+  file_name          text NOT NULL,
+  file_info          text,
+  completed_date     date,
+  created_by         text,
+  created_at         timestamptz NOT NULL DEFAULT now(),
+  updated_at         timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_completed_bid_created_at ON completed_bid(created_at DESC);

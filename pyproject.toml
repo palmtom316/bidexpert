@@ -28,7 +28,8 @@ dependencies = [
   "pymupdf>=1.25.1",
   "pillow>=11.0.0",
   "pytesseract>=0.3.13",
-  "langextract>=1.1.1"
+  "langextract>=1.1.1",
+  "alembic>=1.13.0"
 ]
 
 [project.optional-dependencies]

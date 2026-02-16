@@ -499,6 +499,48 @@ textarea:focus {
   overflow: auto;
 }
 
+.result-box.compact {
+  max-height: 180px;
+}
+
+.grid-2 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.metric-card {
+  background: linear-gradient(180deg, #f7fbff 0%, #edf4ff 100%);
+  border: 1px solid #cddcf0;
+  border-radius: 12px;
+  padding: 14px;
+  box-shadow: var(--shadow-soft);
+}
+
+.metric-card .metric-label {
+  font-size: 13px;
+  color: #5f728b;
+  letter-spacing: 0.4px;
+}
+
+.metric-card .metric-value {
+  margin-top: 6px;
+  font-size: 28px;
+  font-weight: 700;
+  color: #1768ac;
+}
+
+.metric-card .metric-sub {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #718198;
+}
+
+.card.highlight {
+  border: 1px solid var(--line-soft);
+  background: var(--bg-panel);
+}
+
 .modules-view {
   max-height: 360px;
   overflow: auto;

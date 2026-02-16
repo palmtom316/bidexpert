@@ -6,6 +6,8 @@ from app.services.adapters.base import (
     QueryRewriteResult,
     ReviewRequest,
     ReviewResult,
+    ComplianceReviewRequest,
+    ComplianceReviewResult,
 )
 from app.services.adapters.providers import (
     DeepSeekAdapter,
@@ -26,6 +28,8 @@ __all__ = [
     "QueryRewriteResult",
     "ReviewRequest",
     "ReviewResult",
+    "ComplianceReviewRequest",
+    "ComplianceReviewResult",
     "create_adapter",
     "list_registered_providers",
     "DeepSeekAdapter",

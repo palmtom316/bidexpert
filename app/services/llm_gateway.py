@@ -5,6 +5,8 @@ from typing import TYPE_CHECKING
 
 from app.services.adapters import (
     AdapterUnavailableError,
+    ComplianceReviewRequest,
+    ComplianceReviewResult,
     GenerationRequest,
     GenerationResult,
     QueryRewriteRequest,
@@ -162,6 +164,70 @@ def review_with_fallback_chain(
     raise last_exc or AdapterUnavailableError("no review providers available")
 
 
+def compliance_review_with_profile(
+    *,
+    project_id: str | None,
+    provider: str,
+    model: str,
+    api_key: str | None,
+    base_url: str | None,
+    content_text: str,
+    requirements: list[dict],
+) -> ComplianceReviewResult:
+    adapter = _select_adapter(provider)
+    payload = ComplianceReviewRequest(
+        model=model,
+        content_text=content_text,
+        requirements=requirements,
+        api_key=api_key,
+        base_url=base_url,
+    )
+    try:
+        with acquire_concurrency_slot(project_id=project_id, task_type="REVIEW"):
+            return adapter.compliance_review(payload)
+    except ConcurrencyLimitExceeded as exc:
+        raise AdapterUnavailableError(str(exc)) from exc
+
+
+def compliance_review_with_fallback_chain(
+    *,
+    profile_chain: list[ResolvedProfile],
+    project_id: str | None,
+    content_text: str,
+    requirements: list[dict],
+) -> tuple[ComplianceReviewResult, int]:
+    """Try each profile in *profile_chain* for compliance review until one succeeds."""
+    last_exc: AdapterUnavailableError | None = None
+    for idx, profile in enumerate(profile_chain):
+        try:
+            result = compliance_review_with_profile(
+                project_id=project_id,
+                provider=profile.provider,
+                model=profile.model,
+                api_key=profile.api_key,
+                base_url=profile.base_url,
+                content_text=content_text,
+                requirements=requirements,
+            )
+            if idx > 0:
+                logger.info(
+                    "compliance review fallback succeeded at index=%d provider=%s model=%s",
+                    idx,
+                    profile.provider,
+                    profile.model,
+                )
+            return result, idx
+        except AdapterUnavailableError as exc:
+            logger.warning(
+                "compliance review failed for provider=%s model=%s: %s",
+                profile.provider,
+                profile.model,
+                exc,
+            )
+            last_exc = exc
+    raise last_exc or AdapterUnavailableError("no compliance review providers available")
+
+
 def rewrite_query_with_profile(
     *,
     project_id: str | None,
@@ -191,5 +257,7 @@ __all__ = [
     "generate_with_profile",
     "review_with_fallback_chain",
     "review_with_profile",
+    "compliance_review_with_fallback_chain",
+    "compliance_review_with_profile",
     "rewrite_query_with_profile",
 ]

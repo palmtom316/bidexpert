@@ -128,11 +128,24 @@ def embed_text(
                 return vec[:vector_size]
             return vec + [0.0] * (vector_size - len(vec))
         except (RuntimeError, ConcurrencyLimitExceeded):
+            if settings.app_env != "dev":
+                logger.error(
+                    "Embedding API failed in %s environment for provider=%s model=%s — refusing mock fallback",
+                    settings.app_env,
+                    provider,
+                    model_id,
+                )
+                raise
             logger.warning(
-                "Embedding API failed for provider=%s model=%s, falling back to mock",
+                "Embedding API failed for provider=%s model=%s, falling back to mock (dev mode only)",
                 provider,
                 model_id,
                 exc_info=True,
             )
+
+    if settings.app_env != "dev":
+        raise RuntimeError(
+            "No embedding API credentials configured. Set provider profile with api_key and base_url."
+        )
 
     return _mock_embed(text, vector_size, model_id)

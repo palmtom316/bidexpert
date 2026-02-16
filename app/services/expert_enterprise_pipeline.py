@@ -237,7 +237,7 @@ def build_structure_v1_from_blocks(
         "title": title or doc_id,
         "doc_type": doc_type if doc_type in {"bid", "spec", "manual", "other"} else "other",
         "source_file": source_file,
-        "source_format": source_format if source_format in {"docx", "pdf", "scanned_pdf"} else "pdf",
+        "source_format": source_format if source_format in {"docx", "pdf", "scanned_pdf", "markdown"} else "pdf",
         "parser_version": parser_version,
         "created_at": datetime.now().isoformat(timespec="seconds"),
         "sections": [],

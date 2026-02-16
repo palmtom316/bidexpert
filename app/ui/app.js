@@ -24,6 +24,7 @@ const state = {
   projectId: normalizeStoredProjectId(localStorage.getItem("be_project_id")),
   industryTag: String(localStorage.getItem("be_industry_tag") || "").trim(),
   industryTagHistory: parseStoredArray(localStorage.getItem("be_industry_tag_history")),
+  apiKey: String(localStorage.getItem("be_api_key") || "").trim(),
   completedBids: [],
   outlineId: "",
   outlineConfirmed: false,
@@ -72,6 +73,11 @@ const Toast = {
 
 async function api(path, options = {}) {
   const config = { ...options };
+  const headers = new Headers(config.headers || {});
+  if (state.apiKey && !headers.has("X-API-Key")) {
+    headers.set("X-API-Key", state.apiKey);
+  }
+  config.headers = headers;
   try {
     const response = await fetch(API_BASE + path, config);
     if (!response.ok) {
@@ -127,12 +133,25 @@ function normalizeOutputName(name) {
   return cleaned.toLowerCase().endsWith(".docx") ? cleaned : `${cleaned}.docx`;
 }
 
-function ensureProjectId() {
+function ensureProjectId({ autoCreate = false } = {}) {
   const projectId = state.projectId.trim();
-  if (!isValidUuid(projectId)) {
+  if (isValidUuid(projectId)) {
+    return projectId;
+  }
+  if (!autoCreate) {
     throw new Error("请先手动输入项目 ID（UUID）");
   }
-  return projectId;
+  const generated = globalThis.crypto?.randomUUID?.();
+  if (!generated || !isValidUuid(generated)) {
+    throw new Error("无法自动生成项目 ID，请手动输入 UUID");
+  }
+  state.projectId = generated;
+  localStorage.setItem("be_project_id", generated);
+  if ($("#projectIdInput")) $("#projectIdInput").value = generated;
+  if ($("#byokProjectId")) $("#byokProjectId").value = generated;
+  if ($("#completedBidProjectId")) CompletedBidHub.syncProjectIdInput();
+  Toast.info("已自动生成项目 ID（UUID），可在顶部手动修改");
+  return generated;
 }
 
 function effectiveIndustryTag() {
@@ -275,6 +294,9 @@ const GlobalBar = {
     $("#projectIdInput").value = state.projectId;
     $("#industryTagInput").value = state.industryTag;
     $("#expertIndustryTag").value = state.industryTag;
+    if ($("#apiKeyInput")) {
+      $("#apiKeyInput").value = state.apiKey;
+    }
     if (state.industryTag) {
       rememberIndustryTag(state.industryTag);
     } else {
@@ -313,6 +335,20 @@ const GlobalBar = {
       Toast.success(state.industryTag ? "工程类别已更新" : "工程类别已清空");
       guarded(() => ExpertHub.loadDocList())();
     });
+
+    if ($("#apiKeyInput")) {
+      $("#apiKeyInput").addEventListener("change", () => {
+        const raw = $("#apiKeyInput").value.trim();
+        state.apiKey = raw;
+        if (raw) {
+          localStorage.setItem("be_api_key", raw);
+          Toast.success("API Key 已设置 (X-API-Key)");
+        } else {
+          localStorage.removeItem("be_api_key");
+          Toast.info("已清除 API Key");
+        }
+      });
+    }
 
     $("#expertIndustryTag").addEventListener("change", () => {
       applyIndustryTag($("#expertIndustryTag").value, "expert");
@@ -355,7 +391,7 @@ const ExpertHub = {
   async ingestPdfFiles() {
     const files = Array.from($("#expertPdfFiles").files || []);
     if (!files.length) {
-      Toast.error("请至少选择一个 PDF 文件");
+      Toast.error("请至少选择一个文件");
       return;
     }
 
@@ -363,34 +399,33 @@ const ExpertHub = {
     const docType = $("#expertDocType").value;
     const projectId = state.projectId.trim();
     const resultView = $("#expertIngestResult");
-    const logs = [];
+    const formData = new FormData();
+    files.forEach((file) => formData.append("files", file));
+    formData.append("doc_type", docType);
+    formData.append("industry_tag", industryTag);
+    if (projectId) formData.append("project_id", projectId);
 
-    setTaskStatus(`资料入库中（0/${files.length}）`);
+    setTaskStatus(`资料入库提交中（${files.length} 个文件）`);
+    const res = await api("/v1/expert-library/ingest-uploads", {
+      method: "POST",
+      body: formData,
+    });
 
-    for (let idx = 0; idx < files.length; idx += 1) {
-      const file = files[idx];
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("doc_type", docType);
-      formData.append("industry_tag", industryTag);
-      if (projectId) formData.append("project_id", projectId);
-
-      try {
-        const res = await api("/v1/expert-library/ingest-upload", {
-          method: "POST",
-          body: formData,
-        });
-        logs.push(`[${idx + 1}/${files.length}] ${file.name} -> SUCCEEDED | chunks=${res.chunk_count} | qdrant=${res.qdrant_upserted}`);
-        setTaskStatus(`资料入库中（${idx + 1}/${files.length}）`);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        logs.push(`[${idx + 1}/${files.length}] ${file.name} -> FAILED | ${message}`);
+    const logs = (res.items || []).map((item, idx) => {
+      if (item.status === "SUCCEEDED") {
+        const warnings = (item.warnings || []).length ? ` | warnings=${item.warnings.join(";")}` : "";
+        return `[${idx + 1}/${res.total_files}] ${item.filename} -> SUCCEEDED | chunks=${item.chunk_count} | qdrant=${item.qdrant_upserted}${warnings}`;
       }
-      resultView.textContent = logs.join("\n");
-    }
+      return `[${idx + 1}/${res.total_files}] ${item.filename} -> FAILED | ${item.error || "unknown error"}`;
+    });
+    resultView.textContent = logs.join("\n");
 
-    setTaskStatus("资料入库完成");
-    Toast.success("PDF 入库流程完成");
+    setTaskStatus(`资料入库完成（成功 ${res.success_count}/${res.total_files}）`);
+    if (res.failure_count > 0) {
+      Toast.info(`入库完成：成功 ${res.success_count}，失败 ${res.failure_count}`);
+    } else {
+      Toast.success("资料入库流程完成");
+    }
     this.loadDocList();
   },
 
@@ -1595,6 +1630,75 @@ const ReviewWorkbench = {
   },
 };
 
+const ReviewScoreDashboard = {
+  init() {
+    $("#btnFetchReviewApi")?.addEventListener("click", guarded(() => this.fetchReview()));
+    $("#btnFetchScoreApi")?.addEventListener("click", guarded(() => this.fetchScore()));
+    this.renderReviewSummary(null);
+    this.renderScoreSummary(null);
+  },
+
+  currentSectionKey() {
+    return $("#reviewSectionSelect")?.value?.trim() || "";
+  },
+
+  renderReviewSummary(data) {
+    const card = $("#reviewSummaryCard");
+    if (!card) return;
+    if (!data) {
+      card.querySelector(".metric-value").textContent = "--";
+      card.querySelector(".metric-sub").textContent = "等待审核";
+      return;
+    }
+    card.querySelector(".metric-value").textContent = data.status || "--";
+    card.querySelector(".metric-sub").textContent = data.created_at || "";
+  },
+
+  renderScoreSummary(data) {
+    const card = $("#scoringSummaryCard");
+    if (!card) return;
+    if (!data) {
+      card.querySelector(".metric-value").textContent = "--";
+      card.querySelector(".metric-sub").textContent = "等待评分";
+      return;
+    }
+    card.querySelector(".metric-value").textContent = Number(data.score_total || 0).toFixed(1);
+    card.querySelector(".metric-sub").textContent = data.created_at || "";
+  },
+
+  setDetail(text) {
+    const box = $("#reviewSummaryDetail");
+    if (box) box.textContent = text;
+  },
+
+  async fetchReview() {
+    const sectionKey = this.currentSectionKey();
+    if (!sectionKey) {
+      Toast.error("请先选择章节");
+      return;
+    }
+    const projectId = ensureProjectId();
+    const res = await api("/v1/workflow/section/review", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ project_id: projectId, section_key: sectionKey }),
+    });
+    this.renderReviewSummary(res);
+    this.setDetail(JSON.stringify(res, null, 2));
+  },
+
+  async fetchScore() {
+    const projectId = ensureProjectId();
+    const res = await api("/v1/workflow/scoring/calculate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ project_id: projectId }),
+    });
+    this.renderScoreSummary(res);
+    this.setDetail(JSON.stringify(res, null, 2));
+  },
+};
+
 const PublishHub = {
   init() {
     $("#btnRenderWord").addEventListener("click", guarded(() => this.renderWord()));
@@ -1958,7 +2062,7 @@ const ByokSettings = {
   },
 
   async open() {
-    const projectId = ensureProjectId();
+    const projectId = ensureProjectId({ autoCreate: true });
     $("#byokProjectId").value = projectId;
     $("#drawerByok").classList.remove("hidden");
     await this.loadProfiles();
@@ -2218,6 +2322,7 @@ document.addEventListener("DOMContentLoaded", () => {
   TenderHub.init();
   BidWorkbench.init();
   ReviewWorkbench.init();
+  ReviewScoreDashboard.init();
   PublishHub.init();
   CompletedBidHub.init();
   ByokSettings.init();

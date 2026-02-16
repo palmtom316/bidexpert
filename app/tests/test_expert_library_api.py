@@ -134,3 +134,81 @@ def test_expert_library_ingest_upload_route_with_model_id(monkeypatch) -> None:
         assert captured["model_id"] == "gemini-2.5-pro"
 
     asyncio.run(_run())
+
+
+def test_expert_library_ingest_upload_route_accepts_markdown(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    def _fake_ingest(**kwargs) -> ExpertLibraryIngestResponse:  # type: ignore[no-untyped-def]
+        captured.update(kwargs)
+        return ExpertLibraryIngestResponse(
+            status="SUCCEEDED",
+            expert_doc_id="doc-md",
+            source_document_id="src-md",
+            filename="history.md",
+            page_count=1,
+            chunk_count=2,
+            qdrant_upserted=2,
+            warnings=[],
+        )
+
+    monkeypatch.setattr(routes, "ingest_historical_pdf", _fake_ingest)
+
+    async def _run() -> None:
+        file = UploadFile(filename="history.md", file=BytesIO(b"# title\n\nmarkdown content"))
+        result = await routes.expert_library_ingest_upload(
+            file=file,
+            project_id="p-1",
+            industry_tag="政企",
+            title="markdown-历史项目",
+            created_by="tester",
+            doc_type="EXPERT_HISTORY",
+            model_id="gemini-2.5-pro",
+        )
+        assert result.expert_doc_id == "doc-md"
+        assert captured["filename"] == "history.md"
+
+    asyncio.run(_run())
+
+
+def test_expert_library_ingest_uploads_route_partial_success(monkeypatch) -> None:
+    def _fake_ingest(**kwargs) -> ExpertLibraryIngestResponse:  # type: ignore[no-untyped-def]
+        filename = str(kwargs.get("filename") or "")
+        if filename.lower().endswith(".doc"):
+            raise ValueError("暂不支持 .doc，请另存为 .docx 后上传")
+        return ExpertLibraryIngestResponse(
+            status="SUCCEEDED",
+            expert_doc_id=f"doc-{filename}",
+            source_document_id=f"src-{filename}",
+            filename=filename,
+            page_count=1,
+            chunk_count=2,
+            qdrant_upserted=2,
+            warnings=[],
+        )
+
+    monkeypatch.setattr(routes, "ingest_historical_pdf", _fake_ingest)
+
+    async def _run() -> None:
+        files = [
+            UploadFile(filename="history-a.pdf", file=BytesIO(b"%PDF-1.4")),
+            UploadFile(filename="history-b.doc", file=BytesIO(b"legacy word")),
+        ]
+        result = await routes.expert_library_ingest_uploads(
+            files=files,
+            project_id="p-1",
+            industry_tag="政企",
+            title=None,
+            created_by="tester",
+            doc_type="EXPERT_HISTORY",
+            model_id=None,
+        )
+        assert result.total_files == 2
+        assert result.success_count == 1
+        assert result.failure_count == 1
+        assert result.status == "PARTIAL_SUCCESS"
+        assert result.items[0].status == "SUCCEEDED"
+        assert result.items[1].status == "FAILED"
+        assert "docx" in (result.items[1].error or "")
+
+    asyncio.run(_run())

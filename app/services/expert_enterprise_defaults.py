@@ -69,7 +69,7 @@ STRUCTURE_SCHEMA = {
         "title": {"type": "string"},
         "doc_type": {"type": "string", "enum": ["bid", "spec", "manual", "other"]},
         "source_file": {"type": "string"},
-        "source_format": {"type": "string", "enum": ["docx", "pdf", "scanned_pdf"]},
+        "source_format": {"type": "string", "enum": ["docx", "pdf", "scanned_pdf", "markdown"]},
         "parser_version": {"type": "string"},
         "created_at": {"type": "string"},
         "sections": {

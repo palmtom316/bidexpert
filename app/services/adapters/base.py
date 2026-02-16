@@ -58,6 +58,23 @@ class QueryRewriteResult:
     model: str
 
 
+@dataclass
+class ComplianceReviewRequest:
+    model: str
+    content_text: str
+    requirements: list[dict]
+    api_key: str | None
+    base_url: str | None
+
+
+@dataclass
+class ComplianceReviewResult:
+    status: str  # PASS, FAIL, WARN
+    report: dict
+    provider: str
+    model: str
+
+
 class LLMAdapter:
     provider: str
 
@@ -65,6 +82,9 @@ class LLMAdapter:
         raise NotImplementedError
 
     def review(self, payload: ReviewRequest) -> ReviewResult:
+        raise NotImplementedError
+
+    def compliance_review(self, payload: ComplianceReviewRequest) -> ComplianceReviewResult:
         raise NotImplementedError
 
     def rewrite_query(self, payload: QueryRewriteRequest) -> QueryRewriteResult:

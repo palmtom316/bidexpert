@@ -27,6 +27,20 @@ class ReviewAnalysisPayload(BaseModel):
     issues: list[str] = Field(default_factory=list)
 
 
+
+class ComplianceIssue(BaseModel):
+    requirement_code: str
+    issue_type: str = "NON_COMPLIANT"
+    description: str
+    location_snippet: str | None = None
+
+
+class ComplianceReviewPayload(BaseModel):
+    status: str = Field(pattern="^(PASS|FAIL|WARN)$")
+    modeled_issues: list[ComplianceIssue] = Field(default_factory=list)
+    general_comments: str | None = None
+
+
 _FENCE = re.compile(r"^\s*```(?:json)?\s*|\s*```\s*$", re.IGNORECASE)
 
 
@@ -61,6 +75,14 @@ def validate_review_payload(raw: str | dict[str, Any]) -> ReviewAnalysisPayload:
         return ReviewAnalysisPayload.model_validate(payload)
     except ValidationError as exc:
         raise ValueError("review payload schema validation failed") from exc
+
+
+def validate_compliance_payload(raw: str | dict[str, Any]) -> ComplianceReviewPayload:
+    payload = parse_json_payload(raw)
+    try:
+        return ComplianceReviewPayload.model_validate(payload)
+    except ValidationError as exc:
+        raise ValueError("compliance payload schema validation failed") from exc
 
 
 def build_generation_payload(text: str, evidence_ids: list[str]) -> SectionGenerationPayload:

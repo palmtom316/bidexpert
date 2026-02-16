@@ -111,9 +111,9 @@
   ],
   "role_defaults": {
     "EXTRACT": [
-      "qwen:qwen3",
       "gemini:gemini-3-pro",
       "openai:gpt-5",
+      "qwen:qwen3",
       "deepseek:deepseek-v3.2"
     ],
     "EMBED": [
@@ -122,25 +122,25 @@
       "voyage:voyage-law-2"
     ],
     "GENERATE": [
-      "qwen:qwen3",
       "gemini:gemini-3-pro",
       "openai:gpt-5",
+      "qwen:qwen3",
       "qwen:qwen3-max"
     ],
     "REVIEW": [
-      "qwen:qwen3",
       "openai:o1",
       "openai:gpt-5",
-      "gemini:gemini-3-pro"
+      "gemini:gemini-3-pro",
+      "qwen:qwen3"
     ],
     "QUERY_REWRITE": [
-      "qwen:qwen3",
       "gemini:gemini-3-flash",
+      "qwen:qwen3",
       "deepseek:deepseek-v3.2"
     ],
     "PROGRAM_SUPPORT": [
-      "qwen:qwen3",
       "openai:gpt-5.3-codex",
+      "qwen:qwen3",
       "glm:glm-4.5"
     ]
   }

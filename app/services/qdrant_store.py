@@ -1,18 +1,22 @@
 from __future__ import annotations
 
-import math
+import logging
 import re
 import uuid
 from collections import Counter
 from dataclasses import dataclass
 from datetime import date
+from typing import cast
 
 from app.core.config import settings
 from app.schemas.contracts import EvidenceSearchHit, EvidenceUpsertItem
 from app.services.byok import resolve_profile_for_task
 from app.services.embedding import embed_text
 
+logger = logging.getLogger(__name__)
 TOKEN_PATTERN = re.compile(r"[\w\u4e00-\u9fff]+", re.UNICODE)
+
+SPARSE_VECTOR_NAME = "bm25_sparse"
 
 
 @dataclass
@@ -25,6 +29,19 @@ class RetrievedEvidence:
 
 def _tokenize(text: str) -> list[str]:
     return TOKEN_PATTERN.findall((text or "").lower())
+
+
+def _build_sparse_vector(text: str) -> dict[int, float]:
+    tokens = _tokenize(text)
+    if not tokens:
+        return {}
+    tf = Counter(tokens)
+    total = len(tokens)
+    indices_values: dict[int, float] = {}
+    for token, count in tf.items():
+        idx = int.from_bytes(token.encode("utf-8")[:4].ljust(4, b"\x00"), "big") % (2**31)
+        indices_values[idx] = count / total
+    return indices_values
 
 
 def _is_payload_allowed(payload: dict) -> bool:
@@ -46,11 +63,12 @@ def _is_payload_allowed(payload: dict) -> bool:
 class QdrantStore:
     def __init__(self) -> None:
         from qdrant_client import QdrantClient
-        from qdrant_client.http.models import Distance, VectorParams
+        from qdrant_client.http.models import Distance, SparseVectorParams, VectorParams
 
         self.client = QdrantClient(url=settings.qdrant_url, check_compatibility=False)
         self.collection = settings.qdrant_collection
         self.vector_size = settings.qdrant_vector_size
+        self._sparse_enabled = False
 
         collections = self.client.get_collections().collections
         exists = any(c.name == self.collection for c in collections)
@@ -58,10 +76,29 @@ class QdrantStore:
             self.client.create_collection(
                 collection_name=self.collection,
                 vectors_config=VectorParams(size=self.vector_size, distance=Distance.COSINE),
+                sparse_vectors_config={SPARSE_VECTOR_NAME: SparseVectorParams()},
             )
+            self._sparse_enabled = True
+        else:
+            try:
+                info = self.client.get_collection(self.collection)
+                sparse_cfg = getattr(info.config.params, "sparse_vectors", None) or {}
+                self._sparse_enabled = SPARSE_VECTOR_NAME in sparse_cfg
+            except Exception:
+                self._sparse_enabled = False
+
+        if not self._sparse_enabled:
+            try:
+                self.client.update_collection(
+                    collection_name=self.collection,
+                    sparse_vectors_config={SPARSE_VECTOR_NAME: SparseVectorParams()},
+                )
+                self._sparse_enabled = True
+            except Exception:
+                logger.info("Sparse vector upgrade unavailable; falling back to dense only")
 
     def upsert_chunks(self, expert_doc_id: str, chunks: list[EvidenceUpsertItem], project_id: str | None = None) -> int:
-        from qdrant_client.http.models import PointStruct
+        from qdrant_client.http.models import PointStruct, SparseVector
 
         embed_profile = resolve_profile_for_task(project_id=project_id, task_type="EMBED")
         points: list[PointStruct] = []
@@ -86,34 +123,48 @@ class QdrantStore:
                 "discipline": source_locator.get("discipline"),
                 "source_page": source_locator.get("source_page"),
             }
-            points.append(
-                PointStruct(
-                    id=str(uuid.uuid5(uuid.NAMESPACE_URL, f"{expert_doc_id}:{chunk.chunk_id}")),
-                    vector=embed_text(
-                        chunk.text,
-                        self.vector_size,
-                        model_id=embed_profile.model,
-                        provider=embed_profile.provider,
-                        api_key=embed_profile.api_key,
-                        base_url=embed_profile.base_url,
-                        project_id=project_id,
-                    ),
-                    payload=payload,
-                )
+
+            dense_vector = embed_text(
+                chunk.text,
+                self.vector_size,
+                model_id=embed_profile.model,
+                provider=embed_profile.provider,
+                api_key=embed_profile.api_key,
+                base_url=embed_profile.base_url,
+                project_id=project_id,
             )
+
+            point_kwargs: dict = {
+                "id": str(uuid.uuid5(uuid.NAMESPACE_URL, f"{expert_doc_id}:{chunk.chunk_id}")),
+                "vector": dense_vector,
+                "payload": payload,
+            }
+
+            if self._sparse_enabled:
+                sparse = _build_sparse_vector(chunk.text)
+                if sparse:
+                    point_kwargs["vector"] = {
+                        "": dense_vector,
+                        SPARSE_VECTOR_NAME: SparseVector(
+                            indices=list(sparse.keys()),
+                            values=list(sparse.values()),
+                        ),
+                    }
+
+            points.append(PointStruct(**point_kwargs))
 
         if points:
             self.client.upsert(collection_name=self.collection, points=points, wait=True)
         return len(points)
 
     def _build_query_filter(self, industry_tag: str | None = None):
-        from qdrant_client.http.models import FieldCondition, Filter, MatchValue
+        from qdrant_client.http.models import Condition, FieldCondition, Filter, MatchValue
 
-        must = [FieldCondition(key="sensitivity_level", match=MatchValue(value="PUBLIC_OK"))]
+        must_conditions: list[Condition] = [FieldCondition(key="sensitivity_level", match=MatchValue(value="PUBLIC_OK"))]
         if industry_tag:
-            must.append(FieldCondition(key="industry_tag", match=MatchValue(value=industry_tag)))
-        must_not = [FieldCondition(key="forbidden_tags", match=MatchValue(value="PRICING_RELATED"))]
-        return Filter(must=must, must_not=must_not)
+            must_conditions.append(FieldCondition(key="industry_tag", match=MatchValue(value=industry_tag)))
+        must_not_conditions: list[Condition] = [FieldCondition(key="forbidden_tags", match=MatchValue(value="PRICING_RELATED"))]
+        return Filter(must=cast(list[Condition], must_conditions), must_not=cast(list[Condition], must_not_conditions))
 
     def _vector_search(self, query_vector: list[float], query_filter, limit: int):
         if hasattr(self.client, "query_points"):
@@ -127,7 +178,7 @@ class QdrantStore:
             )
             return list(getattr(response, "points", []))
         return list(
-            self.client.search(
+            self.client.search(  # type: ignore[attr-defined]
                 collection_name=self.collection,
                 query_vector=query_vector,
                 query_filter=query_filter,
@@ -137,65 +188,24 @@ class QdrantStore:
             )
         )
 
-    def _bm25_scores(self, query: str, query_filter, limit: int) -> list[tuple[object, float]]:
-        query_terms = _tokenize(query)
-        if not query_terms:
-            return []
+    def _sparse_search(self, sparse_vector: dict[int, float], query_filter, limit: int):
+        from qdrant_client.http.models import NamedSparseVector, SparseVector
 
-        points, _ = self.client.scroll(
-            collection_name=self.collection,
-            scroll_filter=query_filter,
-            limit=limit,
-            with_payload=True,
-            with_vectors=False,
+        if not sparse_vector:
+            return []
+        named_sparse = NamedSparseVector(
+            name=SPARSE_VECTOR_NAME,
+            vector=SparseVector(indices=list(sparse_vector.keys()), values=list(sparse_vector.values())),
         )
-        if not points:
-            return []
-
-        docs_tokens: list[list[str]] = []
-        valid_points: list[object] = []
-        for point in points:
-            payload = getattr(point, "payload", None) or {}
-            text = str(payload.get("text", ""))
-            tokens = _tokenize(text)
-            if not tokens:
-                continue
-            valid_points.append(point)
-            docs_tokens.append(tokens)
-
-        if not valid_points:
-            return []
-
-        doc_count = len(docs_tokens)
-        avg_doc_len = max(1.0, sum(len(tokens) for tokens in docs_tokens) / doc_count)
-        query_vocab = set(query_terms)
-        df = Counter()
-        for tokens in docs_tokens:
-            token_set = set(tokens)
-            for term in query_vocab:
-                if term in token_set:
-                    df[term] += 1
-
-        k1 = 1.2
-        b = 0.75
-        scored: list[tuple[object, float]] = []
-        for idx, point in enumerate(valid_points):
-            tokens = docs_tokens[idx]
-            tf = Counter(tokens)
-            dl = len(tokens)
-            score = 0.0
-            for term in query_vocab:
-                freq = tf.get(term, 0)
-                if freq <= 0:
-                    continue
-                denom = df.get(term, 0) + 0.5
-                idf = math.log(1 + (doc_count - df.get(term, 0) + 0.5) / denom)
-                score += idf * (freq * (k1 + 1)) / (freq + k1 * (1 - b + b * dl / avg_doc_len))
-            if score > 0:
-                scored.append((point, score))
-
-        scored.sort(key=lambda item: item[1], reverse=True)
-        return scored
+        return list(
+            self.client.search(  # type: ignore[attr-defined]
+                collection_name=self.collection,
+                query_vector=named_sparse,
+                query_filter=query_filter,
+                limit=limit,
+                with_payload=True,
+            )
+        )
 
     def _chunk_id(self, point: object) -> str:
         payload = getattr(point, "payload", None) or {}
@@ -205,7 +215,7 @@ class QdrantStore:
         self,
         *,
         vector_hits: list[object],
-        bm25_hits: list[tuple[object, float]],
+        sparse_hits: list[object],
         top_k: int,
     ) -> list[RetrievedEvidence]:
         candidates: dict[str, dict] = {}
@@ -218,16 +228,16 @@ class QdrantStore:
                 {
                     "payload": payload,
                     "vector_rank": None,
-                    "bm25_rank": None,
+                    "sparse_rank": None,
                     "vector_score": 0.0,
-                    "bm25_score": 0.0,
+                    "sparse_score": 0.0,
                 },
             )
             candidates[chunk_id]["payload"] = payload
             candidates[chunk_id]["vector_rank"] = rank
             candidates[chunk_id]["vector_score"] = float(getattr(hit, "score", 0.0) or 0.0)
 
-        for rank, (hit, bm25_score) in enumerate(bm25_hits):
+        for rank, hit in enumerate(sparse_hits):
             payload = getattr(hit, "payload", None) or {}
             chunk_id = self._chunk_id(hit)
             candidates.setdefault(
@@ -235,25 +245,25 @@ class QdrantStore:
                 {
                     "payload": payload,
                     "vector_rank": None,
-                    "bm25_rank": None,
+                    "sparse_rank": None,
                     "vector_score": 0.0,
-                    "bm25_score": 0.0,
+                    "sparse_score": 0.0,
                 },
             )
             candidates[chunk_id]["payload"] = payload
-            candidates[chunk_id]["bm25_rank"] = rank
-            candidates[chunk_id]["bm25_score"] = float(bm25_score)
+            candidates[chunk_id]["sparse_rank"] = rank
+            candidates[chunk_id]["sparse_score"] = float(getattr(hit, "score", 0.0) or 0.0)
 
         rrf_k = max(1, int(settings.qdrant_rrf_k))
 
         def _fusion_score(candidate: dict) -> float:
             score = 0.0
-            vector_rank = candidate["vector_rank"]
-            bm25_rank = candidate["bm25_rank"]
+            vector_rank = candidate.get("vector_rank")
+            sparse_rank = candidate.get("sparse_rank")
             if vector_rank is not None:
                 score += 1.0 / (rrf_k + vector_rank + 1)
-            if bm25_rank is not None:
-                score += 1.0 / (rrf_k + bm25_rank + 1)
+            if sparse_rank is not None:
+                score += 1.0 / (rrf_k + sparse_rank + 1)
             return score
 
         ranked = sorted(candidates.items(), key=lambda item: _fusion_score(item[1]), reverse=True)
@@ -288,7 +298,7 @@ class QdrantStore:
         embed_profile = resolve_profile_for_task(project_id=project_id, task_type="EMBED")
         query_filter = self._build_query_filter(industry_tag=industry_tag)
 
-        query_vector = embed_text(
+        dense_query = embed_text(
             query,
             self.vector_size,
             model_id=embed_profile.model,
@@ -297,33 +307,21 @@ class QdrantStore:
             base_url=embed_profile.base_url,
             project_id=project_id,
         )
-        vector_hits = self._vector_search(query_vector=query_vector, query_filter=query_filter, limit=max(top_k * 4, 8))
+        vector_hits = self._vector_search(query_vector=dense_query, query_filter=query_filter, limit=max(top_k * 4, 8))
 
-        bm25_hits = self._bm25_scores(
-            query=query,
-            query_filter=query_filter,
-            limit=max(top_k * 8, int(settings.qdrant_hybrid_candidate_limit)),
-        )
-
-        if bm25_hits:
-            return self._fuse_hybrid(vector_hits=vector_hits, bm25_hits=bm25_hits, top_k=top_k)
-
-        items: list[RetrievedEvidence] = []
-        for hit in vector_hits:
-            payload = getattr(hit, "payload", None) or {}
-            if not _is_payload_allowed(payload):
-                continue
-            items.append(
-                RetrievedEvidence(
-                    chunk_id=str(payload.get("chunk_id", getattr(hit, "id", ""))),
-                    score=float(getattr(hit, "score", 0.0) or 0.0),
-                    text=str(payload.get("text", "")),
-                    payload=payload,
-                )
+        sparse_hits: list[object] = []
+        if self._sparse_enabled:
+            sparse_query = _build_sparse_vector(query)
+            sparse_hits = self._sparse_search(
+                sparse_vector=sparse_query,
+                query_filter=query_filter,
+                limit=max(top_k * 8, int(settings.qdrant_hybrid_candidate_limit)),
             )
-            if len(items) >= top_k:
-                break
-        return items
+
+        if vector_hits or sparse_hits:
+            return self._fuse_hybrid(vector_hits=vector_hits, sparse_hits=sparse_hits, top_k=top_k)
+
+        return []
 
 
 def to_search_hits(items: list[RetrievedEvidence]) -> list[EvidenceSearchHit]:

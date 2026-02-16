@@ -466,3 +466,29 @@ class TenderKeyInfo(Base):
     importance: Mapped[int] = mapped_column(Integer, default=50)
     source_quote: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class ReviewReport(Base):
+    __tablename__ = "review_report"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("project.id", ondelete="CASCADE"), nullable=False
+    )
+    section_key: Mapped[str] = mapped_column(Text, nullable=False)
+    outline_id: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(Text, nullable=False)
+    report_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class ScoringReport(Base):
+    __tablename__ = "scoring_report"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("project.id", ondelete="CASCADE"), nullable=False
+    )
+    score_total: Mapped[float] = mapped_column(Numeric(6, 2))
+    details_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

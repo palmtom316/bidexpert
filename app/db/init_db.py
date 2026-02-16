@@ -39,6 +39,11 @@ def _apply_postgres_runtime_migrations() -> None:
         "CREATE TABLE IF NOT EXISTS tender_key_info (id uuid PRIMARY KEY, run_id uuid NOT NULL REFERENCES tender_analysis_run(id) ON DELETE CASCADE, project_id uuid REFERENCES project(id) ON DELETE SET NULL, document_id uuid REFERENCES document(id) ON DELETE SET NULL, category tender_key_category NOT NULL, title text NULL, content text NOT NULL, page_no int NULL, section_anchor text NULL, score_weight numeric(6,2) NULL, is_must boolean NOT NULL DEFAULT false, importance int NOT NULL DEFAULT 50, source_quote text NULL, created_at timestamptz NOT NULL DEFAULT now());",
         "CREATE INDEX IF NOT EXISTS idx_tender_analysis_project_time ON tender_analysis_run(project_id, created_at DESC);",
         "CREATE INDEX IF NOT EXISTS idx_tender_key_info_run_category ON tender_key_info(run_id, category);",
+        "CREATE TABLE IF NOT EXISTS review_report (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), project_id uuid NOT NULL REFERENCES project(id) ON DELETE CASCADE, section_key text NOT NULL, outline_id text NOT NULL, status text NOT NULL, report_json jsonb NOT NULL DEFAULT '{}'::jsonb, created_at timestamptz NOT NULL DEFAULT now());",
+        "CREATE INDEX IF NOT EXISTS idx_review_report_project ON review_report(project_id);",
+        "CREATE INDEX IF NOT EXISTS idx_review_report_section ON review_report(project_id, section_key);",
+        "CREATE TABLE IF NOT EXISTS scoring_report (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), project_id uuid NOT NULL REFERENCES project(id) ON DELETE CASCADE, score_total numeric(6,2), details_json jsonb NOT NULL DEFAULT '{}'::jsonb, created_at timestamptz NOT NULL DEFAULT now());",
+        "CREATE INDEX IF NOT EXISTS idx_scoring_report_project ON scoring_report(project_id);",
     ]
     with engine.begin() as conn:
         conn.exec_driver_sql("DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'section_origin') THEN CREATE TYPE section_origin AS ENUM ('AI', 'HUMAN', 'MERGE'); END IF; END $$;")

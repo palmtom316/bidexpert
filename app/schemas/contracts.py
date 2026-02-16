@@ -362,6 +362,26 @@ class ExpertLibraryIngestResponse(BaseModel):
     warnings: list[str] = Field(default_factory=list)
 
 
+class ExpertLibraryBatchIngestItem(BaseModel):
+    filename: str
+    status: str
+    expert_doc_id: str | None = None
+    source_document_id: str | None = None
+    page_count: int = 0
+    chunk_count: int = 0
+    qdrant_upserted: int = 0
+    warnings: list[str] = Field(default_factory=list)
+    error: str | None = None
+
+
+class ExpertLibraryBatchIngestResponse(BaseModel):
+    status: str
+    total_files: int
+    success_count: int
+    failure_count: int
+    items: list[ExpertLibraryBatchIngestItem]
+
+
 class ExpertLibraryDocItem(BaseModel):
     expert_doc_id: str
     title: str | None = None
@@ -460,3 +480,30 @@ class TenderAnalysisDetailResponse(BaseModel):
     run: TenderAnalysisRunItem
     summary: TenderAnalysisSummary
     key_infos: list[TenderKeyInfoItem]
+
+
+class ReviewSectionRequest(BaseModel):
+    project_id: str
+    section_key: str
+    outline_id: str | None = None
+
+
+class ReviewReportResponse(BaseModel):
+    id: str
+    project_id: str
+    section_key: str
+    status: str
+    report_json: dict
+    created_at: str
+
+
+class ScoringRequest(BaseModel):
+    project_id: str
+
+
+class ScoringReportResponse(BaseModel):
+    id: str
+    project_id: str
+    score_total: float
+    details_json: dict
+    created_at: str

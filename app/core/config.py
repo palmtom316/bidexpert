@@ -34,6 +34,8 @@ class Settings(BaseSettings):
     task_max_fallbacks: int = 1
     max_parallel_sections: int = 4
     master_key_b64: str | None = None
+    api_key: str | None = None
+    cors_origins: str = "*"
     review_fallback_provider: str | None = None
     review_fallback_model: str | None = None
     review_fallback_base_url: str | None = None

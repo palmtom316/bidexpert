@@ -8,6 +8,8 @@ import httpx
 from app.core.config import settings
 from app.services.adapters.base import (
     AdapterUnavailableError,
+    ComplianceReviewRequest,
+    ComplianceReviewResult,
     GenerationRequest,
     GenerationResult,
     LLMAdapter,
@@ -19,6 +21,7 @@ from app.services.adapters.base import (
 from app.validator import (
     build_generation_payload,
     flatten_generation_payload,
+    validate_compliance_payload,
     validate_generation_payload,
     validate_review_payload,
 )
@@ -70,6 +73,24 @@ class MockAdapter(LLMAdapter):
             provider=self.provider,
             model=payload.model,
             report=report,
+        )
+
+    def compliance_review(self, payload: ComplianceReviewRequest) -> ComplianceReviewResult:
+        issues = []
+        if "fail" in payload.content_text.lower():
+            issues.append("mock_forced_fail")
+        
+        status = "FAIL" if issues else "PASS"
+        report = {
+            "status": status,
+            "modeled_issues": [{"requirement_code": "req1", "description": i} for i in issues],
+            "general_comments": "Mock review completed."
+        }
+        return ComplianceReviewResult(
+            status=status,
+            report=report,
+            provider=self.provider,
+            model=payload.model,
         )
 
     def rewrite_query(self, payload: QueryRewriteRequest) -> QueryRewriteResult:
@@ -204,6 +225,50 @@ class OpenAICompatibleAdapter(LLMAdapter):
                 report=fallback,
             )
 
+    def compliance_review(self, payload: ComplianceReviewRequest) -> ComplianceReviewResult:
+        req_lines = []
+        for r in payload.requirements:
+            code = r.get("requirement_code", "?")
+            strength = r.get("strength", "MUST")
+            text = r.get("original_text", "")
+            req_lines.append(f"- [{code}] ({strength}) {text}")
+        
+        req_text = "\n".join(req_lines)
+        prompt = (
+            "你是合规审查员。请严格对照要求审查内容。\n"
+            "要求列表：\n"
+            f"{req_text}\n\n"
+            f"待审查内容：\n{payload.content_text}\n\n"
+            "必须输出 JSON：\n"
+            '{"status": "PASS"|"FAIL"|"WARN", "modeled_issues": [{"requirement_code": "...", "issue_type": "NON_COMPLIANT"|"MISSING", "description": "...", "location_snippet": "..."}], "general_comments": "..."}'
+        )
+        content = self._post_chat(
+            model=payload.model,
+            prompt=prompt,
+            api_key=payload.api_key,
+            base_url=payload.base_url,
+        )
+        try:
+            parsed = validate_compliance_payload(content)
+            return ComplianceReviewResult(
+                status=parsed.status,
+                report=parsed.model_dump(mode="json"),
+                provider=self.provider,
+                model=payload.model,
+            )
+        except ValueError:
+            fallback = {
+                "status": "FAIL",
+                "modeled_issues": [{"requirement_code": "PARSE_ERROR", "description": "LLM output parsing failed"}],
+                "general_comments": "Failed to parse LLM response"
+            }
+            return ComplianceReviewResult(
+                status="FAIL",
+                report=fallback,
+                provider=self.provider,
+                model=payload.model,
+            )
+
     def rewrite_query(self, payload: QueryRewriteRequest) -> QueryRewriteResult:
         prompt = (
             "你是检索查询重写器。请把输入改写为更适合知识库检索的一句话。\n"
@@ -259,6 +324,9 @@ class VoyageAdapter(LLMAdapter):
         raise AdapterUnavailableError("voyage provider only supports embedding tasks")
 
     def review(self, payload: ReviewRequest) -> ReviewResult:
+        raise AdapterUnavailableError("voyage provider only supports embedding tasks")
+
+    def compliance_review(self, payload: ComplianceReviewRequest) -> ComplianceReviewResult:
         raise AdapterUnavailableError("voyage provider only supports embedding tasks")
 
     def rewrite_query(self, payload: QueryRewriteRequest) -> QueryRewriteResult:

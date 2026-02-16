@@ -59,7 +59,7 @@ def create_outline_run(project_id: str, tender_text: str) -> tuple[str, list[Out
 def confirm_outline_run(outline_id: str, approved: bool) -> str:
     _ensure_table()
     with SessionLocal() as db:
-        run = db.query(WorkflowRun).filter(WorkflowRun.id == outline_id).first()
+        run = db.query(WorkflowRun).filter(WorkflowRun.id == outline_id).with_for_update().first()
         if not run:
             raise ValueError("outline not found")
         run.status = "OUTLINE_CONFIRMED" if approved else "OUTLINE_REJECTED"
@@ -81,7 +81,7 @@ def get_outline_status(outline_id: str) -> str | None:
 def mark_section_pending(outline_id: str, section_key: str) -> None:
     _ensure_table()
     with SessionLocal() as db:
-        run = db.query(WorkflowRun).filter(WorkflowRun.id == outline_id).first()
+        run = db.query(WorkflowRun).filter(WorkflowRun.id == outline_id).with_for_update().first()
         if not run:
             raise ValueError("outline not found")
         section_status = dict(run.section_status_json or {})
@@ -95,7 +95,7 @@ def mark_section_pending(outline_id: str, section_key: str) -> None:
 def confirm_section_run(outline_id: str, section_key: str, approved: bool) -> str:
     _ensure_table()
     with SessionLocal() as db:
-        run = db.query(WorkflowRun).filter(WorkflowRun.id == outline_id).first()
+        run = db.query(WorkflowRun).filter(WorkflowRun.id == outline_id).with_for_update().first()
         if not run:
             raise ValueError("outline not found")
         section_status = dict(run.section_status_json or {})

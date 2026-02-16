@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>AI辅助投标系统 | 投标办公工作台</title>
     <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet" />
-    <link rel="stylesheet" href="/ui/styles.css" />
+    <link rel="stylesheet" href="/ui/styles.css?v=20260216-1" />
   </head>
   <body>
     <header class="ribbon">
@@ -43,7 +43,7 @@
             <button type="button" class="flow-item active" data-target="panel-expert-hub">
               <i class="ri-database-2-line"></i>
               <div>
-                <h4>专家库形成</h4>
+                <h4>公司投标专家库</h4>
                 <p>资料清洗、拆解、入库与回灌</p>
               </div>
             </button>
@@ -109,17 +109,17 @@
         <div id="panel-expert-hub" class="view-panel active">
           <header class="panel-header">
             <div>
-              <h2><i class="ri-database-2-line"></i> 专家库形成</h2>
+              <h2><i class="ri-database-2-line"></i> 公司投标专家库</h2>
               <p>统一完成过往资料入库与投标成果回灌，形成可复用专家知识库。</p>
             </div>
           </header>
 
           <div class="office-grid cols-2">
             <article class="card">
-              <h3><i class="ri-file-upload-line"></i> PDF 资料清洗、拆解、入库</h3>
+              <h3><i class="ri-file-upload-line"></i> 投标资料入库</h3>
               <div class="form-group">
-                <label>资料 PDF（可多选）</label>
-                <input id="expertPdfFiles" type="file" accept=".pdf" multiple />
+                <label>资料文件（可多选）</label>
+                <input id="expertPdfFiles" type="file" accept=".pdf,.md,.markdown,.doc,.docx" multiple />
               </div>
               <div class="form-row">
                 <div class="form-group">
@@ -448,6 +448,29 @@
           </header>
 
           <div class="office-grid cols-2">
+            <article class="card highlight">
+              <h3><i class="ri-bar-chart-2-line"></i> 审核 / 评分概览</h3>
+              <div class="grid-2">
+                <div class="metric-card" id="reviewSummaryCard">
+                  <div class="metric-label">最新章节审核</div>
+                  <div class="metric-value">--</div>
+                  <div class="metric-sub">状态 / 时间</div>
+                </div>
+                <div class="metric-card" id="scoringSummaryCard">
+                  <div class="metric-label">项目评分</div>
+                  <div class="metric-value">--</div>
+                  <div class="metric-sub">score_total</div>
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group action-stack">
+                  <button id="btnFetchReviewApi" class="btn btn-primary btn-sm"><i class="ri-search-eye-line"></i> 拉取审核</button>
+                  <button id="btnFetchScoreApi" class="btn btn-secondary btn-sm"><i class="ri-function-line"></i> 拉取评分</button>
+                </div>
+              </div>
+              <pre id="reviewSummaryDetail" class="result-box compact">等待请求...</pre>
+            </article>
+
             <article class="card">
               <h3><i class="ri-shield-check-line"></i> 章节审核交互</h3>
               <div class="form-group">
@@ -516,7 +539,7 @@
               <div class="typeset-grid">
                 <div class="form-group">
                   <label>页眉文字</label>
-                  <input id="typesetHeaderText" type="text" value="\"小蜜蜂AI标书助手，即时生成\"" />
+                  <input id="typesetHeaderText" type="text" value="" />
                 </div>
                 <div class="form-group">
                   <label>上边距（cm）</label>
@@ -524,7 +547,7 @@
                 </div>
                 <div class="form-group">
                   <label>页脚文字</label>
-                  <input id="typesetFooterText" type="text" value="小蜜蜂AI标书助手，即时生成" />
+                  <input id="typesetFooterText" type="text" value="" />
                 </div>
                 <div class="form-group">
                   <label>下边距（cm）</label>
@@ -650,7 +673,7 @@
               <p class="hint">终审通过后，建议将交付文件或章节回灌到专家库，形成知识闭环。</p>
               <div class="form-actions">
                 <button id="btnJumpToFeedback" class="btn btn-outline btn-sm">
-                  <i class="ri-arrow-left-right-line"></i> 前往“专家库形成”执行回灌
+                  <i class="ri-arrow-left-right-line"></i> 前往“公司投标专家库”执行回灌
                 </button>
               </div>
             </article>
@@ -743,6 +766,12 @@
                 <label>项目 ID（UUID）</label>
                 <input id="byokProjectId" type="text" placeholder="来自顶部手动输入，可按需修改" />
               </div>
+              <div class="form-group">
+                <label>接口认证 API Key（X-API-Key）</label>
+                <input id="apiKeyInput" type="password" placeholder="用于当前页面请求鉴权，可留空" />
+              </div>
+            </div>
+            <div class="form-row">
               <div class="form-group action-stack">
                 <button id="btnByokLoadProfiles" class="btn btn-outline btn-sm" type="button">
                   <i class="ri-refresh-line"></i> 加载 Profiles
@@ -801,7 +830,7 @@
             <h4>按工作流程绑定模型</h4>
             <p class="hint">支持不同流程使用不同商用模型；Embedding 下拉仅展示向量模型；未选择时使用系统默认模型（通用为百炼 Qwen3）。</p>
             <div class="form-group">
-              <label>专家库形成（抽取模型）</label>
+              <label>公司投标专家库（抽取模型）</label>
               <select id="byokWorkflowExpert"></select>
             </div>
             <div class="form-group">

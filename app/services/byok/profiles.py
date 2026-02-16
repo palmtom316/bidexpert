@@ -270,16 +270,30 @@ def test_provider_profile(profile_id: str) -> tuple[ProviderProfile, bool, str]:
     profile = get_provider_profile(profile_id)
     if not profile:
         raise ValueError("provider profile not found")
-    if not _resolve_api_key(profile):
+    api_key = _resolve_api_key(profile)
+    if not api_key:
         return profile, False, "missing credential"
     if not profile.base_url:
         return profile, True, "credential resolved"
 
-    health_url = f"{profile.base_url.rstrip('/')}/health"
+    url = f"{profile.base_url.rstrip('/')}/chat/completions"
+    body = {
+        "model": profile.default_model,
+        "messages": [{"role": "user", "content": "ping"}],
+        "max_tokens": 1,
+    }
     try:
-        resp = httpx.get(health_url, timeout=5.0)
+        resp = httpx.post(
+            url,
+            json=body,
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            timeout=10.0,
+        )
         if 200 <= resp.status_code < 400:
-            return profile, True, f"health endpoint reachable ({resp.status_code})"
-        return profile, False, f"health endpoint returned {resp.status_code}"
+            return profile, True, f"completion probe OK ({resp.status_code})"
+        return profile, False, f"completion probe returned {resp.status_code}"
     except (httpx.HTTPError, OSError, TimeoutError, SQLAlchemyError) as exc:
-        return profile, False, f"health endpoint unreachable: {exc}"
+        return profile, False, f"completion probe failed: {exc}"

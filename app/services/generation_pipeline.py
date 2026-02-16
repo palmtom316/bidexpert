@@ -12,7 +12,7 @@ from app.services.evidence_validator import run_three_gates
 from app.services.governance import estimate_tokens
 from app.services.llm_audit import log_llm_call, reserve_budget_persistent
 from app.services.llm_gateway import generate_with_fallback_chain, review_with_fallback_chain
-from app.services.pii_policy import sanitize_outbound_text
+from app.services.pii_policy import sanitize_inbound_text, sanitize_outbound_text
 from app.rag.rag_flow import decompose_requirement, merge_retrieval, retrieve_for_subrequirements
 from app.services.semantic_cache import build_cache_key, get_cache, set_cache
 from app.validator import build_generation_payload, flatten_generation_payload, validate_generation_payload
@@ -74,6 +74,19 @@ def generate_draft_with_retrieval(
 
     begin = perf_counter()
     effective_top_k = max(1, min(top_k, 8))
+
+    inbound_result = sanitize_inbound_text(requirement_text)
+    if inbound_result.pricing_blocked:
+        return DraftGenerationResponse(
+            draft="",
+            evidence_ids=[],
+            review_passed=False,
+            review_comment="requirement text blocked by pricing fuse",
+            gate_results={},
+            warnings=inbound_result.warnings,
+        )
+    requirement_text = inbound_result.text
+
     resolved_profile = resolve_profile_for_task(project_id=project_id, task_type="GENERATE")
     gen_chain = resolve_profile_chain_for_task(project_id=project_id, task_type="GENERATE")
     review_chain = resolve_profile_chain_for_task(project_id=project_id, task_type="REVIEW")

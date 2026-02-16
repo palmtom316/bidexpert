@@ -66,3 +66,18 @@ def sanitize_outbound_text(
         warnings.append(f"sensitive_strategy_applied:{sensitive_strategy}")
 
     return SanitizeResult(text=sanitized2, pricing_blocked=False, warnings=warnings)
+
+
+def sanitize_inbound_text(text: str) -> SanitizeResult:
+    warnings: list[str] = []
+
+    blocked, reasons = detect_pricing_content(text)
+    if blocked:
+        warnings.extend([f"pricing_blocked:{reason}" for reason in reasons])
+        return SanitizeResult(text="BLOCKED_PRICING_CONTENT", pricing_blocked=True, warnings=warnings)
+
+    sanitized = _mask_pii(text)
+    if sanitized != text:
+        warnings.append("pii_masked_inbound")
+
+    return SanitizeResult(text=sanitized, pricing_blocked=False, warnings=warnings)

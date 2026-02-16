@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 import hashlib
 import json
 import re
@@ -16,6 +17,7 @@ from app.core.config import settings
 from app.db.session import SessionLocal
 from app.models.tables import DocKind, Document, EvidenceChunk, ExpertDoc, Project, SensitivityLevel
 from app.schemas.contracts import (
+    DocBlockItem,
     ExpertLibraryChunkItem,
     ExpertLibraryDocItem,
     ExpertLibraryIngestResponse,
@@ -87,10 +89,10 @@ def _ensure_project_exists(project_uuid: uuid.UUID | None) -> None:
 
 def _safe_filename(name: str) -> str:
     cleaned = re.sub(r"[^a-zA-Z0-9._-]+", "_", name).strip("_")
-    return cleaned or "upload.pdf"
+    return cleaned or "upload_file"
 
 
-def _save_uploaded_pdf(filename: str, content: bytes, raw_bid_dir: Path) -> Path:
+def _save_uploaded_file(filename: str, content: bytes, raw_bid_dir: Path) -> Path:
     target = raw_bid_dir / _safe_filename(filename)
     target.write_bytes(content)
     return target
@@ -258,6 +260,158 @@ def _fallback_chunks_from_blocks(
     return chunks
 
 
+def _decode_text_content(content: bytes) -> str:
+    for encoding in ("utf-8-sig", "utf-8", "gb18030"):
+        try:
+            return content.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+    return content.decode("utf-8", errors="ignore")
+
+
+def _looks_like_markdown_table(lines: list[str]) -> bool:
+    if len(lines) < 2:
+        return False
+    if "|" not in lines[0] or "|" not in lines[1]:
+        return False
+    return bool(re.match(r"^\s*\|?[\s:\-|]+\|?\s*$", lines[1]))
+
+
+def _build_text_blocks(*, text: str, default_anchor: str, markdown_mode: bool = False) -> list[DocBlockItem]:
+    blocks: list[DocBlockItem] = []
+    current_anchor = (default_anchor or "未命名章节").strip()[:48] or "未命名章节"
+    cursor = 0
+
+    for paragraph in [item.strip() for item in re.split(r"\n{2,}", text) if item.strip()]:
+        lines = [line.strip() for line in paragraph.splitlines() if line.strip()]
+        if not lines:
+            continue
+        first_line = lines[0]
+        heading_match = re.match(r"^\s{0,3}#{1,6}\s*(.+)$", first_line)
+        if heading_match:
+            current_anchor = heading_match.group(1).strip()[:48] or current_anchor
+        elif re.match(r"^\s*(第[一二三四五六七八九十0-9]+[章节条款]|\d+(?:\.\d+)+)", first_line):
+            current_anchor = first_line[:48]
+
+        block_type = "TABLE" if markdown_mode and _looks_like_markdown_table(lines) else "PARA"
+        start = cursor
+        end = cursor + len(paragraph)
+        cursor = end + 1
+        blocks.append(
+            DocBlockItem(
+                page_no=1,
+                block_type=block_type,
+                section_anchor=current_anchor,
+                content_text=paragraph,
+                char_start=start,
+                char_end=end,
+            )
+        )
+    return blocks
+
+
+def _extract_docx_blocks(filename: str, content: bytes) -> list[DocBlockItem]:
+    from docx import Document as WordDocument
+
+    try:
+        doc = WordDocument(io.BytesIO(content))
+    except Exception as exc:  # noqa: BLE001
+        raise ValueError("invalid .docx content") from exc
+
+    blocks: list[DocBlockItem] = []
+    current_anchor = (Path(filename).stem or "未命名章节").strip()[:48] or "未命名章节"
+    cursor = 0
+
+    for paragraph in doc.paragraphs:
+        text = (paragraph.text or "").strip()
+        if not text:
+            continue
+        style_name = str(getattr(paragraph.style, "name", "") or "").lower()
+        if "heading" in style_name:
+            current_anchor = text[:48] or current_anchor
+            continue
+        start = cursor
+        end = cursor + len(text)
+        cursor = end + 1
+        blocks.append(
+            DocBlockItem(
+                page_no=1,
+                block_type="PARA",
+                section_anchor=current_anchor,
+                content_text=text,
+                char_start=start,
+                char_end=end,
+            )
+        )
+
+    for table in doc.tables:
+        rows: list[list[str]] = []
+        for row in table.rows:
+            cells = [re.sub(r"\s+", " ", cell.text or "").strip() for cell in row.cells]
+            if any(cells):
+                rows.append(cells)
+        if not rows:
+            continue
+        table_text = "\n".join(" | ".join(cell or "-" for cell in row) for row in rows)
+        start = cursor
+        end = cursor + len(table_text)
+        cursor = end + 1
+        blocks.append(
+            DocBlockItem(
+                page_no=1,
+                block_type="TABLE",
+                section_anchor=current_anchor,
+                content_text=table_text,
+                char_start=start,
+                char_end=end,
+            )
+        )
+
+    return blocks
+
+
+def _extract_upload_blocks(
+    filename: str,
+    content: bytes,
+) -> tuple[list[DocBlockItem], int, str, str, str]:
+    ext = Path(filename).suffix.lower()
+    if ext == ".pdf":
+        pages = extract_pages(content, enable_ocr_fallback=settings.enable_ocr_fallback)
+        return (
+            build_doc_blocks(pages),
+            len(pages),
+            "pdf",
+            "application/pdf",
+            "pdf_ingest.v1",
+        )
+    if ext in {".md", ".markdown"}:
+        text = _decode_text_content(content)
+        blocks = _build_text_blocks(text=text, default_anchor=Path(filename).stem, markdown_mode=True)
+        if not blocks:
+            raise ValueError("empty markdown content")
+        return (
+            blocks,
+            1,
+            "markdown",
+            "text/markdown",
+            "markdown_ingest.v1",
+        )
+    if ext == ".docx":
+        blocks = _extract_docx_blocks(filename, content)
+        if not blocks:
+            raise ValueError("empty word document content")
+        return (
+            blocks,
+            1,
+            "docx",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "docx_ingest.v1",
+        )
+    if ext == ".doc":
+        raise ValueError("暂不支持 .doc，请另存为 .docx 后上传")
+    raise ValueError("unsupported file format, allowed: .pdf/.md/.markdown/.docx")
+
+
 def ingest_historical_pdf(
     *,
     filename: str,
@@ -276,8 +430,7 @@ def ingest_historical_pdf(
     sync_enterprise_config_assets(layout)
     thresholds = _load_thresholds(layout)
 
-    pages = extract_pages(content, enable_ocr_fallback=settings.enable_ocr_fallback)
-    blocks = build_doc_blocks(pages)
+    blocks, page_count, source_format, content_type, parser_version = _extract_upload_blocks(filename, content)
     full_text = "\n".join((block.content_text or "") for block in blocks if block.content_text)
 
     pricing_blocked, pricing_reasons = detect_pricing_content(full_text)
@@ -304,16 +457,16 @@ def ingest_historical_pdf(
     try:
         with SessionLocal() as db:
             doc_workspace = prepare_doc_workspace(layout, title or Path(filename).stem)
-            saved_path = _save_uploaded_pdf(filename, content, doc_workspace.raw_bid_dir)
+            saved_path = _save_uploaded_file(filename, content, doc_workspace.raw_bid_dir)
 
             source_doc = Document(
                 project_id=parsed_project.project_uuid,
                 kind=DocKind.EXPERT,
                 filename=filename,
-                content_type="application/pdf",
+                content_type=content_type,
                 object_uri=str(saved_path),
                 sha256=hashlib.sha256(content).hexdigest(),
-                page_count=len(pages),
+                page_count=page_count,
                 language="zh-CN",
                 sensitivity=SensitivityLevel.PUBLIC_OK,
                 created_by=created_by,
@@ -327,9 +480,9 @@ def ingest_historical_pdf(
                 doc_id=doc_id,
                 title=title,
                 source_file=filename,
-                source_format="pdf",
+                source_format=source_format,
                 blocks=blocks,
-                parser_version="pdf_ingest.v1",
+                parser_version=parser_version,
                 doc_type=_structure_doc_type(doc_type),
             )
             table_summaries = summarize_tables_in_structure(structure)
@@ -458,7 +611,7 @@ def ingest_historical_pdf(
         expert_doc_id=str(expert_doc_id),
         source_document_id=str(source_document_id) if source_document_id else None,
         filename=filename,
-        page_count=len(pages),
+        page_count=page_count,
         chunk_count=len(chunks),
         qdrant_upserted=upserted,
         warnings=warnings,

@@ -8,8 +8,9 @@ from uuid import uuid4
 
 from celery import chain
 from celery.exceptions import CeleryError
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
+from fastapi.security import APIKeyHeader
 
 from app.core.config import settings
 from app.schemas.contracts import (
@@ -22,6 +23,8 @@ from app.schemas.contracts import (
     DraftGenerationRequest,
     DraftGenerationResponse,
     EnqueueIngestResponse,
+    ExpertLibraryBatchIngestItem,
+    ExpertLibraryBatchIngestResponse,
     ExpertLibraryChunkListResponse,
     ExpertLibraryDocListResponse,
     ExpertLibraryIngestResponse,
@@ -64,6 +67,10 @@ from app.schemas.contracts import (
     TenderAnalysisRunListResponse,
     WorkflowSectionRequest,
     WorkflowSectionResponse,
+    ReviewReportResponse,
+    ReviewSectionRequest,
+    ScoringReportResponse,
+    ScoringRequest,
 )
 from app.services.byok import (
     create_provider_profile,
@@ -102,6 +109,8 @@ from app.services.workflow_runs import (
     get_section_status,
     mark_section_pending,
 )
+from app.services.review_engine import run_compliance_review
+from app.services.scoring_engine import run_scoring_service
 from app.services.word_renderer import render_word
 from app.worker.tasks import (
     generate_draft_task,
@@ -115,7 +124,18 @@ from app.worker.tasks import (
     upsert_evidence_task,
 )
 
-router = APIRouter()
+_api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+
+async def _verify_api_key(key: str | None = Depends(_api_key_header)) -> None:
+    expected = settings.api_key
+    if not expected:
+        return
+    if not key or key != expected:
+        raise HTTPException(status_code=401, detail="Invalid or missing API key")
+
+
+router = APIRouter(dependencies=[Depends(_verify_api_key)])
 
 
 def _service_unavailable() -> HTTPException:
@@ -482,7 +502,7 @@ async def task_status_stream(task_id: str) -> StreamingResponse:
         terminal = {"SUCCESS", "FAILURE", "REVOKED"}
         while True:
             result = get_task_result(task_id)
-            yield f"data: {json.dumps(result, ensure_ascii=False)}\\n\\n"
+            yield f"data: {json.dumps(result, ensure_ascii=False)}\n\n"
             if result["status"] in terminal:
                 break
             await asyncio.sleep(1)
@@ -627,6 +647,41 @@ def confirm_section(payload: SectionConfirmRequest) -> SectionConfirmResponse:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
+@router.post("/v1/workflow/section/review", response_model=ReviewReportResponse)
+def review_section_api(payload: ReviewSectionRequest) -> ReviewReportResponse:
+    try:
+        report = run_compliance_review(payload.project_id, payload.section_key)
+        return ReviewReportResponse(
+            id=str(report.id),
+            project_id=str(report.project_id),
+            section_key=str(report.section_key),
+            status=str(report.status),
+            report_json=report.report_json,
+            created_at=report.created_at.isoformat(),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise _service_unavailable() from exc
+
+
+@router.post("/v1/workflow/scoring/calculate", response_model=ScoringReportResponse)
+def calculate_score_api(payload: ScoringRequest) -> ScoringReportResponse:
+    try:
+        report = run_scoring_service(payload.project_id)
+        return ScoringReportResponse(
+            id=str(report.id),
+            project_id=str(report.project_id),
+            score_total=float(report.score_total),
+            details_json=report.details_json,
+            created_at=report.created_at.isoformat(),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise _service_unavailable() from exc
+
+
 @router.post("/v1/evidence/upsert", response_model=EnqueueIngestResponse)
 def evidence_upsert(payload: EvidenceUpsertRequest) -> EnqueueIngestResponse:
     try:
@@ -664,12 +719,9 @@ async def expert_library_ingest_upload(
     doc_type: str = Form(default="EXPERT_HISTORY"),
     model_id: str | None = Form(default=None),
 ) -> ExpertLibraryIngestResponse:
-    filename = file.filename or ""
-    if not filename.lower().endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="only .pdf is supported")
     try:
         return ingest_historical_pdf(
-            filename=filename,
+            filename=file.filename or "",
             content=await file.read(),
             project_id=project_id,
             industry_tag=industry_tag,
@@ -682,6 +734,82 @@ async def expert_library_ingest_upload(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except (RuntimeError, OSError) as exc:
         raise _service_unavailable() from exc
+
+
+@router.post("/v1/expert-library/ingest-uploads", response_model=ExpertLibraryBatchIngestResponse)
+async def expert_library_ingest_uploads(
+    files: list[UploadFile] = File(...),
+    project_id: str | None = Form(default=None),
+    industry_tag: str | None = Form(default=None),
+    title: str | None = Form(default=None),
+    created_by: str = Form(default="system"),
+    doc_type: str = Form(default="EXPERT_HISTORY"),
+    model_id: str | None = Form(default=None),
+) -> ExpertLibraryBatchIngestResponse:
+    if not files:
+        raise HTTPException(status_code=400, detail="no files uploaded")
+
+    items: list[ExpertLibraryBatchIngestItem] = []
+    success_count = 0
+    failure_count = 0
+    for file in files:
+        filename = file.filename or "unknown"
+        try:
+            result = ingest_historical_pdf(
+                filename=filename,
+                content=await file.read(),
+                project_id=project_id,
+                industry_tag=industry_tag,
+                title=title,
+                created_by=created_by,
+                doc_type=doc_type,
+                model_id=(model_id or "").strip() or None,
+            )
+            success_count += 1
+            items.append(
+                ExpertLibraryBatchIngestItem(
+                    filename=result.filename,
+                    status=result.status,
+                    expert_doc_id=result.expert_doc_id,
+                    source_document_id=result.source_document_id,
+                    page_count=result.page_count,
+                    chunk_count=result.chunk_count,
+                    qdrant_upserted=result.qdrant_upserted,
+                    warnings=result.warnings,
+                )
+            )
+        except ValueError as exc:
+            failure_count += 1
+            items.append(
+                ExpertLibraryBatchIngestItem(
+                    filename=filename,
+                    status="FAILED",
+                    error=str(exc),
+                )
+            )
+        except (RuntimeError, OSError):
+            failure_count += 1
+            items.append(
+                ExpertLibraryBatchIngestItem(
+                    filename=filename,
+                    status="FAILED",
+                    error="service temporarily unavailable",
+                )
+            )
+
+    status = "SUCCEEDED"
+    if success_count and failure_count:
+        status = "PARTIAL_SUCCESS"
+    elif failure_count and not success_count:
+        status = "FAILED"
+
+    return ExpertLibraryBatchIngestResponse(
+        status=status,
+        total_files=len(files),
+        success_count=success_count,
+        failure_count=failure_count,
+        items=items,
+    )
 
 
 @router.post("/v1/expert-library/ingest-structured", response_model=ExpertLibraryStructuredIngestResponse)
