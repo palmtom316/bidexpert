@@ -9,6 +9,27 @@ from app.schemas.contracts import DocBlockItem, IngestUploadResponse
 from app.services.pricing_guard import detect_pricing_content
 
 SECTION_PATTERN = re.compile(r"^\s*(第[一二三四五六七八九十0-9]+[章节条款]|\d+(?:\.\d+)+)")
+TABLE_ROW_PATTERN = re.compile(r"\|.+\|")
+
+
+def _looks_like_table(paragraph: str) -> bool:
+    lines = [line.strip() for line in paragraph.splitlines() if line.strip()]
+    if not lines:
+        return False
+
+    if any(TABLE_ROW_PATTERN.search(line) for line in lines):
+        return True
+
+    separators = sum(1 for line in lines if "\t" in line)
+    if separators >= 2:
+        return True
+
+    wide_columns = 0
+    for line in lines:
+        columns = [part for part in re.split(r"\s{2,}", line) if part]
+        if len(columns) >= 3:
+            wide_columns += 1
+    return wide_columns >= 2
 
 
 @dataclass
@@ -77,10 +98,11 @@ def build_doc_blocks(pages: list[PageExtract]) -> list[DocBlockItem]:
             start = cursor
             end = cursor + len(para)
             cursor = end + 1
+            block_type = "TABLE" if _looks_like_table(para) else "PARA"
             blocks.append(
                 DocBlockItem(
                     page_no=page.page_no,
-                    block_type="PARA",
+                    block_type=block_type,
                     section_anchor=current_anchor,
                     content_text=para,
                     char_start=start,

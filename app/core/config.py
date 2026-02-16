@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     llm_http_timeout_seconds: int = 120
 
     upload_dir: str = "data/uploads"
+    expert_library_root: str = "data/tender-expert-lib"
     render_output_dir: str = "data/exports"
     render_template_dir: str = "templates"
     enable_ocr_fallback: bool = True
@@ -41,6 +42,9 @@ class Settings(BaseSettings):
     context_compression_max_items: int = 6
     context_compression_max_chars: int = 4000
     context_compression_snippet_chars: int = 800
+    expert_chunk_min_tokens: int = 800
+    expert_chunk_max_tokens: int = 1200
+    expert_chunk_overlap_tokens: int = 120
 
     model_config = SettingsConfigDict(env_prefix="BIDEXPERT_", extra="ignore")
 

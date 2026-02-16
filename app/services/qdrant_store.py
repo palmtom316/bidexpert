@@ -66,6 +66,7 @@ class QdrantStore:
         embed_profile = resolve_profile_for_task(project_id=project_id, task_type="EMBED")
         points: list[PointStruct] = []
         for chunk in chunks:
+            source_locator = chunk.source_locator or {}
             payload = {
                 "expert_doc_id": expert_doc_id,
                 "chunk_id": chunk.chunk_id,
@@ -76,10 +77,14 @@ class QdrantStore:
                 "valid_to": chunk.valid_to,
                 "forbidden_tags": chunk.forbidden_tags,
                 "quality_score": chunk.quality_score,
-                "source_locator": chunk.source_locator,
+                "source_locator": source_locator,
                 "text": chunk.text,
                 "embed_provider": embed_profile.provider,
                 "embed_model": embed_profile.model,
+                "doc_id": source_locator.get("doc_id"),
+                "section_id": source_locator.get("section_id"),
+                "discipline": source_locator.get("discipline"),
+                "source_page": source_locator.get("source_page"),
             }
             points.append(
                 PointStruct(

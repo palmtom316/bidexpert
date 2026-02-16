@@ -1,18 +1,19 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 import uuid
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
+from typing import Any
 
 from sqlalchemy import func, select
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.config import settings
 from app.db.session import SessionLocal
-from app.extract.historical_extractor import extract_evidence_chunks_from_text
 from app.models.tables import DocKind, Document, EvidenceChunk, ExpertDoc, Project, SensitivityLevel
 from app.schemas.contracts import (
     ExpertLibraryChunkItem,
@@ -21,6 +22,23 @@ from app.schemas.contracts import (
     ExpertLibraryStructuredIngestItem,
     ExpertLibraryStructuredIngestResponse,
     EvidenceUpsertItem,
+)
+from app.services.expert_enterprise_pipeline import (
+    build_exceptions_queue,
+    build_structure_v1_from_blocks,
+    chunks_for_enterprise_rag,
+    enrich_sections_v1,
+    merge_structure_meta_risk,
+    render_enterprise_markdown,
+    risk_review_sections,
+    serialize_chunks_jsonl,
+    summarize_tables_in_structure,
+)
+from app.services.expert_workspace import (
+    ExpertDocWorkspace,
+    ensure_expert_library_layout,
+    prepare_doc_workspace,
+    sync_enterprise_config_assets,
 )
 from app.services.pdf_ingest import build_doc_blocks, extract_pages
 from app.services.pricing_guard import detect_pricing_content
@@ -72,12 +90,132 @@ def _safe_filename(name: str) -> str:
     return cleaned or "upload.pdf"
 
 
-def _save_uploaded_pdf(filename: str, content: bytes) -> Path:
-    base_dir = Path(settings.upload_dir) / "expert_library"
-    base_dir.mkdir(parents=True, exist_ok=True)
-    target = base_dir / f"{uuid.uuid4()}_{_safe_filename(filename)}"
+def _save_uploaded_pdf(filename: str, content: bytes, raw_bid_dir: Path) -> Path:
+    target = raw_bid_dir / _safe_filename(filename)
     target.write_bytes(content)
     return target
+
+
+def _save_json(path: Path, payload: dict | list) -> None:
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _save_jsonl(path: Path, rows: list[dict]) -> None:
+    content = "\n".join(json.dumps(row, ensure_ascii=False) for row in rows)
+    path.write_text(f"{content}\n" if content else "", encoding="utf-8")
+
+
+def _append_jsonl(path: Path, rows: list[dict]) -> None:
+    if not rows:
+        return
+    with path.open("a", encoding="utf-8") as f:
+        for row in rows:
+            f.write(json.dumps(row, ensure_ascii=False))
+            f.write("\n")
+
+
+def _structure_doc_type(doc_type: str) -> str:
+    normalized = (doc_type or "").strip().upper()
+    if "SPEC" in normalized:
+        return "spec"
+    if "MANUAL" in normalized:
+        return "manual"
+    if normalized:
+        return "bid"
+    return "other"
+
+
+def _write_extracted_blocks(structure: dict, blocks_dir: Path) -> None:
+    for section in structure.get("sections", []):
+        for block in section.get("blocks", []):
+            block_id = str(block.get("block_id") or "block")
+            block_type = str(block.get("type", "")).lower()
+            if block_type == "table":
+                payload = block.get("table") or {}
+                (blocks_dir / f"{block_id}.json").write_text(
+                    json.dumps(payload, ensure_ascii=False, indent=2),
+                    encoding="utf-8",
+                )
+            elif block_type == "text":
+                (blocks_dir / f"{block_id}.txt").write_text(str(block.get("text", "")), encoding="utf-8")
+
+
+def _write_review_yaml(path: Path, doc_id: str, exceptions: list[dict]) -> None:
+    lines = [
+        f"doc_id: {doc_id}",
+        f"issue_count: {len(exceptions)}",
+        "issues:",
+    ]
+    for item in exceptions:
+        lines.append(f"  - issue: {item.get('issue')}")
+        lines.append(f"    section_id: {item.get('section_id')}")
+        lines.append(f"    action: {item.get('action')}")
+        lines.append(f"    detail: {item.get('detail')}")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _write_pipeline_run_log(
+    *,
+    layout,
+    doc_id: str,
+    filename: str,
+    chunk_count: int,
+    exception_count: int,
+    warnings: list[str],
+    pricing_blocked: bool,
+) -> None:
+    run_dir = layout.stage_dirs["99_logs"] / "pipeline_runs"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+    payload = {
+        "run_id": f"{stamp}_run01",
+        "doc_id": doc_id,
+        "filename": filename,
+        "status": "SUCCEEDED",
+        "chunk_count": chunk_count,
+        "exception_count": exception_count,
+        "pricing_blocked": pricing_blocked,
+        "warnings": warnings,
+        "stages": [
+            "classify_files",
+            "extract_structure",
+            "summarize_tables",
+            "enrich_sections",
+            "risk_review",
+            "merge_and_validate",
+            "render_markdown",
+            "chunk_for_rag",
+        ],
+    }
+    _save_json(run_dir / f"{stamp}_run01.json", payload)
+
+
+def _load_thresholds(layout) -> dict[str, float]:
+    defaults: dict[str, float] = {
+        "low_confidence": 0.60,
+        "strong_review_confidence": 0.75,
+        "max_section_pages": 20.0,
+        "max_chunk_tokens": float(settings.expert_chunk_max_tokens),
+        "chunk_overlap_tokens": float(settings.expert_chunk_overlap_tokens),
+    }
+    config_path = layout.root / "00_config" / "pipeline" / "thresholds.v1.yaml"
+    if not config_path.exists():
+        return defaults
+
+    for raw_line in config_path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or ":" not in line:
+            continue
+        key, value = line.split(":", 1)
+        key = key.strip()
+        value = value.strip()
+        if key not in defaults:
+            continue
+        try:
+            defaults[key] = float(value)
+        except ValueError:
+            continue
+    return defaults
 
 
 def _fallback_chunks_from_blocks(
@@ -86,23 +224,35 @@ def _fallback_chunks_from_blocks(
     industry_tag: str | None,
     doc_type: str,
     pricing_related: bool,
+    doc_id: str,
 ) -> list[EvidenceUpsertItem]:
     chunks: list[EvidenceUpsertItem] = []
     for idx, block in enumerate(blocks, start=1):
         text = (block.content_text or "").strip()
         if len(text) < 24:
             continue
+        page_no = int(getattr(block, "page_no", 1) or 1)
+        section_id = f"fb-sec-{idx:04d}"
+        section_type = "TABLE" if str(getattr(block, "block_type", "")).upper() == "TABLE" else "PARA"
         digest = hashlib.sha1(text.encode("utf-8")).hexdigest()[:12]
         chunks.append(
             EvidenceUpsertItem(
                 chunk_id=f"fb-{idx}-{digest}",
                 text=text,
                 doc_type=doc_type,
-                section_type="PARA",
+                section_type=section_type,
                 industry_tag=industry_tag,
                 sensitivity_level="PUBLIC_OK",
                 forbidden_tags=["PRICING_RELATED"] if pricing_related else [],
-                source_locator={"page_no": block.page_no, "section_anchor": block.section_anchor},
+                source_locator={
+                    "doc_id": doc_id,
+                    "section_id": section_id,
+                    "section_type": section_type,
+                    "discipline": industry_tag or "GENERAL",
+                    "source_page": page_no,
+                    "section_anchor": block.section_anchor,
+                    "block_type": "table" if section_type == "TABLE" else "text",
+                },
             )
         )
     return chunks
@@ -122,56 +272,40 @@ def ingest_historical_pdf(
     parsed_project = _parse_project_id(project_id)
     _ensure_project_exists(parsed_project.project_uuid)
 
-    saved_path = _save_uploaded_pdf(filename, content)
+    layout = ensure_expert_library_layout()
+    sync_enterprise_config_assets(layout)
+    thresholds = _load_thresholds(layout)
+
     pages = extract_pages(content, enable_ocr_fallback=settings.enable_ocr_fallback)
     blocks = build_doc_blocks(pages)
     full_text = "\n".join((block.content_text or "") for block in blocks if block.content_text)
 
     pricing_blocked, pricing_reasons = detect_pricing_content(full_text)
     warnings: list[str] = []
+    if (model_id or "").strip():
+        warnings.append("model_id_ignored_in_section_chunking_pipeline")
     if pricing_blocked:
         warnings.extend([f"pricing_detected:{reason}" for reason in pricing_reasons])
+        warnings.append("section_enhancement_chunking_with_pricing_redaction_flags")
 
-    chunks: list[EvidenceUpsertItem]
-    if not pricing_blocked:
-        try:
-            chunks = extract_evidence_chunks_from_text(
-                text=full_text,
-                industry_tag=industry_tag,
-                doc_type=doc_type,
-                model_id=model_id,
-                project_id=parsed_project.project_raw,
-            )
-        except Exception:  # noqa: BLE001
-            chunks = _fallback_chunks_from_blocks(
-                blocks=blocks,
-                industry_tag=industry_tag,
-                doc_type=doc_type,
-                pricing_related=False,
-            )
-            warnings.append("langextract_failed_fallback_to_paragraph_chunks")
-    else:
-        chunks = _fallback_chunks_from_blocks(
-            blocks=blocks,
-            industry_tag=industry_tag,
-            doc_type=doc_type,
-            pricing_related=True,
-        )
-        warnings.append("langextract_skipped_due_to_pricing_content")
-
-    if not chunks:
-        chunks = _fallback_chunks_from_blocks(
-            blocks=blocks,
-            industry_tag=industry_tag,
-            doc_type=doc_type,
-            pricing_related=pricing_blocked,
-        )
-        warnings.append("no_structured_chunks_fallback_to_paragraph_chunks")
+    doc_workspace: ExpertDocWorkspace | None = None
+    structure: dict[str, Any] | None = None
+    table_summaries: list[dict] = []
+    section_meta: list[dict] = []
+    risk_reviews: list[dict] = []
+    merged: dict[str, Any] | None = None
+    exception_queue: list[dict] = []
+    markdown: str | None = None
 
     source_document_id: uuid.UUID | None = None
     expert_doc_id: uuid.UUID
+    chunks: list[EvidenceUpsertItem] = []
+
     try:
         with SessionLocal() as db:
+            doc_workspace = prepare_doc_workspace(layout, title or Path(filename).stem)
+            saved_path = _save_uploaded_pdf(filename, content, doc_workspace.raw_bid_dir)
+
             source_doc = Document(
                 project_id=parsed_project.project_uuid,
                 kind=DocKind.EXPERT,
@@ -187,6 +321,57 @@ def ingest_historical_pdf(
             db.add(source_doc)
             db.flush()
             source_document_id = source_doc.id
+            doc_id = f"{doc_workspace.doc_key}-{str(source_document_id)[:8]}"
+
+            structure = build_structure_v1_from_blocks(
+                doc_id=doc_id,
+                title=title,
+                source_file=filename,
+                source_format="pdf",
+                blocks=blocks,
+                parser_version="pdf_ingest.v1",
+                doc_type=_structure_doc_type(doc_type),
+            )
+            table_summaries = summarize_tables_in_structure(structure)
+            section_meta = enrich_sections_v1(structure, table_summaries)
+            risk_reviews = risk_review_sections(
+                structure,
+                section_meta,
+                strong_review_confidence=float(thresholds["strong_review_confidence"]),
+            )
+            merged = merge_structure_meta_risk(structure, section_meta, risk_reviews)
+            exception_queue = build_exceptions_queue(
+                doc_id=doc_id,
+                merged=merged,
+                low_confidence=float(thresholds["low_confidence"]),
+                max_section_pages=int(thresholds["max_section_pages"]),
+            )
+            markdown = render_enterprise_markdown(merged)
+            chunks = chunks_for_enterprise_rag(
+                merged,
+                industry_tag=industry_tag,
+                doc_type=doc_type,
+                min_tokens=settings.expert_chunk_min_tokens,
+                max_tokens=int(thresholds["max_chunk_tokens"]),
+                overlap_tokens=int(thresholds["chunk_overlap_tokens"]),
+            )
+
+            if not chunks:
+                chunks = _fallback_chunks_from_blocks(
+                    blocks=blocks,
+                    industry_tag=industry_tag,
+                    doc_type=doc_type,
+                    pricing_related=pricing_blocked,
+                    doc_id=doc_id,
+                )
+                warnings.append("no_section_chunks_fallback_to_block_chunks")
+
+            if pricing_blocked:
+                for chunk in chunks:
+                    tags = list(chunk.forbidden_tags or [])
+                    if "PRICING_RELATED" not in tags:
+                        tags.append("PRICING_RELATED")
+                    chunk.forbidden_tags = tags
 
             expert_doc = ExpertDoc(
                 source_document_id=source_document_id,
@@ -204,13 +389,18 @@ def ingest_historical_pdf(
 
             for idx, chunk in enumerate(chunks, start=1):
                 source_locator = chunk.source_locator or {}
+                source_page = source_locator.get("source_page")
                 db.add(
                     EvidenceChunk(
                         expert_doc_id=expert_doc_id,
                         chunk_no=idx,
                         excerpt_text=chunk.text,
                         excerpt_hash=hashlib.sha1(chunk.text.encode("utf-8")).hexdigest(),
-                        location={"section_anchor": source_locator.get("section_anchor"), "page_no": source_locator.get("page_no")},
+                        location={
+                            "section_anchor": source_locator.get("section_title")
+                            or source_locator.get("section_anchor"),
+                            "page_no": source_page,
+                        },
                         source_locator=source_locator,
                         valid_to=date.fromisoformat(chunk.valid_to) if chunk.valid_to else None,
                         sensitivity_level=SensitivityLevel.PUBLIC_OK,
@@ -226,6 +416,42 @@ def ingest_historical_pdf(
 
     store = QdrantStore()
     upserted = store.upsert_chunks(str(expert_doc_id), chunks, project_id=parsed_project.project_raw)
+
+    if source_document_id and doc_workspace and structure and merged and markdown is not None:
+        _save_json(doc_workspace.extracted_dir / "structure.v1.json", structure)
+        _write_extracted_blocks(structure, doc_workspace.extracted_blocks_dir)
+        _save_jsonl(doc_workspace.enriched_dir / "table_summary.v1.jsonl", table_summaries)
+        _save_jsonl(doc_workspace.enriched_dir / "section_meta.v1.jsonl", section_meta)
+        _save_jsonl(doc_workspace.enriched_dir / "risk_review.v1.jsonl", risk_reviews)
+        _save_json(doc_workspace.enriched_dir / "merged.v1.json", merged)
+
+        (layout.stage_dirs["04_md"] / f"{doc_workspace.doc_key}.enhanced.md").write_text(markdown, encoding="utf-8")
+        _save_jsonl(doc_workspace.chunks_dir / "chunks.v1.jsonl", serialize_chunks_jsonl(chunks))
+
+        _save_json(
+            layout.stage_dirs["06_index"] / "qdrant" / f"{doc_workspace.doc_key}.json",
+            {
+                "expert_doc_id": str(expert_doc_id),
+                "source_document_id": str(source_document_id),
+                "qdrant_upserted": upserted,
+                "chunk_count": len(chunks),
+            },
+        )
+        _append_jsonl(layout.stage_dirs["07_review"] / "exceptions.queue.jsonl", exception_queue)
+        _write_review_yaml(
+            layout.stage_dirs["07_review"] / f"{doc_workspace.doc_key}.review.yaml",
+            doc_id=str(merged.get("doc_id", "")),
+            exceptions=exception_queue,
+        )
+        _write_pipeline_run_log(
+            layout=layout,
+            doc_id=str(merged.get("doc_id", "")),
+            filename=filename,
+            chunk_count=len(chunks),
+            exception_count=len(exception_queue),
+            warnings=warnings,
+            pricing_blocked=pricing_blocked,
+        )
 
     return ExpertLibraryIngestResponse(
         status="SUCCEEDED",
@@ -385,7 +611,15 @@ def _persist_structured_category(
             db.flush()
 
             for idx, chunk in enumerate(chunks, start=1):
-                source_locator = chunk.source_locator or {}
+                source_locator = dict(chunk.source_locator or {})
+                source_locator.setdefault("doc_id", str(source_doc.id))
+                source_locator.setdefault("section_id", f"{category_key.lower()}-{idx:03d}")
+                source_locator.setdefault("section_type", section_type)
+                source_locator.setdefault("discipline", industry_tag or "GENERAL")
+                source_locator.setdefault("source_page", 1)
+                source_locator.setdefault("block_type", "text")
+                source_locator.setdefault("section_title", title)
+                chunk.source_locator = source_locator
                 db.add(
                     EvidenceChunk(
                         expert_doc_id=expert_doc.id,
