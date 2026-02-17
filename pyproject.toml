@@ -23,6 +23,7 @@ dependencies = [
   "redis>=5.2.1",
   "httpx>=0.28.1",
   "qdrant-client>=1.12.1",
+  "prometheus-client>=0.22.1",
   "cryptography>=45.0.0",
   "pypdf>=5.1.0",
   "pymupdf>=1.25.1",

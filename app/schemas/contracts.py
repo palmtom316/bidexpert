@@ -349,6 +349,26 @@ class ProviderProfileTestResponse(BaseModel):
     detail: str
 
 
+class ProviderProfileQualifyCase(BaseModel):
+    case_id: str
+    name: str
+    weight: float
+    passed: bool
+    detail: str
+
+
+class ProviderProfileQualifyResponse(BaseModel):
+    profile_id: str
+    provider: str
+    model: str
+    ready_for_online: bool
+    threshold: float
+    quality_score: float
+    capability_score: float
+    model_quality: dict
+    cases: list[ProviderProfileQualifyCase]
+
+
 class ProjectModelPolicyUpsertRequest(BaseModel):
     extract_profile_id: str | None = None
     generate_profile_id: str | None = None
@@ -545,6 +565,13 @@ class ReviewSectionRequest(BaseModel):
     project_id: str
     section_key: str
     outline_id: str | None = None
+
+
+class ReviewFullRequest(BaseModel):
+    project_id: str
+    outline_id: str | None = None
+    enable_ensemble: bool = False
+    ensemble_size: int | None = None
 
 
 class ReviewReportResponse(BaseModel):

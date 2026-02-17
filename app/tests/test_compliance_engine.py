@@ -2,7 +2,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 import uuid
 from app.services.review_engine import ComplianceReviewer
-from app.models.tables import SectionContent, Requirement, ReviewReport
+from app.models.tables import SectionContent, Requirement
 
 class TestComplianceReviewer(unittest.TestCase):
     def setUp(self):

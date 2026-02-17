@@ -10,7 +10,7 @@ from celery import chain
 from celery.exceptions import CeleryError
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
-from fastapi.security import APIKeyHeader
+from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBearer
 
 from app.core.config import settings
 from app.schemas.contracts import (
@@ -53,6 +53,7 @@ from app.schemas.contracts import (
     ProviderProfileDeleteResponse,
     ProviderProfileItem,
     ProviderProfileListResponse,
+    ProviderProfileQualifyResponse,
     ProviderProfileTestResponse,
     SanitizeRequest,
     SanitizeResponse,
@@ -69,6 +70,7 @@ from app.schemas.contracts import (
     TenderAnalysisRunListResponse,
     WorkflowSectionRequest,
     WorkflowSectionResponse,
+    ReviewFullRequest,
     ReviewReportResponse,
     ReviewSectionRequest,
     ScoringReportResponse,
@@ -79,6 +81,7 @@ from app.services.byok import (
     delete_provider_profile,
     get_project_model_policy,
     list_provider_profiles,
+    qualify_provider_profile,
     test_provider_profile,
     upsert_project_model_policy,
 )
@@ -111,9 +114,10 @@ from app.services.workflow_runs import (
     get_section_status,
     mark_section_pending,
 )
-from app.services.review_engine import run_compliance_review
+from app.services.review_engine import run_compliance_review, run_full_compliance_review
 from app.services.scoring_engine import run_scoring_service
 from app.services.word_renderer import render_word, render_word_structured
+from app.security import AuthContext, decode_hs256_jwt, get_auth_context, set_auth_context
 from app.worker.tasks import (
     generate_draft_task,
     get_task_result,
@@ -127,21 +131,84 @@ from app.worker.tasks import (
 )
 
 _api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+_bearer_header = HTTPBearer(auto_error=False)
 
 
-async def _verify_api_key(key: str | None = Depends(_api_key_header)) -> None:
-    expected = settings.api_key
-    if not expected:
+def _auth_mode() -> str:
+    normalized = (settings.auth_mode or "api_key").strip().lower()
+    return normalized if normalized in {"api_key", "jwt", "hybrid"} else "api_key"
+
+
+def _resolved_created_by(provided: str | None) -> str:
+    auth = get_auth_context()
+    if auth.method == "jwt":
+        return auth.user_id
+    if provided and provided.strip():
+        return provided.strip()
+    if auth.method == "api_key" and auth.user_id:
+        return auth.user_id
+    return "system"
+
+
+async def _require_auth(
+    key: str | None = Depends(_api_key_header),
+    bearer: HTTPAuthorizationCredentials | None = Depends(_bearer_header),
+) -> None:
+    mode = _auth_mode()
+    set_auth_context(AuthContext(user_id="system", method="anonymous"))
+
+    if mode in {"jwt", "hybrid"}:
+        jwt_secret = (settings.jwt_secret or "").strip()
+        if bearer:
+            if bearer.scheme.lower() != "bearer":
+                raise HTTPException(status_code=401, detail="invalid authorization scheme")
+            if not jwt_secret:
+                raise HTTPException(status_code=500, detail="JWT auth is enabled but JWT secret is not configured")
+            try:
+                claims = decode_hs256_jwt(
+                    bearer.credentials,
+                    secret=jwt_secret,
+                    expected_issuer=(settings.jwt_issuer or "").strip() or None,
+                    expected_audience=(settings.jwt_audience or "").strip() or None,
+                )
+            except ValueError as exc:
+                raise HTTPException(status_code=401, detail=f"invalid bearer token: {exc}") from exc
+            subject = str(claims.get("sub", "")).strip()
+            if not subject:
+                raise HTTPException(status_code=401, detail="jwt subject is required")
+            set_auth_context(AuthContext(user_id=subject, method="jwt"))
+            return
+        if mode == "jwt":
+            raise HTTPException(status_code=401, detail="missing bearer token")
+
+    if mode in {"api_key", "hybrid"}:
+        expected = settings.api_key
+        if expected:
+            if not key or key != expected:
+                raise HTTPException(status_code=401, detail="Invalid or missing API key")
+            set_auth_context(AuthContext(user_id="api-key-user", method="api_key"))
+            return
+        set_auth_context(AuthContext(user_id="system", method="anonymous"))
         return
-    if not key or key != expected:
-        raise HTTPException(status_code=401, detail="Invalid or missing API key")
+
+    raise HTTPException(status_code=401, detail="authentication required")
 
 
-router = APIRouter(dependencies=[Depends(_verify_api_key)])
+router = APIRouter(dependencies=[Depends(_require_auth)])
 
 
 def _service_unavailable() -> HTTPException:
     return HTTPException(status_code=503, detail="service temporarily unavailable")
+
+
+async def _read_upload_with_limit(file: UploadFile) -> bytes:
+    data = await file.read()
+    if len(data) > int(settings.max_upload_bytes):
+        raise HTTPException(
+            status_code=413,
+            detail=f"file exceeds max_upload_bytes={settings.max_upload_bytes}",
+        )
+    return data
 
 
 def _profile_to_item(profile) -> ProviderProfileItem:
@@ -191,6 +258,7 @@ def create_provider_profile_api(payload: ProviderProfileCreateRequest) -> Provid
             api_key=payload.api_key,
             key_storage=payload.key_storage,
             allowed_tasks=payload.allowed_tasks,
+            created_by=_resolved_created_by(None),
         )
         return ProviderProfileCreateResponse(
             profile_id=str(profile.id),
@@ -219,6 +287,31 @@ def test_provider_profile_api(profile_id: str) -> ProviderProfileTestResponse:
             provider=profile.provider,
             model=profile.default_model,
             detail=detail,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/api/provider-profiles/{profile_id}/qualify", response_model=ProviderProfileQualifyResponse)
+def qualify_provider_profile_api(
+    profile_id: str,
+    score_threshold: float = 80.0,
+) -> ProviderProfileQualifyResponse:
+    try:
+        profile, result = qualify_provider_profile(
+            profile_id,
+            score_threshold=max(0.0, min(100.0, float(score_threshold))),
+        )
+        return ProviderProfileQualifyResponse(
+            profile_id=str(profile.id),
+            provider=profile.provider,
+            model=profile.default_model,
+            ready_for_online=bool(result.get("ready_for_online", False)),
+            threshold=float(result.get("threshold", score_threshold)),
+            quality_score=float(result.get("quality_score", 0.0)),
+            capability_score=float(result.get("capability_score", 0.0)),
+            model_quality=result.get("model_quality", {}),
+            cases=result.get("cases", []),
         )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -320,7 +413,7 @@ def create_completed_bid_api(payload: CompletedBidCreateRequest) -> CompletedBid
             file_name=payload.file_name,
             file_info=payload.file_info,
             completed_date=payload.completed_date,
-            created_by=payload.created_by,
+            created_by=_resolved_created_by(payload.created_by),
         )
         return _completed_bid_to_item(record)
     except ValueError as exc:
@@ -373,11 +466,12 @@ async def analyze_tender_upload(
     if not filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="only .pdf is supported")
     try:
+        content = await _read_upload_with_limit(file)
         run, summary = analyze_and_persist_tender_pdf(
             filename=filename,
-            content=await file.read(),
+            content=content,
             project_id=project_id,
-            created_by=created_by,
+            created_by=_resolved_created_by(created_by),
         )
         return TenderAnalyzeUploadResponse(
             run_id=run.run_id,
@@ -446,7 +540,7 @@ async def ingest_tender_upload(file: UploadFile = File(...)) -> IngestUploadResp
 
     result = ingest_pdf_bytes(
         filename=filename,
-        pdf_bytes=await file.read(),
+        pdf_bytes=await _read_upload_with_limit(file),
         enable_ocr_fallback=settings.enable_ocr_fallback,
     )
     return result
@@ -461,7 +555,7 @@ async def enqueue_ingest(file: UploadFile = File(...)) -> EnqueueIngestResponse:
     upload_dir = Path(settings.upload_dir)
     upload_dir.mkdir(parents=True, exist_ok=True)
     target = upload_dir / f"{uuid4()}_{filename}"
-    target.write_bytes(await file.read())
+    target.write_bytes(await _read_upload_with_limit(file))
 
     try:
         task = ingest_document_task.delay(str(target))
@@ -667,6 +761,31 @@ def review_section_api(payload: ReviewSectionRequest) -> ReviewReportResponse:
         raise _service_unavailable() from exc
 
 
+@router.post("/v1/workflow/review/full", response_model=ReviewReportResponse)
+def review_full_api(payload: ReviewFullRequest) -> ReviewReportResponse:
+    try:
+        enable_ensemble = bool(payload.enable_ensemble or settings.review_ensemble_enabled)
+        ensemble_size = payload.ensemble_size or settings.review_ensemble_size
+        report = run_full_compliance_review(
+            payload.project_id,
+            payload.outline_id,
+            enable_ensemble=enable_ensemble,
+            ensemble_size=ensemble_size,
+        )
+        return ReviewReportResponse(
+            id=str(report.id),
+            project_id=str(report.project_id),
+            section_key=str(report.section_key),
+            status=str(report.status),
+            report_json=report.report_json,
+            created_at=report.created_at.isoformat(),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise _service_unavailable() from exc
+
+
 @router.post("/v1/workflow/scoring/calculate", response_model=ScoringReportResponse)
 def calculate_score_api(payload: ScoringRequest) -> ScoringReportResponse:
     try:
@@ -722,13 +841,14 @@ async def expert_library_ingest_upload(
     model_id: str | None = Form(default=None),
 ) -> ExpertLibraryIngestResponse:
     try:
+        content = await _read_upload_with_limit(file)
         return ingest_historical_pdf(
             filename=file.filename or "",
-            content=await file.read(),
+            content=content,
             project_id=project_id,
             industry_tag=industry_tag,
             title=title,
-            created_by=created_by,
+            created_by=_resolved_created_by(created_by),
             doc_type=doc_type,
             model_id=(model_id or "").strip() or None,
         )
@@ -757,13 +877,14 @@ async def expert_library_ingest_uploads(
     for file in files:
         filename = file.filename or "unknown"
         try:
+            content = await _read_upload_with_limit(file)
             result = ingest_historical_pdf(
                 filename=filename,
-                content=await file.read(),
+                content=content,
                 project_id=project_id,
                 industry_tag=industry_tag,
                 title=title,
-                created_by=created_by,
+                created_by=_resolved_created_by(created_by),
                 doc_type=doc_type,
                 model_id=(model_id or "").strip() or None,
             )
@@ -822,7 +943,7 @@ def expert_library_ingest_structured(
         return ingest_structured_expert_knowledge(
             project_id=payload.project_id,
             industry_tag=payload.industry_tag,
-            created_by=payload.created_by,
+            created_by=_resolved_created_by(payload.created_by),
             standard_items=payload.standard_items,
             company_performance_items=payload.company_performance_items,
             company_qualification_items=payload.company_qualification_items,

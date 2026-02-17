@@ -20,6 +20,7 @@ from app.services.adapters.base import (
 )
 from app.validator import (
     build_generation_payload,
+    ensure_generation_evidence_binding,
     flatten_generation_payload,
     validate_compliance_payload,
     validate_generation_payload,
@@ -168,7 +169,10 @@ class OpenAICompatibleAdapter(LLMAdapter):
             base_url=payload.base_url,
         )
         try:
-            structured = validate_generation_payload(content)
+            structured = ensure_generation_evidence_binding(
+                validate_generation_payload(content),
+                allowed_evidence_ids=payload.evidence_ids,
+            )
         except ValueError:
             structured = build_generation_payload(content, evidence_ids)
         return GenerationResult(

@@ -4,6 +4,7 @@ from app.validator.llm_contracts import (
     ReviewAnalysisPayload,
     SectionGenerationPayload,
     build_generation_payload,
+    ensure_generation_evidence_binding,
     flatten_generation_payload,
     parse_json_payload,
     validate_compliance_payload,
@@ -17,10 +18,10 @@ __all__ = [
     "ReviewAnalysisPayload",
     "SectionGenerationPayload",
     "build_generation_payload",
+    "ensure_generation_evidence_binding",
     "flatten_generation_payload",
     "parse_json_payload",
     "validate_compliance_payload",
     "validate_generation_payload",
     "validate_review_payload",
 ]
-

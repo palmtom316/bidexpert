@@ -3,7 +3,7 @@ from unittest.mock import MagicMock
 import uuid
 from datetime import datetime
 from app.services.scoring_engine import SimulatedScorer
-from app.models.tables import Requirement, ReviewReport, SectionContent, ScoringReport
+from app.models.tables import Requirement, ReviewReport, SectionContent
 
 class TestSimulatedScorer(unittest.TestCase):
     def setUp(self):
@@ -46,10 +46,12 @@ class TestSimulatedScorer(unittest.TestCase):
         req1 = MagicMock(spec=Requirement)
         req1.requirement_code = "REQ-1"
         req1.score_weight = 10.0
+        req1.original_text = "必须提供业绩证明"
         
         req2 = MagicMock(spec=Requirement)
         req2.requirement_code = "REQ-2"
         req2.score_weight = 5.0
+        req2.original_text = "必须提供资质证明"
         
         self.mock_db.scalars.return_value.all.side_effect = [
             [req1, req2],
@@ -69,6 +71,31 @@ class TestSimulatedScorer(unittest.TestCase):
         items = report.details_json["items"]
         self.assertEqual(items[0]["status"], "PASS")
         self.assertEqual(items[1]["status"], "FAIL")
+
+    def test_calculate_score_estimates_when_no_review_report(self):
+        req = MagicMock(spec=Requirement)
+        req.requirement_code = "REQ-1"
+        req.score_weight = 10.0
+        req.original_text = "必须提供资质证明"
+
+        self.mock_db.scalars.return_value.all.side_effect = [
+            [req],
+            [
+                MagicMock(
+                    spec=SectionContent,
+                    requirement_codes=["REQ-1"],
+                    section_key="1.1",
+                    content_md="我方将提交完整资质证明材料和扫描件。",
+                )
+            ],
+            [],
+        ]
+
+        report = self.scorer.calculate_score(self.project_id)
+        item = report.details_json["items"][0]
+
+        self.assertGreater(report.score_total, 0.0)
+        self.assertEqual(item["status"], "ESTIMATED_PASS")
 
 
 if __name__ == "__main__":

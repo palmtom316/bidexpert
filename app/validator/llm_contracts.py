@@ -64,9 +64,31 @@ def parse_json_payload(raw: str | dict[str, Any]) -> dict[str, Any]:
 def validate_generation_payload(raw: str | dict[str, Any]) -> SectionGenerationPayload:
     payload = parse_json_payload(raw)
     try:
-        return SectionGenerationPayload.model_validate(payload)
+        parsed = SectionGenerationPayload.model_validate(payload)
     except ValidationError as exc:
         raise ValueError("generation payload schema validation failed") from exc
+    return parsed
+
+
+def ensure_generation_evidence_binding(
+    payload: SectionGenerationPayload,
+    *,
+    allowed_evidence_ids: list[str] | None = None,
+) -> SectionGenerationPayload:
+    if allowed_evidence_ids is None:
+        return payload
+
+    allowed = {str(item).strip() for item in allowed_evidence_ids if str(item).strip()}
+    invalid: list[str] = []
+    for block in payload.content_blocks:
+        for evidence_id in block.evidence_ids:
+            if evidence_id not in allowed:
+                invalid.append(evidence_id)
+
+    if invalid:
+        joined = ",".join(sorted(set(invalid)))
+        raise ValueError(f"generation payload contains unknown evidence_ids: {joined}")
+    return payload
 
 
 def validate_review_payload(raw: str | dict[str, Any]) -> ReviewAnalysisPayload:
@@ -99,4 +121,3 @@ def build_generation_payload(text: str, evidence_ids: list[str]) -> SectionGener
 
 def flatten_generation_payload(payload: SectionGenerationPayload) -> str:
     return "\n".join(block.text for block in payload.content_blocks if block.text.strip()).strip()
-

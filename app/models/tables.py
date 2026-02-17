@@ -2,11 +2,11 @@ import enum
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import JSON, Date, DateTime, Enum, ForeignKey, Integer, LargeBinary, Numeric, String, Text
-from sqlalchemy.dialects.postgresql import ARRAY, UUID
+from sqlalchemy import JSON, Date, DateTime, Enum, ForeignKey, Integer, LargeBinary, Numeric, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
+from app.db.types import GUID, StringListType, UUIDListType
 
 
 def utcnow() -> datetime:
@@ -87,7 +87,7 @@ class WorkflowRun(Base):
 class Project(Base):
     __tablename__ = "project"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(Text, nullable=False)
     owner_user_id: Mapped[str] = mapped_column(Text, nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
@@ -105,9 +105,9 @@ class Project(Base):
 class Document(Base):
     __tablename__ = "document"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
     project_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("project.id", ondelete="CASCADE")
+        GUID(), ForeignKey("project.id", ondelete="CASCADE")
     )
     kind: Mapped[DocKind] = mapped_column(Enum(DocKind, name="doc_kind"), nullable=False)
     filename: Mapped[str] = mapped_column(Text, nullable=False)
@@ -126,9 +126,9 @@ class Document(Base):
 class DocBlock(Base):
     __tablename__ = "doc_block"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
     document_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("document.id", ondelete="CASCADE"), nullable=False
+        GUID(), ForeignKey("document.id", ondelete="CASCADE"), nullable=False
     )
     block_type: Mapped[str] = mapped_column(Text, nullable=False)
     page_no: Mapped[int | None] = mapped_column(Integer)
@@ -143,9 +143,9 @@ class DocBlock(Base):
 class Requirement(Base):
     __tablename__ = "requirement"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
     project_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("project.id", ondelete="CASCADE"), nullable=False
+        GUID(), ForeignKey("project.id", ondelete="CASCADE"), nullable=False
     )
     requirement_code: Mapped[str] = mapped_column(Text, nullable=False)
     strength: Mapped[RequirementStrength] = mapped_column(
@@ -155,7 +155,7 @@ class Requirement(Base):
     title: Mapped[str | None] = mapped_column(Text)
     original_text: Mapped[str] = mapped_column(Text, nullable=False)
     location_document_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("document.id")
+        GUID(), ForeignKey("document.id")
     )
     location_page_no: Mapped[int | None] = mapped_column(Integer)
     location_anchor: Mapped[str | None] = mapped_column(Text)
@@ -167,9 +167,9 @@ class Requirement(Base):
 class ExpertDoc(Base):
     __tablename__ = "expert_doc"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
     source_document_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("document.id", ondelete="SET NULL")
+        GUID(), ForeignKey("document.id", ondelete="SET NULL")
     )
     doc_type: Mapped[str] = mapped_column(Text, nullable=False)
     title: Mapped[str | None] = mapped_column(Text)
@@ -180,7 +180,7 @@ class ExpertDoc(Base):
     )
     valid_from: Mapped[Date | None] = mapped_column(Date)
     valid_to: Mapped[Date | None] = mapped_column(Date)
-    forbidden_tags: Mapped[list[str]] = mapped_column(ARRAY(Text), default=list)
+    forbidden_tags: Mapped[list[str]] = mapped_column(StringListType(), default=list)
     created_by: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
@@ -188,9 +188,9 @@ class ExpertDoc(Base):
 class EvidenceChunk(Base):
     __tablename__ = "evidence_chunk"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
     expert_doc_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("expert_doc.id", ondelete="CASCADE"), nullable=False
+        GUID(), ForeignKey("expert_doc.id", ondelete="CASCADE"), nullable=False
     )
     chunk_no: Mapped[int] = mapped_column(Integer, nullable=False)
     excerpt_text: Mapped[str] = mapped_column(Text, nullable=False)
@@ -202,7 +202,7 @@ class EvidenceChunk(Base):
         Enum(SensitivityLevel, name="sensitivity_level"), default=SensitivityLevel.PUBLIC_OK
     )
     quality_score: Mapped[float] = mapped_column(Numeric(5, 2), default=0)
-    forbidden_tags: Mapped[list[str]] = mapped_column(ARRAY(Text), default=list)
+    forbidden_tags: Mapped[list[str]] = mapped_column(StringListType(), default=list)
     qdrant_point_id: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
@@ -210,18 +210,18 @@ class EvidenceChunk(Base):
 class ComplianceMatrix(Base):
     __tablename__ = "compliance_matrix"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
     project_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("project.id", ondelete="CASCADE"), nullable=False
+        GUID(), ForeignKey("project.id", ondelete="CASCADE"), nullable=False
     )
     requirement_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("requirement.id", ondelete="CASCADE"), nullable=False
+        GUID(), ForeignKey("requirement.id", ondelete="CASCADE"), nullable=False
     )
     status: Mapped[MatrixStatus] = mapped_column(
         Enum(MatrixStatus, name="matrix_status"), default=MatrixStatus.NOT_FOUND
     )
     planned_section: Mapped[str | None] = mapped_column(Text)
-    evidence_ids: Mapped[list[uuid.UUID]] = mapped_column(ARRAY(UUID(as_uuid=True)), default=list)
+    evidence_ids: Mapped[list[uuid.UUID]] = mapped_column(UUIDListType(), default=list)
     notes: Mapped[str | None] = mapped_column(Text)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
@@ -229,9 +229,9 @@ class ComplianceMatrix(Base):
 class GenerationVersion(Base):
     __tablename__ = "generation_version"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
     project_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("project.id", ondelete="CASCADE"), nullable=False
+        GUID(), ForeignKey("project.id", ondelete="CASCADE"), nullable=False
     )
     version_no: Mapped[int] = mapped_column(Integer, nullable=False)
     status: Mapped[JobStatus] = mapped_column(Enum(JobStatus, name="job_status"), default=JobStatus.PENDING)
@@ -245,22 +245,22 @@ class GenerationVersion(Base):
 class SectionContent(Base):
     __tablename__ = "section_content"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
     project_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("project.id", ondelete="CASCADE"), nullable=False
+        GUID(), ForeignKey("project.id", ondelete="CASCADE"), nullable=False
     )
     version_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("generation_version.id", ondelete="CASCADE"), nullable=False
+        GUID(), ForeignKey("generation_version.id", ondelete="CASCADE"), nullable=False
     )
     parent_section_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("section_content.id", ondelete="SET NULL")
+        GUID(), ForeignKey("section_content.id", ondelete="SET NULL")
     )
     section_key: Mapped[str] = mapped_column(Text, nullable=False)
     section_title: Mapped[str] = mapped_column(Text, nullable=False)
     content_md: Mapped[str] = mapped_column(Text, nullable=False)
     content_json: Mapped[dict | None] = mapped_column(JSON)
-    requirement_codes: Mapped[list[str]] = mapped_column(ARRAY(String), default=list)
-    evidence_ids: Mapped[list[uuid.UUID]] = mapped_column(ARRAY(UUID(as_uuid=True)), default=list)
+    requirement_codes: Mapped[list[str]] = mapped_column(StringListType(), default=list)
+    evidence_ids: Mapped[list[uuid.UUID]] = mapped_column(UUIDListType(), default=list)
     origin: Mapped[SectionOrigin] = mapped_column(Enum(SectionOrigin, name="section_origin"), default=SectionOrigin.AI)
     edit_summary: Mapped[str | None] = mapped_column(Text)
     created_by: Mapped[str | None] = mapped_column(Text)
@@ -271,9 +271,9 @@ class SectionContent(Base):
 class SectionRevision(Base):
     __tablename__ = "section_revision"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
     base_section_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("section_content.id", ondelete="CASCADE"), nullable=False
+        GUID(), ForeignKey("section_content.id", ondelete="CASCADE"), nullable=False
     )
     rev_no: Mapped[int] = mapped_column(Integer, nullable=False)
     editor: Mapped[str] = mapped_column(Text, nullable=False)
@@ -284,12 +284,12 @@ class SectionRevision(Base):
 class IngestJob(Base):
     __tablename__ = "ingest_job"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
     project_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("project.id", ondelete="SET NULL")
+        GUID(), ForeignKey("project.id", ondelete="SET NULL")
     )
     source_document_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("document.id", ondelete="SET NULL")
+        GUID(), ForeignKey("document.id", ondelete="SET NULL")
     )
     status: Mapped[JobStatus] = mapped_column(Enum(JobStatus, name="job_status"), default=JobStatus.PENDING)
     report_json: Mapped[dict | None] = mapped_column(JSON)
@@ -301,9 +301,9 @@ class IngestJob(Base):
 class AuditLog(Base):
     __tablename__ = "audit_log"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
     project_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("project.id", ondelete="SET NULL")
+        GUID(), ForeignKey("project.id", ondelete="SET NULL")
     )
     actor_user_id: Mapped[str] = mapped_column(Text, nullable=False)
     action: Mapped[str] = mapped_column(Text, nullable=False)
@@ -315,11 +315,11 @@ class AuditLog(Base):
 class ProviderProfile(Base):
     __tablename__ = "provider_profile"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
     scope: Mapped[ProviderScope] = mapped_column(
         Enum(ProviderScope, name="provider_scope"), default=ProviderScope.PROJECT, nullable=False
     )
-    scope_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    scope_id: Mapped[uuid.UUID] = mapped_column(GUID(), nullable=False)
     provider: Mapped[str] = mapped_column(Text, nullable=False)
     base_url: Mapped[str | None] = mapped_column(Text)
     default_model: Mapped[str] = mapped_column(Text, nullable=False)
@@ -338,25 +338,25 @@ class ProjectModelPolicy(Base):
     __tablename__ = "project_model_policy"
 
     project_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("project.id", ondelete="CASCADE"), primary_key=True
+        GUID(), ForeignKey("project.id", ondelete="CASCADE"), primary_key=True
     )
     extract_profile_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("provider_profile.id", ondelete="SET NULL")
+        GUID(), ForeignKey("provider_profile.id", ondelete="SET NULL")
     )
     generate_profile_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("provider_profile.id", ondelete="SET NULL")
+        GUID(), ForeignKey("provider_profile.id", ondelete="SET NULL")
     )
     review_profile_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("provider_profile.id", ondelete="SET NULL")
+        GUID(), ForeignKey("provider_profile.id", ondelete="SET NULL")
     )
     embed_profile_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("provider_profile.id", ondelete="SET NULL")
+        GUID(), ForeignKey("provider_profile.id", ondelete="SET NULL")
     )
     query_rewrite_profile_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("provider_profile.id", ondelete="SET NULL")
+        GUID(), ForeignKey("provider_profile.id", ondelete="SET NULL")
     )
     program_support_profile_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("provider_profile.id", ondelete="SET NULL")
+        GUID(), ForeignKey("provider_profile.id", ondelete="SET NULL")
     )
     enable_review: Mapped[bool] = mapped_column(default=True)
     token_budget_total: Mapped[int] = mapped_column(Integer, default=500000)
@@ -379,7 +379,7 @@ class ProjectModelPolicy(Base):
 class CompletedBid(Base):
     __tablename__ = "completed_bid"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
     project_id: Mapped[str | None] = mapped_column(Text)
     project_name: Mapped[str] = mapped_column(Text, nullable=False)
     engineering_category: Mapped[str | None] = mapped_column(Text)
@@ -396,20 +396,20 @@ class CompletedBid(Base):
 class LLMCallLog(Base):
     __tablename__ = "llm_call_log"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
     project_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("project.id", ondelete="SET NULL")
+        GUID(), ForeignKey("project.id", ondelete="SET NULL")
     )
     version_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("generation_version.id", ondelete="SET NULL")
+        GUID(), ForeignKey("generation_version.id", ondelete="SET NULL")
     )
     actor_user_id: Mapped[str] = mapped_column(Text, nullable=False)
     model_name: Mapped[str] = mapped_column(Text, nullable=False)
     purpose: Mapped[str] = mapped_column(Text, nullable=False)
     provider_profile_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("provider_profile.id", ondelete="SET NULL")
+        GUID(), ForeignKey("provider_profile.id", ondelete="SET NULL")
     )
-    evidence_ids: Mapped[list[uuid.UUID]] = mapped_column(ARRAY(UUID(as_uuid=True)), default=list)
+    evidence_ids: Mapped[list[uuid.UUID]] = mapped_column(UUIDListType(), default=list)
     prompt_hash: Mapped[str | None] = mapped_column(Text)
     input_tokens: Mapped[int | None] = mapped_column(Integer)
     output_tokens: Mapped[int | None] = mapped_column(Integer)
@@ -426,12 +426,12 @@ class LLMCallLog(Base):
 class TenderAnalysisRun(Base):
     __tablename__ = "tender_analysis_run"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
     project_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("project.id", ondelete="SET NULL")
+        GUID(), ForeignKey("project.id", ondelete="SET NULL")
     )
     document_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("document.id", ondelete="SET NULL")
+        GUID(), ForeignKey("document.id", ondelete="SET NULL")
     )
     filename: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(Text, nullable=False)
@@ -444,15 +444,15 @@ class TenderAnalysisRun(Base):
 class TenderKeyInfo(Base):
     __tablename__ = "tender_key_info"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
     run_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("tender_analysis_run.id", ondelete="CASCADE"), nullable=False
+        GUID(), ForeignKey("tender_analysis_run.id", ondelete="CASCADE"), nullable=False
     )
     project_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("project.id", ondelete="SET NULL")
+        GUID(), ForeignKey("project.id", ondelete="SET NULL")
     )
     document_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("document.id", ondelete="SET NULL")
+        GUID(), ForeignKey("document.id", ondelete="SET NULL")
     )
     category: Mapped[TenderKeyCategory] = mapped_column(
         Enum(TenderKeyCategory, name="tender_key_category"), nullable=False
@@ -471,9 +471,9 @@ class TenderKeyInfo(Base):
 class ReviewReport(Base):
     __tablename__ = "review_report"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
     project_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("project.id", ondelete="CASCADE"), nullable=False
+        GUID(), ForeignKey("project.id", ondelete="CASCADE"), nullable=False
     )
     section_key: Mapped[str] = mapped_column(Text, nullable=False)
     outline_id: Mapped[str] = mapped_column(Text, nullable=False)
@@ -485,9 +485,9 @@ class ReviewReport(Base):
 class ScoringReport(Base):
     __tablename__ = "scoring_report"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
     project_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("project.id", ondelete="CASCADE"), nullable=False
+        GUID(), ForeignKey("project.id", ondelete="CASCADE"), nullable=False
     )
     score_total: Mapped[float] = mapped_column(Numeric(6, 2))
     details_json: Mapped[dict] = mapped_column(JSON, default=dict)

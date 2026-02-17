@@ -6,32 +6,152 @@ services:
     environment:
       BIDEXPERT_DATABASE_URL: postgresql+psycopg://bidexpert:bidexpert@postgres:5432/bidexpert
       BIDEXPERT_MIN_MATRIX_COVERAGE: "0.9"
+      BIDEXPERT_AUTH_MODE: ${BIDEXPERT_AUTH_MODE:-api_key}
+      BIDEXPERT_JWT_SECRET: ${BIDEXPERT_JWT_SECRET:-}
+      BIDEXPERT_JWT_ISSUER: ${BIDEXPERT_JWT_ISSUER:-}
+      BIDEXPERT_JWT_AUDIENCE: ${BIDEXPERT_JWT_AUDIENCE:-}
+      BIDEXPERT_API_RATE_LIMIT_ENABLED: ${BIDEXPERT_API_RATE_LIMIT_ENABLED:-true}
+      BIDEXPERT_API_RATE_LIMIT_REQUESTS: ${BIDEXPERT_API_RATE_LIMIT_REQUESTS:-300}
+      BIDEXPERT_API_RATE_LIMIT_WINDOW_SECONDS: ${BIDEXPERT_API_RATE_LIMIT_WINDOW_SECONDS:-60}
+      BIDEXPERT_LOG_LEVEL: ${BIDEXPERT_LOG_LEVEL:-INFO}
+      BIDEXPERT_LOG_FORMAT: ${BIDEXPERT_LOG_FORMAT:-json}
+      BIDEXPERT_METRICS_ENABLED: ${BIDEXPERT_METRICS_ENABLED:-true}
       BIDEXPERT_CELERY_BROKER_URL: redis://redis:6379/0
       BIDEXPERT_CELERY_RESULT_BACKEND: redis://redis:6379/1
       BIDEXPERT_QDRANT_URL: http://qdrant:6333
+      BIDEXPERT_QDRANT_ENABLE_RERANK: ${BIDEXPERT_QDRANT_ENABLE_RERANK:-true}
+      BIDEXPERT_QDRANT_RERANK_CANDIDATE_LIMIT: ${BIDEXPERT_QDRANT_RERANK_CANDIDATE_LIMIT:-24}
       BIDEXPERT_UPLOAD_DIR: /app/data/uploads
+      BIDEXPERT_MAX_UPLOAD_BYTES: ${BIDEXPERT_MAX_UPLOAD_BYTES:-52428800}
+      BIDEXPERT_SERVE_UI_STATIC: "false"
+      BIDEXPERT_OCR_PROVIDER: ${BIDEXPERT_OCR_PROVIDER:-tesseract}
+      BIDEXPERT_HUNYUAN_OCR_API_KEY: ${BIDEXPERT_HUNYUAN_OCR_API_KEY:-}
+      BIDEXPERT_HUNYUAN_OCR_BASE_URL: ${BIDEXPERT_HUNYUAN_OCR_BASE_URL:-}
+      BIDEXPERT_DOCAI_OCR_API_KEY: ${BIDEXPERT_DOCAI_OCR_API_KEY:-}
+      BIDEXPERT_DOCAI_OCR_BASE_URL: ${BIDEXPERT_DOCAI_OCR_BASE_URL:-}
+      BIDEXPERT_MASTER_KEY_B64: ${BIDEXPERT_MASTER_KEY_B64:-}
+      BIDEXPERT_API_KEY: ${BIDEXPERT_API_KEY:-}
+      BIDEXPERT_OPENAI_API_KEY: ${BIDEXPERT_OPENAI_API_KEY:-}
+      BIDEXPERT_OPENAI_BASE_URL: ${BIDEXPERT_OPENAI_BASE_URL:-https://api.openai.com/v1}
+      BIDEXPERT_GEMINI_API_KEY: ${BIDEXPERT_GEMINI_API_KEY:-}
+      BIDEXPERT_GEMINI_BASE_URL: ${BIDEXPERT_GEMINI_BASE_URL:-}
+      BIDEXPERT_QWEN_API_KEY: ${BIDEXPERT_QWEN_API_KEY:-}
+      BIDEXPERT_QWEN_BASE_URL: ${BIDEXPERT_QWEN_BASE_URL:-}
+      BIDEXPERT_DEEPSEEK_API_KEY: ${BIDEXPERT_DEEPSEEK_API_KEY:-}
+      BIDEXPERT_DEEPSEEK_BASE_URL: ${BIDEXPERT_DEEPSEEK_BASE_URL:-https://api.deepseek.com/v1}
+      BIDEXPERT_VOYAGE_API_KEY: ${BIDEXPERT_VOYAGE_API_KEY:-}
+      BIDEXPERT_VOYAGE_BASE_URL: ${BIDEXPERT_VOYAGE_BASE_URL:-https://api.voyageai.com/v1}
     depends_on:
-      - postgres
-      - redis
-      - qdrant
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3).read()",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
     volumes:
       - ./data:/app/data
       - ./app:/app/app
 
+  nginx:
+    image: nginx:1.27
+    ports:
+      - "8080:80"
+      - "8443:443"
+    depends_on:
+      api:
+        condition: service_healthy
+    command: >
+      /bin/sh -ec '
+      cert_dir=/etc/nginx/certs;
+      cert_file="$$cert_dir/tls.crt";
+      key_file="$$cert_dir/tls.key";
+      if [ ! -s "$$cert_file" ] || [ ! -s "$$key_file" ]; then
+        echo "Generating self-signed TLS certificate for localhost";
+        mkdir -p "$$cert_dir";
+        command -v openssl >/dev/null 2>&1;
+        openssl req -x509 -nodes -newkey rsa:2048 -days 365
+        -subj "/CN=localhost"
+        -keyout "$$key_file"
+        -out "$$cert_file";
+      fi;
+      exec nginx -g "daemon off;";
+      '
+    volumes:
+      - ./deploy/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./deploy/nginx/certs:/etc/nginx/certs
+      - ./app/ui:/usr/share/nginx/html/ui:ro
+    healthcheck:
+      test: ["CMD-SHELL", "nginx -t"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
   worker:
     build: .
-    command: celery -A app.workers.celery_app.celery_app worker --loglevel=INFO
+    command: celery -A app.worker.celery_app.celery_app worker --loglevel=INFO
     environment:
       BIDEXPERT_DATABASE_URL: postgresql+psycopg://bidexpert:bidexpert@postgres:5432/bidexpert
       BIDEXPERT_MIN_MATRIX_COVERAGE: "0.9"
+      BIDEXPERT_AUTH_MODE: ${BIDEXPERT_AUTH_MODE:-api_key}
+      BIDEXPERT_JWT_SECRET: ${BIDEXPERT_JWT_SECRET:-}
+      BIDEXPERT_JWT_ISSUER: ${BIDEXPERT_JWT_ISSUER:-}
+      BIDEXPERT_JWT_AUDIENCE: ${BIDEXPERT_JWT_AUDIENCE:-}
+      BIDEXPERT_API_RATE_LIMIT_ENABLED: ${BIDEXPERT_API_RATE_LIMIT_ENABLED:-true}
+      BIDEXPERT_API_RATE_LIMIT_REQUESTS: ${BIDEXPERT_API_RATE_LIMIT_REQUESTS:-300}
+      BIDEXPERT_API_RATE_LIMIT_WINDOW_SECONDS: ${BIDEXPERT_API_RATE_LIMIT_WINDOW_SECONDS:-60}
+      BIDEXPERT_LOG_LEVEL: ${BIDEXPERT_LOG_LEVEL:-INFO}
+      BIDEXPERT_LOG_FORMAT: ${BIDEXPERT_LOG_FORMAT:-json}
+      BIDEXPERT_METRICS_ENABLED: ${BIDEXPERT_METRICS_ENABLED:-true}
       BIDEXPERT_CELERY_BROKER_URL: redis://redis:6379/0
       BIDEXPERT_CELERY_RESULT_BACKEND: redis://redis:6379/1
       BIDEXPERT_QDRANT_URL: http://qdrant:6333
+      BIDEXPERT_QDRANT_ENABLE_RERANK: ${BIDEXPERT_QDRANT_ENABLE_RERANK:-true}
+      BIDEXPERT_QDRANT_RERANK_CANDIDATE_LIMIT: ${BIDEXPERT_QDRANT_RERANK_CANDIDATE_LIMIT:-24}
       BIDEXPERT_UPLOAD_DIR: /app/data/uploads
+      BIDEXPERT_MAX_UPLOAD_BYTES: ${BIDEXPERT_MAX_UPLOAD_BYTES:-52428800}
+      BIDEXPERT_OCR_PROVIDER: ${BIDEXPERT_OCR_PROVIDER:-tesseract}
+      BIDEXPERT_HUNYUAN_OCR_API_KEY: ${BIDEXPERT_HUNYUAN_OCR_API_KEY:-}
+      BIDEXPERT_HUNYUAN_OCR_BASE_URL: ${BIDEXPERT_HUNYUAN_OCR_BASE_URL:-}
+      BIDEXPERT_DOCAI_OCR_API_KEY: ${BIDEXPERT_DOCAI_OCR_API_KEY:-}
+      BIDEXPERT_DOCAI_OCR_BASE_URL: ${BIDEXPERT_DOCAI_OCR_BASE_URL:-}
+      BIDEXPERT_MASTER_KEY_B64: ${BIDEXPERT_MASTER_KEY_B64:-}
+      BIDEXPERT_API_KEY: ${BIDEXPERT_API_KEY:-}
+      BIDEXPERT_OPENAI_API_KEY: ${BIDEXPERT_OPENAI_API_KEY:-}
+      BIDEXPERT_OPENAI_BASE_URL: ${BIDEXPERT_OPENAI_BASE_URL:-https://api.openai.com/v1}
+      BIDEXPERT_GEMINI_API_KEY: ${BIDEXPERT_GEMINI_API_KEY:-}
+      BIDEXPERT_GEMINI_BASE_URL: ${BIDEXPERT_GEMINI_BASE_URL:-}
+      BIDEXPERT_QWEN_API_KEY: ${BIDEXPERT_QWEN_API_KEY:-}
+      BIDEXPERT_QWEN_BASE_URL: ${BIDEXPERT_QWEN_BASE_URL:-}
+      BIDEXPERT_DEEPSEEK_API_KEY: ${BIDEXPERT_DEEPSEEK_API_KEY:-}
+      BIDEXPERT_DEEPSEEK_BASE_URL: ${BIDEXPERT_DEEPSEEK_BASE_URL:-https://api.deepseek.com/v1}
+      BIDEXPERT_VOYAGE_API_KEY: ${BIDEXPERT_VOYAGE_API_KEY:-}
+      BIDEXPERT_VOYAGE_BASE_URL: ${BIDEXPERT_VOYAGE_BASE_URL:-https://api.voyageai.com/v1}
     depends_on:
-      - postgres
-      - redis
-      - qdrant
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "ps -ef | grep '[c]elery' >/dev/null"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
     volumes:
       - ./data:/app/data
 
@@ -43,14 +163,67 @@ services:
       POSTGRES_DB: bidexpert
     ports:
       - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bidexpert -d bidexpert"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./sql/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+
+  migrate:
+    build: .
+    command: alembic upgrade head
+    environment:
+      BIDEXPERT_DATABASE_URL: postgresql+psycopg://bidexpert:bidexpert@postgres:5432/bidexpert
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  pg-backup:
+    image: postgres:16
+    profiles: ["ops"]
+    entrypoint: ["/bin/sh", "/scripts/pg_backup.sh"]
+    environment:
+      BACKUP_DIR: /backups
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: bidexpert
+      DB_USER: bidexpert
+      DB_PASSWORD: bidexpert
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./deploy/backup:/scripts:ro
+      - ./backups:/backups
+    restart: "no"
+
+  qdrant-backup:
+    image: alpine:3.20
+    profiles: ["ops"]
+    entrypoint: ["/bin/sh", "/scripts/qdrant_backup.sh"]
+    environment:
+      BACKUP_DIR: /backups
+      QDRANT_STORAGE_DIR: /qdrant/storage
+    volumes:
+      - ./deploy/backup:/scripts:ro
+      - qdrant_data:/qdrant/storage:ro
+      - ./backups:/backups
+    restart: "no"
 
   redis:
     image: redis:7-alpine
     ports:
       - "6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
 
   qdrant:
     image: qdrant/qdrant:v1.12.5
@@ -58,6 +231,12 @@ services:
       - "6333:6333"
     volumes:
       - qdrant_data:/qdrant/storage
+    healthcheck:
+      test: ["CMD", "bash", "-lc", "exec 3<>/dev/tcp/127.0.0.1/6333"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
 volumes:
   pgdata:

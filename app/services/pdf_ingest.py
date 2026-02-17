@@ -4,8 +4,10 @@ import io
 import re
 from dataclasses import dataclass
 
+from app.core.config import settings
 from app.extract.tender_parser import parse_tender_requirements
 from app.schemas.contracts import DocBlockItem, IngestUploadResponse
+from app.services.adapters.ocr import OCRAdapterUnavailableError, create_ocr_adapter
 from app.services.pricing_guard import detect_pricing_content
 
 SECTION_PATTERN = re.compile(r"^\s*(第[一二三四五六七八九十0-9]+[章节条款]|\d+(?:\.\d+)+)")
@@ -63,6 +65,22 @@ def _ocr_page_with_fitz(pdf_bytes: bytes, page_no: int) -> str:
     return text.strip()
 
 
+def _render_page_png(pdf_bytes: bytes, page_no: int) -> bytes:
+    import fitz
+
+    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+    page = doc.load_page(page_no - 1)
+    pix = page.get_pixmap(dpi=220)
+    return pix.tobytes("png")
+
+
+def _ocr_page_with_configured_provider(pdf_bytes: bytes, page_no: int) -> str:
+    image_bytes = _render_page_png(pdf_bytes, page_no)
+    adapter = create_ocr_adapter(settings.ocr_provider)
+    text = adapter.extract_image_bytes(image_bytes, page_no=page_no)
+    return text.strip()
+
+
 def extract_pages(pdf_bytes: bytes, enable_ocr_fallback: bool = True) -> list[PageExtract]:
     pages = _extract_with_pypdf(pdf_bytes)
     if not enable_ocr_fallback:
@@ -74,7 +92,14 @@ def extract_pages(pdf_bytes: bytes, enable_ocr_fallback: bool = True) -> list[Pa
             extracted.append(page)
             continue
         try:
-            ocr_text = _ocr_page_with_fitz(pdf_bytes, page.page_no)
+            provider = (settings.ocr_provider or "tesseract").strip().lower()
+            if provider in {"tesseract", "local", ""}:
+                ocr_text = _ocr_page_with_fitz(pdf_bytes, page.page_no)
+            else:
+                try:
+                    ocr_text = _ocr_page_with_configured_provider(pdf_bytes, page.page_no)
+                except (OCRAdapterUnavailableError, RuntimeError, ValueError):
+                    ocr_text = _ocr_page_with_fitz(pdf_bytes, page.page_no)
             extracted.append(PageExtract(page_no=page.page_no, text=ocr_text, ocr_used=True))
         except Exception:
             extracted.append(page)

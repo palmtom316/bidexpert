@@ -1,6 +1,9 @@
 from celery import Celery
 
 from app.core.config import settings
+from app.core.logging import configure_logging
+
+configure_logging()
 
 celery_app = Celery(
     "bidexpert",

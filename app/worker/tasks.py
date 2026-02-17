@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
+from uuid import uuid4
 
 from celery.result import AsyncResult
 
@@ -13,6 +15,7 @@ from app.services.evidence_validator import run_three_gates
 from app.services.generation_pipeline import generate_draft_with_retrieval
 from app.services.pdf_ingest import ingest_pdf_bytes
 from app.services.qdrant_store import QdrantStore
+from app.services.word_renderer import render_word_structured
 from app.worker.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
@@ -63,12 +66,77 @@ def _validate_stage(*, requirement_text: str, generated: dict) -> dict:
     }
 
 
-def _render_stage(generated: dict) -> dict:
+def _safe_token(value: str | None, fallback: str) -> str:
+    token = re.sub(r"[^a-zA-Z0-9._-]+", "_", str(value or "").strip()).strip("._")
+    return token or fallback
+
+
+def _structured_content_from_generated(*, section_key: str, generated: dict) -> dict[str, list[dict[str, str]]]:
+    section_title = f"章节 {section_key}"
+    body: list[dict[str, str]] = [{"type": "heading", "style": "Title1", "text": section_title}]
+
+    generation_json = generated.get("generation_json")
+    content_blocks = generation_json.get("content_blocks") if isinstance(generation_json, dict) else None
+    if isinstance(content_blocks, list):
+        for block in content_blocks:
+            if not isinstance(block, dict):
+                continue
+            text = str(block.get("text", "")).strip()
+            if not text:
+                continue
+            body.append({"type": "paragraph", "style": "BodyText", "text": text})
+
+    if len(body) == 1:
+        generated_text = str(generated.get("generated_text", "")).strip()
+        if generated_text:
+            for paragraph in [line.strip() for line in generated_text.splitlines() if line.strip()]:
+                body.append({"type": "paragraph", "style": "BodyText", "text": paragraph})
+
+    if len(body) == 1:
+        body.append({"type": "paragraph", "style": "BodyText", "text": "NEED_HUMAN_INPUT"})
+
+    return {"body": body, "appendix": []}
+
+
+def _render_stage(*, context: dict, generated: dict) -> dict:
     final_status = str(generated.get("status", "NEED_HUMAN_INPUT"))
     render_ready = final_status == "SUPPORTED"
+    if not render_ready:
+        return {
+            "status": "NEED_HUMAN_INPUT",
+            "render_ready": False,
+            "output_path": None,
+            "pdf_path": None,
+        }
+
+    project_token = _safe_token(str(context.get("project_id", "")), "project")
+    section_token = _safe_token(str(context.get("section_key", "")), "section")
+    output_path = f"workflow/{project_token}/{section_token}-{uuid4().hex[:8]}.docx"
+
+    try:
+        rendered_docx, rendered_pdf = render_word_structured(
+            output_path=output_path,
+            content=_structured_content_from_generated(section_key=section_token, generated=generated),
+            placeholders={"project_name": project_token, "section_key": section_token},
+            template_path=None,
+            style_config={},
+            export_pdf=False,
+        )
+    except (ValueError, RuntimeError, OSError) as exc:
+        logger.exception("section render failed for section_key=%s", context.get("section_key"))
+        return {
+            "status": "FAILED",
+            "render_ready": False,
+            "output_path": None,
+            "pdf_path": None,
+            "error": str(exc),
+        }
+
     return {
-        "status": "SUCCEEDED" if render_ready else "NEED_HUMAN_INPUT",
-        "render_ready": render_ready,
+        "status": "SUCCEEDED",
+        "render_ready": True,
+        "output_path": rendered_docx,
+        "pdf_path": rendered_pdf,
     }
 
 
@@ -242,9 +310,11 @@ def section_validate_stage_task(self, context: dict) -> dict:  # type: ignore[no
 def section_render_stage_task(self, context: dict) -> dict:  # type: ignore[no-untyped-def]
     self.update_state(state="PROGRESS", meta={"stage": "RENDER_EXPORT"})
     generated = context.get("stages", {}).get("generate", {})
-    render_result = _render_stage(generated)
+    render_result = _render_stage(context=context, generated=generated)
     context.setdefault("stages", {})["render"] = render_result
     final_status = str(generated.get("status", "NEED_HUMAN_INPUT"))
+    if final_status == "SUPPORTED" and render_result.get("status") == "FAILED":
+        final_status = "FAILED"
     return {
         "status": final_status,
         "section_key": str(context.get("section_key", "")),

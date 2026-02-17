@@ -44,6 +44,57 @@ def _build_sparse_vector(text: str) -> dict[int, float]:
     return indices_values
 
 
+def _rerank_hits(query: str, items: list[RetrievedEvidence], top_k: int) -> list[RetrievedEvidence]:
+    query_tokens = set(_tokenize(query))
+    normalized_query = (query or "").strip().lower()
+    if not query_tokens and not normalized_query:
+        return items[:top_k]
+
+    def _lexical_relevance(text: str) -> float:
+        normalized_text = (text or "").strip().lower()
+        if normalized_query and normalized_query in normalized_text:
+            return 1.0
+
+        text_tokens = set(_tokenize(text))
+        if query_tokens:
+            token_overlap = len(query_tokens & text_tokens) / len(query_tokens)
+        else:
+            token_overlap = 0.0
+
+        query_chars = "".join(ch for ch in normalized_query if "\u4e00" <= ch <= "\u9fff")
+        if len(query_chars) >= 2:
+            bigram_hits = 0
+            total = len(query_chars) - 1
+            for idx in range(total):
+                gram = query_chars[idx : idx + 2]
+                if gram and gram in normalized_text:
+                    bigram_hits += 1
+            bigram_overlap = bigram_hits / total if total > 0 else 0.0
+        else:
+            bigram_overlap = 0.0
+        return max(token_overlap, bigram_overlap)
+
+    def _rerank_score(item: RetrievedEvidence) -> float:
+        base_score = float(item.score)
+        overlap = _lexical_relevance(item.text)
+        quality = float(item.payload.get("quality_score", 0.0) or 0.0) / 100.0
+        quality = max(0.0, min(1.0, quality))
+        return base_score * 0.55 + overlap * 0.40 + quality * 0.05
+
+    ranked = sorted(items, key=_rerank_score, reverse=True)
+    result: list[RetrievedEvidence] = []
+    for item in ranked[:top_k]:
+        result.append(
+            RetrievedEvidence(
+                chunk_id=item.chunk_id,
+                score=_rerank_score(item),
+                text=item.text,
+                payload=item.payload,
+            )
+        )
+    return result
+
+
 def _is_payload_allowed(payload: dict) -> bool:
     sensitivity = payload.get("sensitivity_level", "PUBLIC_OK")
     if sensitivity != "PUBLIC_OK":
@@ -319,6 +370,11 @@ class QdrantStore:
             )
 
         if vector_hits or sparse_hits:
+            rerank_enabled = bool(getattr(settings, "qdrant_enable_rerank", False))
+            if rerank_enabled:
+                candidate_limit = max(top_k, int(settings.qdrant_rerank_candidate_limit))
+                fused = self._fuse_hybrid(vector_hits=vector_hits, sparse_hits=sparse_hits, top_k=candidate_limit)
+                return _rerank_hits(query=query, items=fused, top_k=top_k)
             return self._fuse_hybrid(vector_hits=vector_hits, sparse_hits=sparse_hits, top_k=top_k)
 
         return []

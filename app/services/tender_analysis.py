@@ -22,6 +22,7 @@ from app.models.tables import (
     TenderKeyInfo,
 )
 from app.schemas.contracts import (
+    ParsedRequirement,
     TenderAnalysisDetailResponse,
     TenderAnalysisRunItem,
     TenderAnalysisSummary,
@@ -29,7 +30,7 @@ from app.schemas.contracts import (
 )
 from app.services.pdf_ingest import extract_pages
 from app.services.pricing_guard import detect_pricing_content
-from app.extract.tender_parser import ANCHOR_PATTERN, SCORE_PATTERN
+from app.extract.tender_parser import ANCHOR_PATTERN, SCORE_PATTERN, parse_tender_requirements
 
 _SENTENCE_SPLIT = re.compile(r"[。；;\n]+")
 _MUST_PATTERN = re.compile(r"(必须|应当|不得|须|需|符合|满足|提交|提供)")
@@ -184,6 +185,98 @@ def _classify_line(*, content: str, page_no: int, section_anchor: str | None) ->
     return items
 
 
+def _insights_from_parsed_requirements(items: list[ParsedRequirement]) -> list[_LineInsight]:
+    mapped: list[_LineInsight] = []
+    for req in items:
+        content = req.original_text.strip()
+        if not content:
+            continue
+
+        page_no = req.page_no if isinstance(req.page_no, int) and req.page_no > 0 else 1
+        section_anchor = req.section_anchor.strip() if req.section_anchor else None
+        score_weight = float(req.score_weight) if req.score_weight is not None else _score_weight(content)
+        is_must = bool(req.is_must)
+        format_required = bool((req.format_constraints or {}).get("format_required"))
+        is_scoring = score_weight is not None or bool(_SCORING_PATTERN.search(content))
+        is_bonus = bool(_BONUS_PATTERN.search(content))
+        is_bidding = bool(_BIDDING_PATTERN.search(content)) or ("要求" in content and len(content) >= 10) or format_required
+        is_risk = bool(_RISK_PATTERN.search(content))
+
+        if is_bidding:
+            mapped.append(
+                _LineInsight(
+                    category=TenderKeyCategory.BIDDING_POINTS,
+                    content=content,
+                    page_no=page_no,
+                    section_anchor=section_anchor,
+                    score_weight=score_weight,
+                    is_must=is_must,
+                    importance=58 + (15 if is_must else 0),
+                )
+            )
+        if is_scoring:
+            mapped.append(
+                _LineInsight(
+                    category=TenderKeyCategory.SCORING_POINTS,
+                    content=content,
+                    page_no=page_no,
+                    section_anchor=section_anchor,
+                    score_weight=score_weight,
+                    is_must=is_must,
+                    importance=60 + min(int(score_weight or 0), 30),
+                )
+            )
+        if is_must:
+            mapped.append(
+                _LineInsight(
+                    category=TenderKeyCategory.COMPLIANCE_REQUIREMENTS,
+                    content=content,
+                    page_no=page_no,
+                    section_anchor=section_anchor,
+                    score_weight=score_weight,
+                    is_must=True,
+                    importance=75,
+                )
+            )
+        if is_bonus:
+            mapped.append(
+                _LineInsight(
+                    category=TenderKeyCategory.BONUS_POINTS,
+                    content=content,
+                    page_no=page_no,
+                    section_anchor=section_anchor,
+                    score_weight=score_weight,
+                    is_must=False,
+                    importance=70,
+                )
+            )
+        if is_risk:
+            mapped.append(
+                _LineInsight(
+                    category=TenderKeyCategory.RISK_ALERTS,
+                    content=content,
+                    page_no=page_no,
+                    section_anchor=section_anchor,
+                    score_weight=score_weight,
+                    is_must=is_must,
+                    importance=80,
+                )
+            )
+        if not any((is_bidding, is_scoring, is_must, is_bonus, is_risk)):
+            mapped.append(
+                _LineInsight(
+                    category=TenderKeyCategory.BIDDING_POINTS,
+                    content=content,
+                    page_no=page_no,
+                    section_anchor=section_anchor,
+                    score_weight=score_weight,
+                    is_must=is_must,
+                    importance=50,
+                )
+            )
+    return _dedupe(mapped)
+
+
 def _dedupe(items: list[_LineInsight]) -> list[_LineInsight]:
     best: dict[tuple[TenderKeyCategory, str], _LineInsight] = {}
     for item in items:
@@ -232,11 +325,15 @@ def analyze_and_persist_tender_pdf(
     pricing_hit, reasons = detect_pricing_content(full_text)
     warnings = [f"pricing_detected:{reason}" for reason in reasons] if pricing_hit else []
 
-    insights: list[_LineInsight] = []
-    for page in pages:
-        for line, anchor in _extract_lines(page_no=page.page_no, text=page.text or ""):
-            insights.extend(_classify_line(content=line, page_no=page.page_no, section_anchor=anchor))
-    insights = _dedupe(insights)
+    parse_result = parse_tender_requirements(full_text)
+    insights = _insights_from_parsed_requirements(parse_result.requirements)
+    if not insights:
+        for page in pages:
+            for line, anchor in _extract_lines(page_no=page.page_no, text=page.text or ""):
+                insights.extend(_classify_line(content=line, page_no=page.page_no, section_anchor=anchor))
+        insights = _dedupe(insights)
+    if parse_result.status != "OK":
+        warnings.append("tender_parse_need_human_input")
     status = "SUCCEEDED" if insights else "NEED_HUMAN_INPUT"
 
     if not insights:

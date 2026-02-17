@@ -15,7 +15,12 @@ from app.services.llm_gateway import generate_with_fallback_chain, review_with_f
 from app.services.pii_policy import sanitize_inbound_text, sanitize_outbound_text
 from app.rag.rag_flow import decompose_requirement, merge_retrieval, retrieve_for_subrequirements
 from app.services.semantic_cache import build_cache_key, get_cache, set_cache
-from app.validator import build_generation_payload, flatten_generation_payload, validate_generation_payload
+from app.validator import (
+    build_generation_payload,
+    ensure_generation_evidence_binding,
+    flatten_generation_payload,
+    validate_generation_payload,
+)
 
 
 def _schema_evidence_ids(evidence_ids: list[str]) -> list[str]:
@@ -179,13 +184,19 @@ def generate_draft_with_retrieval(
             warnings.append(f"generate_fallback_index={generation_fallback_index}")
         try:
             if generated.content_json:
-                generation_payload = validate_generation_payload(generated.content_json)
+                generation_payload = ensure_generation_evidence_binding(
+                    validate_generation_payload(generated.content_json),
+                    allowed_evidence_ids=merged_evidence_ids,
+                )
             else:
                 generation_payload = build_generation_payload(generated.text, _schema_evidence_ids(merged_evidence_ids))
                 warnings.append("generate_schema_wrapped_from_text")
-        except ValueError:
+        except ValueError as exc:
             generation_payload = build_generation_payload("NEED_HUMAN_INPUT", _schema_evidence_ids(merged_evidence_ids))
-            warnings.append("generate_schema_validation_failed")
+            if "unknown evidence_ids" in str(exc):
+                warnings.append("generate_evidence_binding_invalid")
+            else:
+                warnings.append("generate_schema_validation_failed")
     except AdapterUnavailableError:
         generation_fallback_index = len(gen_chain)
         generated_text_fallback = _compose_draft(requirement_text, generation_evidence_texts) or "NEED_HUMAN_INPUT"
@@ -271,6 +282,8 @@ def generate_draft_with_retrieval(
         )
 
     status = gate_result.status
+    if "generate_evidence_binding_invalid" in warnings:
+        status = "NEED_HUMAN_INPUT"
     if not sanitize.text:
         status = "NEED_HUMAN_INPUT"
     if any(w.startswith("evidence_near_expiry") for w in warnings):
