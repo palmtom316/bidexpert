@@ -37,6 +37,8 @@ const state = {
   finalLocked: false,
   coverTemplate: "none",
   byokProfiles: [],
+  sidebarWidth: parseInt(localStorage.getItem("be_sidebar_width") || "260", 10),
+  sidebarCollapsed: localStorage.getItem("be_sidebar_collapsed") === "true",
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -139,18 +141,19 @@ function ensureProjectId({ autoCreate = false } = {}) {
     return projectId;
   }
   if (!autoCreate) {
-    throw new Error("请先手动输入项目 ID（UUID）");
+    throw new Error("请先手动输入项目 ID");
   }
   const generated = globalThis.crypto?.randomUUID?.();
   if (!generated || !isValidUuid(generated)) {
-    throw new Error("无法自动生成项目 ID，请手动输入 UUID");
+    throw new Error("无法自动生成项目 ID，请手动输入");
   }
   state.projectId = generated;
   localStorage.setItem("be_project_id", generated);
-  if ($("#projectIdInput")) $("#projectIdInput").value = generated;
+  state.projectId = generated;
+  localStorage.setItem("be_project_id", generated);
   if ($("#byokProjectId")) $("#byokProjectId").value = generated;
   if ($("#completedBidProjectId")) CompletedBidHub.syncProjectIdInput();
-  Toast.info("已自动生成项目 ID（UUID），可在顶部手动修改");
+  Toast.info("已自动生成项目 ID，可在顶部手动修改");
   return generated;
 }
 
@@ -177,9 +180,7 @@ function rememberIndustryTag(raw) {
 function applyIndustryTag(value, source = "") {
   const normalized = String(value || "").trim();
   state.industryTag = normalized;
-  if (source !== "top" && $("#industryTagInput")) {
-    $("#industryTagInput").value = normalized;
-  }
+
   if (source !== "expert" && $("#expertIndustryTag")) {
     $("#expertIndustryTag").value = normalized;
   }
@@ -267,6 +268,91 @@ async function pollTask(taskId, { onTick, onDone, onError, timeoutMs = 180000, i
   throw timeoutError;
 }
 
+const Sidebar = {
+  minWidth: 200,
+  maxWidth: 480,
+  collapsedWidth: 64,
+
+  init() {
+    this.nav = $("#sidebarNav");
+    this.resizer = $("#sidebarResizer");
+    this.toggleBtn = $("#btnToggleSidebar");
+    // Safety check if elements exist (e.g. on different pages)
+    if (!this.nav || !this.toggleBtn) return;
+
+    this.toggleIcon = this.toggleBtn.querySelector("i");
+
+    // Initial State
+    this.applyState();
+
+    // Toggle Event
+    this.toggleBtn.addEventListener("click", () => this.toggle());
+
+    // Resize Events
+    if (this.resizer) {
+      this.resizer.addEventListener("mousedown", (e) => this.startResize(e));
+    }
+  },
+
+  applyState() {
+    if (state.sidebarCollapsed) {
+      this.nav.classList.add("collapsed");
+      this.nav.style.width = `${this.collapsedWidth}px`;
+      if (this.toggleIcon) {
+        this.toggleIcon.className = "ri-menu-unfold-line";
+        this.toggleBtn.title = "展开菜单";
+      }
+    } else {
+      this.nav.classList.remove("collapsed");
+      // Use CSS variable for width to sync with styles
+      this.nav.style.setProperty("--sidebar-width", `${state.sidebarWidth}px`);
+      this.nav.style.width = `${state.sidebarWidth}px`;
+      if (this.toggleIcon) {
+        this.toggleIcon.className = "ri-menu-fold-line";
+        this.toggleBtn.title = "收起菜单";
+      }
+    }
+  },
+
+  toggle() {
+    state.sidebarCollapsed = !state.sidebarCollapsed;
+    localStorage.setItem("be_sidebar_collapsed", state.sidebarCollapsed);
+    this.applyState();
+  },
+
+  startResize(e) {
+    if (state.sidebarCollapsed) return; // Disable resize when collapsed
+    e.preventDefault();
+
+    const startX = e.clientX;
+    const startWidth = parseInt(window.getComputedStyle(this.nav).width, 10);
+
+    const onMouseMove = (e) => {
+      const delta = e.clientX - startX;
+      let newWidth = startWidth + delta;
+
+      if (newWidth < this.minWidth) newWidth = this.minWidth;
+      if (newWidth > this.maxWidth) newWidth = this.maxWidth;
+
+      state.sidebarWidth = newWidth;
+      // Update DOM immediately
+      this.nav.style.width = `${newWidth}px`;
+      this.nav.style.setProperty("--sidebar-width", `${newWidth}px`);
+    };
+
+    const onMouseUp = () => {
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", onMouseUp);
+      document.body.style.cursor = "";
+      localStorage.setItem("be_sidebar_width", state.sidebarWidth);
+    };
+
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", onMouseUp);
+    document.body.style.cursor = "col-resize";
+  }
+};
+
 const Navigation = {
   init() {
     $$(".flow-item").forEach((item) => {
@@ -290,9 +376,11 @@ const Navigation = {
 
 const GlobalBar = {
   init() {
+    Sidebar.init(); // Initialize Sidebar
     Toast.init();
-    $("#projectIdInput").value = state.projectId;
-    $("#industryTagInput").value = state.industryTag;
+
+    // Header inputs removed, rely on state and other inputs
+
     $("#expertIndustryTag").value = state.industryTag;
     if ($("#apiKeyInput")) {
       $("#apiKeyInput").value = state.apiKey;
@@ -303,38 +391,7 @@ const GlobalBar = {
       renderIndustryTagHistory();
     }
 
-    $("#projectIdInput").addEventListener("change", () => {
-      const raw = $("#projectIdInput").value.trim();
-      if (!raw) {
-        state.projectId = "";
-        localStorage.removeItem("be_project_id");
-        if ($("#byokProjectId")) $("#byokProjectId").value = "";
-        CompletedBidHub.syncProjectIdInput();
-        guarded(() => CompletedBidHub.loadRecords())();
-        Toast.info("项目 ID 已清空");
-        guarded(() => ExpertHub.loadDocList())();
-        guarded(() => TenderHub.loadRuns())();
-        return;
-      }
-      if (!isValidUuid(raw)) {
-        Toast.error("项目 ID 必须是 UUID 格式");
-        return;
-      }
-      state.projectId = raw;
-      localStorage.setItem("be_project_id", raw);
-      if ($("#byokProjectId")) $("#byokProjectId").value = raw;
-      CompletedBidHub.syncProjectIdInput();
-      guarded(() => CompletedBidHub.loadRecords())();
-      Toast.success("项目 ID 已更新");
-      guarded(() => ExpertHub.loadDocList())();
-      guarded(() => TenderHub.loadRuns())();
-    });
 
-    $("#industryTagInput").addEventListener("change", () => {
-      applyIndustryTag($("#industryTagInput").value, "top");
-      Toast.success(state.industryTag ? "工程类别已更新" : "工程类别已清空");
-      guarded(() => ExpertHub.loadDocList())();
-    });
 
     if ($("#apiKeyInput")) {
       $("#apiKeyInput").addEventListener("change", () => {
@@ -487,7 +544,7 @@ const ExpertHub = {
       }
 
       res.items.forEach((item) => {
-        const text = `${item.title || item.expert_doc_id.slice(0, 8)} | ${item.doc_type} | 切片 ${item.chunk_count}`;
+        const text = `${item.title || item.expert_doc_id.slice(0, 8)} | ${item.doc_type} | 内容片段 ${item.chunk_count}`;
         const optionA = document.createElement("option");
         optionA.value = item.expert_doc_id;
         optionA.textContent = text;
@@ -517,8 +574,8 @@ const ExpertHub = {
     const view = $("#libraryModulesView");
 
     if (!res.items.length) {
-      view.innerHTML = `<p class="hint">该文档暂无切片。</p>`;
-      setTaskStatus("切片加载完成");
+      view.innerHTML = `<p class="hint">该文档暂无内容片段。</p>`;
+      setTaskStatus("内容片段加载完成");
       return;
     }
 
@@ -533,7 +590,7 @@ const ExpertHub = {
       )
       .join("");
 
-    setTaskStatus(`切片加载完成（${res.items.length} 条）`);
+    setTaskStatus(`内容片段加载完成（${res.items.length} 条）`);
   },
 
   async feedbackPdfIngest() {
@@ -1854,8 +1911,7 @@ const PublishHub = {
       <div class="review-line"><span>必须项覆盖</span><strong>${check.mustMatched}/${check.mustTotal} (${(check.mustRatio * 100).toFixed(1)}%)</strong></div>
       <div class="review-line"><span>章节确认完成度</span><strong>${check.sectionConfirmed}/${check.sectionTotal} (${(check.sectionReady * 100).toFixed(1)}%)</strong></div>
       <div class="review-line"><span>排版配置完整度</span><strong>${check.typesetReady ? "通过" : "未通过"}</strong></div>
-      <div class="review-line"><span>终审建议</span><strong>${
-        !check.pricingBlocked && check.mustRatio >= 0.85 && check.sectionReady >= 1 && check.typesetReady ? "可锁定交付" : "请先按提示调整"
+      <div class="review-line"><span>终审建议</span><strong>${!check.pricingBlocked && check.mustRatio >= 0.85 && check.sectionReady >= 1 && check.typesetReady ? "可锁定交付" : "请先按提示调整"
       }</strong></div>
       <div class="review-line"><span>告警原因</span><strong>${escapeHtml(check.pricingReasons.join("；") || "无")}</strong></div>
     `;

@@ -16,6 +16,7 @@ services:
       - qdrant
     volumes:
       - ./data:/app/data
+      - ./app:/app/app
 
   worker:
     build: .

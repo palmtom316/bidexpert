@@ -1,893 +1,953 @@
 <!doctype html>
 <html lang="zh-CN">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>AI辅助投标系统 | 投标办公工作台</title>
-    <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet" />
-    <link rel="stylesheet" href="/ui/styles.css?v=20260216-1" />
-  </head>
-  <body>
-    <header class="ribbon">
-      <div class="brand">
-        <div class="brand-mark"><i class="ri-cpu-line"></i></div>
-        <div class="brand-text">
-          <div class="brand-title-row">
-            <h1 class="brand-title-handwritten">AI辅助投标系统</h1>
-            <span class="brand-version">v3.7</span>
-          </div>
-        </div>
-      </div>
-      <div class="ribbon-controls">
-        <div class="ribbon-field">
-          <label>项目 ID</label>
-          <input id="projectIdInput" type="text" placeholder="例如：123e4567-e89b-12d3-a456-426614174000" />
-        </div>
-        <div class="ribbon-field">
-          <label>工程类别</label>
-          <input id="industryTagInput" type="text" list="engineeringCategoryHistory" placeholder="例如：房建工程、市政工程" />
-        </div>
-        <button id="btnHealth" class="btn btn-outline btn-sm">
-          <i class="ri-pulse-line"></i>
-          <span id="healthBadge">未检测</span>
-        </button>
-      </div>
-      <datalist id="engineeringCategoryHistory"></datalist>
-    </header>
 
-    <main class="layout">
-      <aside class="flow-nav">
-        <div class="flow-title">操作流程</div>
-        <ul class="flow-list">
-          <li class="flow-list-item">
-            <button type="button" class="flow-item active" data-target="panel-expert-hub">
-              <i class="ri-database-2-line"></i>
-              <div>
-                <h4>公司投标专家库</h4>
-                <p>资料清洗、拆解、入库与回灌</p>
-              </div>
-            </button>
-          </li>
-          <li class="flow-list-item">
-            <button type="button" class="flow-item" data-target="panel-tender-hub">
-              <i class="ri-file-search-line"></i>
-              <div>
-                <h4>招标文件分析</h4>
-                <p>拆解分析与投标要点提炼</p>
-              </div>
-            </button>
-          </li>
-          <li class="flow-list-item">
-            <button type="button" class="flow-item" data-target="panel-bid-hub">
-              <i class="ri-quill-pen-line"></i>
-              <div>
-                <h4>投标文件编制</h4>
-                <p>目录确认与逐章人机协作编写</p>
-              </div>
-            </button>
-          </li>
-          <li class="flow-list-item">
-            <button type="button" class="flow-item" data-target="panel-review-hub">
-              <i class="ri-shield-check-line"></i>
-              <div>
-                <h4>审核评分与定稿</h4>
-                <p>交互式审核、调整、评分</p>
-              </div>
-            </button>
-          </li>
-          <li class="flow-list-item">
-            <button type="button" class="flow-item" data-target="panel-publish-hub">
-              <i class="ri-file-word-2-line"></i>
-              <div>
-                <h4>WPS 排版与终审</h4>
-                <p>排版导出与最终符合性检查</p>
-              </div>
-            </button>
-          </li>
-          <li class="flow-list-item">
-            <button type="button" class="flow-item" data-target="panel-completed-bids">
-              <i class="ri-folder-history-line"></i>
-              <div>
-                <h4>已完成投标</h4>
-                <p>工程归档、中标结果与文件信息</p>
-              </div>
-            </button>
-          </li>
-        </ul>
-        <div class="flow-actions">
-          <button id="btnOpenByokSettings" class="flow-item nav-settings-btn" type="button">
-            <i class="ri-settings-4-line"></i>
-            <div>
-              <h4>AI 模型设置</h4>
-              <p>按流程绑定商用模型与 Embedding</p>
-            </div>
-          </button>
-        </div>
-      </aside>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI辅助投标系统 | 投标办公工作台</title>
+  <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet" />
+  <link rel="stylesheet" href="/ui/styles.css?v=20260216-1" />
+</head>
 
-      <section class="panel-main">
-        <div id="panel-expert-hub" class="view-panel active">
-          <header class="panel-header">
-            <div>
-              <h2><i class="ri-database-2-line"></i> 公司投标专家库</h2>
-              <p>统一完成过往资料入库与投标成果回灌，形成可复用专家知识库。</p>
-            </div>
-          </header>
-
-          <div class="office-grid cols-2">
-            <article class="card">
-              <h3><i class="ri-file-upload-line"></i> 投标资料入库</h3>
-              <div class="form-group">
-                <label>资料文件（可多选）</label>
-                <input id="expertPdfFiles" type="file" accept=".pdf,.md,.markdown,.doc,.docx" multiple />
-              </div>
-              <div class="form-row">
-                <div class="form-group">
-                  <label>资料类型</label>
-                  <select id="expertDocType">
-                    <option value="EXPERT_HISTORY">过往投标文件</option>
-                    <option value="STANDARD_SPEC">规范</option>
-                    <option value="COMPANY_PERFORMANCE">公司业绩</option>
-                    <option value="COMPANY_QUALIFICATION">公司资质</option>
-                    <option value="PM_QUAL_PERFORMANCE">管理人员资质及业绩</option>
-                  </select>
-                </div>
-                <div class="form-group">
-                  <label>工程类别</label>
-                  <input id="expertIndustryTag" type="text" list="engineeringCategoryHistory" placeholder="默认使用顶部工程类别，可手动修改" />
-                </div>
-              </div>
-              <div class="form-actions">
-                <button id="btnExpertIngest" class="btn btn-primary">
-                  <i class="ri-upload-cloud-2-line"></i> 开始入库
-                </button>
-              </div>
-              <pre id="expertIngestResult" class="result-box">等待上传...</pre>
-            </article>
-
-            <article class="card">
-              <h3><i class="ri-table-2"></i> 结构化补录</h3>
-              <p class="hint">用于补充无法从 PDF 直接抽取的条目，一行一条。</p>
-              <div class="form-group">
-                <label>规范</label>
-                <textarea id="structuredStandard" rows="4" placeholder="示例：施工组织设计必须提供进度网络图"></textarea>
-              </div>
-              <div class="form-group">
-                <label>公司业绩</label>
-                <textarea id="structuredCompanyPerformance" rows="4" placeholder="示例：2024 年某智慧园区 EPC 项目，合同额 1.2 亿"></textarea>
-              </div>
-              <div class="form-group">
-                <label>公司资质</label>
-                <textarea id="structuredCompanyQualification" rows="4" placeholder="示例：建筑工程施工总承包一级"></textarea>
-              </div>
-              <div class="form-group">
-                <label>管理人员资质及业绩</label>
-                <textarea id="structuredPmQualificationPerformance" rows="4" placeholder="示例：项目经理张某，一级建造师，近三年同类项目 5 个"></textarea>
-              </div>
-              <div class="form-actions">
-                <button id="btnStructuredIngest" class="btn btn-secondary">
-                  <i class="ri-save-line"></i> 提交结构化补录
-                </button>
-              </div>
-              <pre id="structuredResult" class="result-box">等待提交...</pre>
-            </article>
-
-            <article class="card">
-              <h3><i class="ri-git-repository-private-line"></i> 投标文件回灌专家库</h3>
-              <p class="hint">将系统生成的投标成果回灌知识库，形成持续增强闭环。</p>
-              <div class="split-line"></div>
-
-              <div class="form-group">
-                <label>回灌方式一：上传最终 PDF</label>
-                <input id="feedbackPdfFile" type="file" accept=".pdf" />
-              </div>
-              <div class="form-row">
-                <div class="form-group">
-                  <label>回灌标题</label>
-                  <input id="feedbackTitle" type="text" placeholder="示例：XX 项目最终投标书" />
-                </div>
-                <div class="form-group">
-                  <label>回灌类型</label>
-                  <select id="feedbackDocType">
-                    <option value="GENERATED_BID_FEEDBACK">系统生成标书回灌</option>
-                    <option value="EXPERT_HISTORY">过往投标文件补录</option>
-                  </select>
-                </div>
-              </div>
-              <div class="form-actions">
-                <button id="btnFeedbackPdfIngest" class="btn btn-secondary">
-                  <i class="ri-file-add-line"></i> 上传 PDF 回灌
-                </button>
-              </div>
-
-              <div class="split-line"></div>
-
-              <div class="form-group">
-                <label>回灌方式二：将逐章确认内容回灌到指定专家文档</label>
-                <select id="feedbackTargetDoc"></select>
-              </div>
-              <div class="form-row">
-                <div class="form-group">
-                  <label>outline_id</label>
-                  <input id="feedbackOutlineId" type="text" placeholder="章节编制产生的 outline_id" />
-                </div>
-                <div class="form-group">
-                  <label>section_key</label>
-                  <input id="feedbackSectionKey" type="text" placeholder="例如：S-001" />
-                </div>
-              </div>
-              <div class="form-group">
-                <label>章节标题</label>
-                <input id="feedbackSectionTitle" type="text" placeholder="例如：技术方案" />
-              </div>
-              <div class="form-group">
-                <label>章节内容（确认后正文）</label>
-                <textarea id="feedbackContent" rows="5" placeholder="粘贴已确认章节的最终内容"></textarea>
-              </div>
-              <div class="form-actions">
-                <button id="btnFeedbackSectionUpsert" class="btn btn-primary">
-                  <i class="ri-repeat-2-line"></i> 章节内容回灌
-                </button>
-              </div>
-              <pre id="feedbackResult" class="result-box">等待回灌...</pre>
-            </article>
-
-            <article class="card">
-              <h3><i class="ri-book-open-line"></i> 专家库浏览</h3>
-              <div class="form-row">
-                <div class="form-group">
-                  <label>专家文档</label>
-                  <select id="libraryDocSelect"></select>
-                </div>
-                <div class="form-group action-stack">
-                  <button id="btnLibraryDocs" class="btn btn-outline btn-sm">
-                    <i class="ri-refresh-line"></i> 刷新列表
-                  </button>
-                  <button id="btnLibraryChunks" class="btn btn-outline btn-sm">
-                    <i class="ri-file-list-3-line"></i> 查看切片
-                  </button>
-                </div>
-              </div>
-              <div id="libraryModulesView" class="modules-view">
-                <p class="hint">请选择文档后查看切片。</p>
-              </div>
-            </article>
-          </div>
-        </div>
-
-        <div id="panel-tender-hub" class="view-panel">
-          <header class="panel-header">
-            <div>
-              <h2><i class="ri-file-search-line"></i> 招标文件分析</h2>
-              <p>对新招标文件完成拆解分析，并生成投标要点以驱动后续编制。</p>
-            </div>
-          </header>
-
-          <div class="office-grid cols-2">
-            <article class="card">
-              <h3><i class="ri-upload-2-line"></i> 招标文件拆解</h3>
-              <div class="form-group">
-                <label>招标文件 PDF</label>
-                <input id="analysisPdfFile" type="file" accept=".pdf" />
-              </div>
-              <div class="form-actions">
-                <button id="btnTenderAnalyze" class="btn btn-primary">
-                  <i class="ri-rocket-line"></i> 开始分析
-                </button>
-              </div>
-              <div class="form-row">
-                <div class="form-group">
-                  <label>历史分析记录</label>
-                  <select id="analysisRunSelect"></select>
-                </div>
-                <div class="form-group action-stack">
-                  <button id="btnTenderRuns" class="btn btn-outline btn-sm">
-                    <i class="ri-history-line"></i> 刷新记录
-                  </button>
-                  <button id="btnTenderDetail" class="btn btn-outline btn-sm">
-                    <i class="ri-eye-line"></i> 查看详情
-                  </button>
-                </div>
-              </div>
-              <pre id="tenderAnalyzeResult" class="result-box">等待分析...</pre>
-            </article>
-
-            <article class="card">
-              <h3><i class="ri-lightbulb-flash-line"></i> 拆解结果与投标要点</h3>
-              <div id="tenderSummaryCards" class="summary-cards"></div>
-              <div id="tenderPointsBoard" class="points-board">
-                <p class="hint">分析完成后，这里会显示可执行投标要点。</p>
-              </div>
-              <div class="form-group">
-                <label>投标要点汇总（可编辑）</label>
-                <textarea id="tenderPointsText" rows="8" placeholder="这里会自动生成投标要点"></textarea>
-              </div>
-              <div class="form-actions">
-                <button id="btnUsePointsForOutline" class="btn btn-secondary">
-                  <i class="ri-send-plane-line"></i> 同步到“投标文件编制”
-                </button>
-              </div>
-            </article>
-          </div>
-        </div>
-
-        <div id="panel-bid-hub" class="view-panel">
-          <header class="panel-header">
-            <div>
-              <h2><i class="ri-quill-pen-line"></i> 投标文件编制</h2>
-              <p>先确认目录框架，再通过“用户交付 + 专家库 + AI”逐章编写并确认初稿。</p>
-            </div>
-          </header>
-
-          <article class="card">
-            <h3><i class="ri-flow-chart"></i> 标书生成流程</h3>
-            <div class="generation-stepbar">
-              <button id="btnStepUpload" class="step-btn" type="button">1. 文档上传</button>
-              <button id="btnStepParse" class="step-btn" type="button">2. 文档解析</button>
-              <button id="btnStepOutline" class="step-btn active" type="button">3. 大纲生成</button>
-              <button id="btnStepGenerate" class="step-btn" type="button">4. 内容生成</button>
-              <button id="btnStepExport" class="step-btn" type="button">5. 结果导出</button>
-            </div>
-            <div class="generation-config-row">
-              <div class="form-group">
-                <label>选择智能体</label>
-                <select id="generationAgentPreset">
-                  <option value="content-v1">内容生成 1</option>
-                  <option value="content-v2">内容生成 2（稳健）</option>
-                  <option value="content-v3">内容生成 3（高质量）</option>
-                </select>
-              </div>
-              <div class="form-group">
-                <label>并发数量</label>
-                <input id="generationConcurrency" type="number" min="1" max="8" value="2" />
-              </div>
-              <div class="form-group action-stack">
-                <button id="btnGenerateSelected" class="btn btn-primary btn-sm">
-                  <i class="ri-play-circle-line"></i> 生成选中章节
-                </button>
-                <button id="btnGenerateAll" class="btn btn-secondary btn-sm">
-                  <i class="ri-play-list-add-line"></i> 生成全部
-                </button>
-                <button id="btnExportGenerationResult" class="btn btn-outline btn-sm">
-                  <i class="ri-file-transfer-line"></i> 导出生成结果
-                </button>
-              </div>
-            </div>
-          </article>
-
-          <article class="card">
-            <h3><i class="ri-node-tree"></i> 目录框架生成与确认</h3>
-            <div class="form-group">
-              <label>招标拆解输入（可直接使用上一环节投标要点）</label>
-              <textarea id="outlineRequirementText" rows="7" placeholder="粘贴招标文件关键要求，或点击“载入投标要点”自动填充"></textarea>
-            </div>
-            <div class="form-actions left">
-              <button id="btnLoadTenderPoints" class="btn btn-outline">
-                <i class="ri-file-copy-line"></i> 载入投标要点
-              </button>
-              <button id="btnCreateOutline" class="btn btn-primary">
-                <i class="ri-layout-top-line"></i> 生成目录框架
-              </button>
-              <button id="btnConfirmOutline" class="btn btn-secondary">
-                <i class="ri-checkbox-circle-line"></i> 用户确认并锁定目录
-              </button>
-              <span id="outlineStatusBadge" class="status-chip">未生成</span>
-            </div>
-            <div id="outlineSectionTable" class="outline-table">
-              <p class="hint">目录生成后会显示在这里，可在编写前逐项确认。</p>
-            </div>
-          </article>
-
-          <div class="generation-workspace">
-            <div class="tree-pane">
-              <div class="tree-pane-header">目录</div>
-              <ul id="editorSectionList" class="section-list compact">
-                <li class="empty-hint">请先生成并确认目录</li>
-              </ul>
-            </div>
-            <div class="preview-pane-wrap">
-              <div class="preview-pane-header">
-                <div id="generationPreviewTitle">内容预览</div>
-                <div id="generationPreviewMeta">选择目录节点后查看预览</div>
-              </div>
-              <pre id="generationPreviewPane" class="preview-pane">尚未生成内容。</pre>
-            </div>
-          </div>
-
-          <article class="card">
-            <h3><i class="ri-edit-box-line"></i> 章节内容生成与交付</h3>
-            <div class="editor-toolbar">
-              <div>
-                <div id="currentSectionTitle" class="current-section">未选择章节</div>
-                <div id="currentSectionMeta" class="current-meta">请先在左侧选择章节</div>
-              </div>
-              <div class="toolbar-actions">
-                <button id="btnRetrieveEvidence" class="btn btn-outline btn-sm">
-                  <i class="ri-search-line"></i> 检索专家资料
-                </button>
-                <button id="btnGenerateSection" class="btn btn-primary btn-sm">
-                  <i class="ri-sparkling-line"></i> AI 逐章生成
-                </button>
-                <button id="btnComposeDraft" class="btn btn-secondary btn-sm">
-                  <i class="ri-scissors-cut-line"></i> 合成章节工作稿
-                </button>
-                <button id="btnSaveSection" class="btn btn-secondary btn-sm">
-                  <i class="ri-save-line"></i> 章节确认
-                </button>
-              </div>
-            </div>
-
-            <div class="compose-grid">
-              <div class="pane-block">
-                <div class="pane-header">用户交付内容</div>
-                <textarea id="sectionUserInput" class="pane-editor" placeholder="填写本章人工交付内容、重点表达、禁用词、业主偏好等"></textarea>
-              </div>
-              <div class="pane-block">
-                <div class="pane-header">专家库内容</div>
-                <div id="sectionEvidencePane" class="pane-content">请先检索专家资料。</div>
-              </div>
-              <div class="pane-block">
-                <div class="pane-header">AI 生成内容</div>
-                <div id="sectionAiDraftPane" class="pane-content">请点击“AI 逐章生成”。</div>
-              </div>
-              <div class="pane-block">
-                <div class="pane-header">章节最终稿（可编辑）</div>
-                <textarea id="sectionFinalDraft" class="pane-editor" placeholder="系统会自动合成工作稿，你可在此继续调整"></textarea>
-              </div>
-            </div>
-            <pre id="sectionTaskLog" class="result-box">章节任务日志...</pre>
-          </article>
-        </div>
-
-        <div id="panel-review-hub" class="view-panel">
-          <header class="panel-header">
-            <div>
-              <h2><i class="ri-shield-check-line"></i> 审核评分与定稿</h2>
-              <p>按招标要求与专家库证据进行交互式审核、调整、评分，形成最终投标文件。</p>
-            </div>
-          </header>
-
-          <div class="office-grid cols-2">
-            <article class="card highlight">
-              <h3><i class="ri-bar-chart-2-line"></i> 审核 / 评分概览</h3>
-              <div class="grid-2">
-                <div class="metric-card" id="reviewSummaryCard">
-                  <div class="metric-label">最新章节审核</div>
-                  <div class="metric-value">--</div>
-                  <div class="metric-sub">状态 / 时间</div>
-                </div>
-                <div class="metric-card" id="scoringSummaryCard">
-                  <div class="metric-label">项目评分</div>
-                  <div class="metric-value">--</div>
-                  <div class="metric-sub">score_total</div>
-                </div>
-              </div>
-              <div class="form-row">
-                <div class="form-group action-stack">
-                  <button id="btnFetchReviewApi" class="btn btn-primary btn-sm"><i class="ri-search-eye-line"></i> 拉取审核</button>
-                  <button id="btnFetchScoreApi" class="btn btn-secondary btn-sm"><i class="ri-function-line"></i> 拉取评分</button>
-                </div>
-              </div>
-              <pre id="reviewSummaryDetail" class="result-box compact">等待请求...</pre>
-            </article>
-
-            <article class="card">
-              <h3><i class="ri-shield-check-line"></i> 章节审核交互</h3>
-              <div class="form-group">
-                <label>选择章节</label>
-                <select id="reviewSectionSelect"></select>
-              </div>
-              <div class="form-group">
-                <label>用户交互结论</label>
-                <select id="reviewDecision">
-                  <option value="PASS">通过</option>
-                  <option value="ADJUST_PASS">调整后通过</option>
-                  <option value="REWRITE">需重写</option>
-                </select>
-              </div>
-              <div class="form-group">
-                <label>交互备注</label>
-                <textarea id="reviewUserNote" rows="5" placeholder="记录与用户确认后的修改意见"></textarea>
-              </div>
-              <div class="form-actions left">
-                <button id="btnRunSectionReview" class="btn btn-primary">
-                  <i class="ri-search-eye-line"></i> 执行章节审核评分
-                </button>
-                <button id="btnApplyReviewNote" class="btn btn-secondary">
-                  <i class="ri-edit-box-line"></i> 应用交互结果
-                </button>
-              </div>
-              <div id="reviewReport" class="review-report">
-                <p class="hint">审核后会显示本章合规与得分情况。</p>
-              </div>
-            </article>
-
-            <article class="card">
-              <h3><i class="ri-file-check-line"></i> 最终稿汇总</h3>
-              <div id="reviewOverallMetrics" class="summary-cards"></div>
-              <div class="form-actions">
-                <button id="btnBuildFinalDraft" class="btn btn-primary">
-                  <i class="ri-file-text-line"></i> 形成最终投标文件
-                </button>
-              </div>
-              <div class="form-group">
-                <label>最终投标文件正文（可继续编辑）</label>
-                <textarea id="finalDraftPreview" rows="16" placeholder="汇总后的最终稿会显示在这里"></textarea>
-              </div>
-            </article>
-          </div>
-        </div>
-
-        <div id="panel-publish-hub" class="view-panel">
-          <header class="panel-header">
-            <div>
-              <h2><i class="ri-file-word-2-line"></i> WPS 排版与终审</h2>
-              <p>按招标文件格式导出排版文档，并在交付前完成最终符合性检查。</p>
-            </div>
-          </header>
-
-          <article class="card">
-            <h3><i class="ri-layout-grid-line"></i> 排版配置</h3>
-            <div class="typeset-block">
-              <h4>页面设置</h4>
-              <div class="typeset-cover-row" id="coverTemplateOptions">
-                <button class="cover-option active" type="button" data-cover-template="none">无封面</button>
-                <button class="cover-option" type="button" data-cover-template="blue-wave">投标书（蓝波）</button>
-                <button class="cover-option" type="button" data-cover-template="simple">投标文件（简洁）</button>
-                <button class="cover-option" type="button" data-cover-template="city">投标书（城市）</button>
-              </div>
-              <div class="typeset-grid">
-                <div class="form-group">
-                  <label>页眉文字</label>
-                  <input id="typesetHeaderText" type="text" value="" />
-                </div>
-                <div class="form-group">
-                  <label>上边距（cm）</label>
-                  <input id="typesetHeaderOffset" type="number" min="0" step="0.1" value="1.5" />
-                </div>
-                <div class="form-group">
-                  <label>页脚文字</label>
-                  <input id="typesetFooterText" type="text" value="" />
-                </div>
-                <div class="form-group">
-                  <label>下边距（cm）</label>
-                  <input id="typesetFooterOffset" type="number" min="0" step="0.1" value="0.0" />
-                </div>
-                <div class="form-group">
-                  <label>页边距上（cm）</label>
-                  <input id="typesetMarginTop" type="number" min="0" step="0.01" value="2.54" />
-                </div>
-                <div class="form-group">
-                  <label>页边距下（cm）</label>
-                  <input id="typesetMarginBottom" type="number" min="0" step="0.01" value="2.54" />
-                </div>
-                <div class="form-group">
-                  <label>页边距左（cm）</label>
-                  <input id="typesetMarginLeft" type="number" min="0" step="0.01" value="3.17" />
-                </div>
-                <div class="form-group">
-                  <label>页边距右（cm）</label>
-                  <input id="typesetMarginRight" type="number" min="0" step="0.01" value="3.17" />
-                </div>
-              </div>
-            </div>
-
-            <div class="typeset-block">
-              <h4>段落设置</h4>
-              <div class="typeset-table" id="typesetTable">
-                <div class="typeset-row typeset-row-head">
-                  <span>样式</span>
-                  <span>字体</span>
-                  <span>字号</span>
-                  <span>对齐</span>
-                  <span>加粗</span>
-                  <span>斜体</span>
-                  <span>行距模式</span>
-                  <span>行距值</span>
-                  <span>首行缩进</span>
-                </div>
-                <div class="typeset-row" data-style-key="H1">
-                  <span>一级标题</span>
-                  <select class="fmt-font"><option>微软雅黑</option><option>宋体</option><option>仿宋</option></select>
-                  <select class="fmt-size"><option>小二</option><option selected>小三</option><option>三号</option></select>
-                  <select class="fmt-align"><option selected>居中对齐</option><option>左对齐</option></select>
-                  <input class="fmt-bold" type="checkbox" checked />
-                  <input class="fmt-italic" type="checkbox" />
-                  <select class="fmt-line-mode"><option selected>固定值</option><option>1.5 倍</option></select>
-                  <input class="fmt-line-value" type="number" step="0.1" value="28" />
-                  <input class="fmt-indent" type="number" step="1" value="2" />
-                </div>
-                <div class="typeset-row" data-style-key="H2">
-                  <span>二级标题</span>
-                  <select class="fmt-font"><option selected>微软雅黑</option><option>宋体</option><option>仿宋</option></select>
-                  <select class="fmt-size"><option selected>小三</option><option>四号</option></select>
-                  <select class="fmt-align"><option selected>左对齐</option><option>居中对齐</option></select>
-                  <input class="fmt-bold" type="checkbox" checked />
-                  <input class="fmt-italic" type="checkbox" />
-                  <select class="fmt-line-mode"><option selected>固定值</option><option>1.5 倍</option></select>
-                  <input class="fmt-line-value" type="number" step="0.1" value="28" />
-                  <input class="fmt-indent" type="number" step="1" value="2" />
-                </div>
-                <div class="typeset-row" data-style-key="H3">
-                  <span>三级标题</span>
-                  <select class="fmt-font"><option selected>微软雅黑</option><option>宋体</option><option>仿宋</option></select>
-                  <select class="fmt-size"><option selected>小三</option><option>四号</option></select>
-                  <select class="fmt-align"><option selected>左对齐</option><option>居中对齐</option></select>
-                  <input class="fmt-bold" type="checkbox" checked />
-                  <input class="fmt-italic" type="checkbox" />
-                  <select class="fmt-line-mode"><option selected>固定值</option><option>1.5 倍</option></select>
-                  <input class="fmt-line-value" type="number" step="0.1" value="28" />
-                  <input class="fmt-indent" type="number" step="1" value="2" />
-                </div>
-                <div class="typeset-row" data-style-key="BODY">
-                  <span>段落正文</span>
-                  <select class="fmt-font"><option selected>微软雅黑</option><option>宋体</option><option>仿宋</option></select>
-                  <select class="fmt-size"><option>小四</option><option selected>四号</option><option>小三</option></select>
-                  <select class="fmt-align"><option selected>左对齐</option><option>两端对齐</option></select>
-                  <input class="fmt-bold" type="checkbox" />
-                  <input class="fmt-italic" type="checkbox" />
-                  <select class="fmt-line-mode"><option selected>固定值</option><option>1.5 倍</option></select>
-                  <input class="fmt-line-value" type="number" step="0.1" value="28" />
-                  <input class="fmt-indent" type="number" step="1" value="2" />
-                </div>
-              </div>
-            </div>
-
-            <div class="form-group">
-              <label>待排版最终稿（可编辑）</label>
-              <textarea id="publishFinalDraft" rows="10" placeholder="默认读取上一步最终稿"></textarea>
-            </div>
-            <div class="form-row">
-              <div class="form-group">
-                <label>输出文件名（docx）</label>
-                <input id="exportFileName" type="text" placeholder="投标文件_项目名.docx" />
-              </div>
-              <div class="form-group action-stack">
-                <button id="btnRenderWord" class="btn btn-primary">
-                  <i class="ri-download-2-line"></i> 生成 WPS 排版稿
-                </button>
-              </div>
-            </div>
-            <pre id="renderResult" class="result-box">等待导出...</pre>
-          </article>
-
-          <div class="office-grid cols-2">
-            <article class="card">
-              <h3><i class="ri-shield-star-line"></i> 终审检查</h3>
-              <div class="form-actions left">
-                <button id="btnFinalCheck" class="btn btn-secondary">
-                  <i class="ri-checkbox-multiple-line"></i> 执行终审检查
-                </button>
-                <button id="btnLockDelivery" class="btn btn-primary">
-                  <i class="ri-lock-2-line"></i> 锁定最终交付
-                </button>
-              </div>
-              <div id="finalCheckBoard" class="review-report">
-                <p class="hint">执行终审后显示符合性结果。</p>
-              </div>
-              <div id="deliveryStatus" class="delivery-status">状态：未锁定</div>
-            </article>
-
-            <article class="card">
-              <h3><i class="ri-links-line"></i> 专家库闭环回灌</h3>
-              <p class="hint">终审通过后，建议将交付文件或章节回灌到专家库，形成知识闭环。</p>
-              <div class="form-actions">
-                <button id="btnJumpToFeedback" class="btn btn-outline btn-sm">
-                  <i class="ri-arrow-left-right-line"></i> 前往“公司投标专家库”执行回灌
-                </button>
-              </div>
-            </article>
-          </div>
-        </div>
-
-        <div id="panel-completed-bids" class="view-panel">
-          <header class="panel-header">
-            <div>
-              <h2><i class="ri-folder-history-line"></i> 已完成投标</h2>
-              <p>归档已使用本系统完成的投标工程与投标文件信息，并记录中标结果。</p>
-            </div>
-          </header>
-
-          <div class="office-grid cols-2">
-            <article class="card">
-              <h3><i class="ri-add-circle-line"></i> 新增完成记录</h3>
-              <div class="form-row">
-                <div class="form-group">
-                  <label>工程名称</label>
-                  <input id="completedBidProjectName" type="text" placeholder="示例：光伏建设项目" />
-                </div>
-                <div class="form-group">
-                  <label>项目 ID（UUID）</label>
-                  <input id="completedBidProjectId" type="text" placeholder="手动输入，建议与顶部项目 ID 一致" />
-                </div>
-              </div>
-              <div class="form-row">
-                <div class="form-group">
-                  <label>招标单位</label>
-                  <input id="completedBidTenderer" type="text" placeholder="示例：中国移动" />
-                </div>
-                <div class="form-group">
-                  <label>投标结果</label>
-                  <select id="completedBidResult">
-                    <option value="WON">已中标</option>
-                    <option value="LOST">未中标</option>
-                  </select>
-                </div>
-              </div>
-              <div class="form-row">
-                <div class="form-group">
-                  <label>投标文件名</label>
-                  <input id="completedBidFileName" type="text" placeholder="示例：光伏建设项目_投标文件.docx" />
-                </div>
-                <div class="form-group">
-                  <label>完成日期</label>
-                  <input id="completedBidDate" type="date" />
-                </div>
-              </div>
-              <div class="form-group">
-                <label>投标文件信息</label>
-                <textarea id="completedBidFileInfo" rows="5" placeholder="记录文档版本、交付包说明、关键里程碑等"></textarea>
-              </div>
-              <div class="form-actions left">
-                <button id="btnSaveCompletedBid" class="btn btn-primary">
-                  <i class="ri-save-line"></i> 保存记录
-                </button>
-                <button id="btnResetCompletedBid" class="btn btn-outline">
-                  <i class="ri-eraser-line"></i> 清空输入
-                </button>
-              </div>
-              <pre id="completedBidResultLog" class="result-box">等待录入...</pre>
-            </article>
-
-            <article class="card">
-              <h3><i class="ri-file-list-3-line"></i> 已完成投标清单</h3>
-              <div id="completedBidTable" class="completed-bid-table">
-                <p class="hint">暂无完成记录。</p>
-              </div>
-            </article>
-          </div>
-        </div>
-      </section>
-    </main>
-
-    <div id="drawerByok" class="drawer-overlay hidden">
-      <div class="drawer byok-drawer">
-        <div class="drawer-header">
-          <h3><i class="ri-settings-4-line"></i> AI 模型设置</h3>
-          <button id="btnCloseByokSettings" class="btn btn-outline btn-sm" type="button">
-            <i class="ri-close-line"></i> 关闭
-          </button>
-        </div>
-        <div class="drawer-body">
-          <section class="drawer-section">
-            <h4>项目配置</h4>
-            <div class="form-row">
-              <div class="form-group">
-                <label>项目 ID（UUID）</label>
-                <input id="byokProjectId" type="text" placeholder="来自顶部手动输入，可按需修改" />
-              </div>
-              <div class="form-group">
-                <label>接口认证 API Key（X-API-Key）</label>
-                <input id="apiKeyInput" type="password" placeholder="用于当前页面请求鉴权，可留空" />
-              </div>
-            </div>
-            <div class="form-row">
-              <div class="form-group action-stack">
-                <button id="btnByokLoadProfiles" class="btn btn-outline btn-sm" type="button">
-                  <i class="ri-refresh-line"></i> 加载 Profiles
-                </button>
-                <button id="btnByokLoadPolicy" class="btn btn-outline btn-sm" type="button">
-                  <i class="ri-file-search-line"></i> 加载流程策略
-                </button>
-              </div>
-            </div>
-          </section>
-
-          <section class="drawer-section">
-            <h4>新增商用模型 Profile（默认百炼 Qwen3）</h4>
-            <div class="form-row">
-              <div class="form-group">
-                <label>Provider</label>
-                <select id="byokProvider">
-                  <option value="qwen">qwen（百炼）</option>
-                  <option value="openai">openai</option>
-                  <option value="deepseek">deepseek</option>
-                </select>
-              </div>
-              <div class="form-group">
-                <label>Model</label>
-                <input id="byokModelName" type="text" value="qwen3" />
-              </div>
-            </div>
-            <div class="form-row">
-              <div class="form-group">
-                <label>Base URL（可选）</label>
-                <input id="byokBaseUrl" type="text" placeholder="https://dashscope.aliyuncs.com/compatible-mode/v1" />
-              </div>
-              <div class="form-group">
-                <label>Key 存储方式</label>
-                <select id="byokKeyStorage">
-                  <option value="ENCRYPTED_DB">ENCRYPTED_DB</option>
-                  <option value="TEMP_REDIS">TEMP_REDIS</option>
-                </select>
-              </div>
-            </div>
-            <div class="form-group">
-              <label>API Key</label>
-              <input id="byokApiKey" type="password" placeholder="输入商用模型 API Key" />
-            </div>
-            <div class="form-actions left">
-              <button id="btnByokCreateProfile" class="btn btn-primary btn-sm" type="button">
-                <i class="ri-add-line"></i> 创建 Profile
-              </button>
-              <button id="btnByokPresetQwen3" class="btn btn-secondary btn-sm" type="button">
-                <i class="ri-magic-line"></i> 预置百炼 Qwen3
-              </button>
-            </div>
-          </section>
-
-          <section class="drawer-section">
-            <h4>按工作流程绑定模型</h4>
-            <p class="hint">支持不同流程使用不同商用模型；Embedding 下拉仅展示向量模型；未选择时使用系统默认模型（通用为百炼 Qwen3）。</p>
-            <div class="form-group">
-              <label>公司投标专家库（抽取模型）</label>
-              <select id="byokWorkflowExpert"></select>
-            </div>
-            <div class="form-group">
-              <label>Embedding 专用模型（向量检索）</label>
-              <select id="byokWorkflowEmbed"></select>
-            </div>
-            <div class="form-group">
-              <label>招标文件分析（Query Rewrite）</label>
-              <select id="byokWorkflowTender"></select>
-            </div>
-            <div class="form-group">
-              <label>投标文件编制（内容生成）</label>
-              <select id="byokWorkflowBid"></select>
-            </div>
-            <div class="form-group">
-              <label>审核评分与定稿（Review）</label>
-              <select id="byokWorkflowReview"></select>
-            </div>
-            <div class="form-group">
-              <label>排版与终审（Program Support）</label>
-              <select id="byokWorkflowPublish"></select>
-            </div>
-            <div class="form-actions left">
-              <button id="btnByokSavePolicy" class="btn btn-primary btn-sm" type="button">
-                <i class="ri-save-line"></i> 保存流程策略
-              </button>
-            </div>
-          </section>
-
-          <section class="drawer-section">
-            <h4>当前 Profiles</h4>
-            <div id="byokProfileList" class="byok-profile-list">
-              <p class="hint">暂无 profile，请先创建。</p>
-            </div>
-          </section>
-
-          <section class="drawer-section">
-            <h4>操作结果</h4>
-            <pre id="byokResult" class="result-box">等待操作...</pre>
-          </section>
+<body>
+  <header class="ribbon">
+    <div class="brand">
+      <div class="brand-mark"><i class="ri-cpu-line"></i></div>
+      <div class="brand-text">
+        <div class="brand-title-row">
+          <h1 class="brand-title-handwritten">AI辅助投标系统</h1>
+          <span class="brand-version">v3.7</span>
         </div>
       </div>
     </div>
+    <div class="ribbon-controls">
+      <button id="btnHealth" class="btn btn-outline btn-sm">
+        <i class="ri-pulse-line"></i>
+        <span id="healthBadge">未检测</span>
+      </button>
+    </div>
+    <datalist id="engineeringCategoryHistory"></datalist>
+  </header>
 
-    <footer class="statusbar">
-      <div class="status-left">
-        <span><i class="ri-cloud-line"></i> AI辅助投标系统</span>
-        <span class="divider">|</span>
-        <span id="taskStatusText">无后台任务</span>
+  <main class="layout">
+    <aside class="flow-nav" id="sidebarNav">
+      <div class="sidebar-resizer" id="sidebarResizer"></div>
+      <div class="nav-header">
+        <div class="flow-title">操作流程</div>
+        <button id="btnToggleSidebar" class="nav-toggle-btn" title="收起/展开菜单">
+          <i class="ri-menu-fold-line"></i>
+        </button>
       </div>
-      <div class="status-right">
-        <span id="clock">--:--:--</span>
+      <ul class="flow-list">
+        <li class="flow-list-item">
+          <button type="button" class="flow-item active" data-target="panel-expert-hub">
+            <i class="ri-database-2-line"></i>
+            <div>
+              <h4>公司投标专家库</h4>
+              <p>资料清洗、拆解、入库与回灌</p>
+            </div>
+          </button>
+        </li>
+        <li class="flow-list-item">
+          <button type="button" class="flow-item" data-target="panel-tender-hub">
+            <i class="ri-file-search-line"></i>
+            <div>
+              <h4>招标文件分析</h4>
+              <p>拆解分析与投标要点提炼</p>
+            </div>
+          </button>
+        </li>
+        <li class="flow-list-item">
+          <button type="button" class="flow-item" data-target="panel-bid-hub">
+            <i class="ri-quill-pen-line"></i>
+            <div>
+              <h4>投标文件编制</h4>
+              <p>目录确认与逐章人机协作编写</p>
+            </div>
+          </button>
+        </li>
+        <li class="flow-list-item">
+          <button type="button" class="flow-item" data-target="panel-review-hub">
+            <i class="ri-shield-check-line"></i>
+            <div>
+              <h4>审核评分与定稿</h4>
+              <p>交互式审核、调整、评分</p>
+            </div>
+          </button>
+        </li>
+        <li class="flow-list-item">
+          <button type="button" class="flow-item" data-target="panel-publish-hub">
+            <i class="ri-file-word-2-line"></i>
+            <div>
+              <h4>WPS 排版与终审</h4>
+              <p>排版导出与最终符合性检查</p>
+            </div>
+          </button>
+        </li>
+        <li class="flow-list-item">
+          <button type="button" class="flow-item" data-target="panel-completed-bids">
+            <i class="ri-folder-history-line"></i>
+            <div>
+              <h4>已完成投标</h4>
+              <p>工程归档、中标结果与文件信息</p>
+            </div>
+          </button>
+        </li>
+      </ul>
+      <div class="flow-actions">
+        <button id="btnOpenByokSettings" class="flow-item nav-settings-btn" type="button">
+          <i class="ri-settings-4-line"></i>
+          <div>
+            <h4>AI 模型设置</h4>
+            <p>按流程绑定商用模型与 Embedding</p>
+          </div>
+        </button>
       </div>
-    </footer>
+    </aside>
 
-    <div id="toastContainer" class="toast-container"></div>
+    <section class="panel-main">
+      <div id="panel-expert-hub" class="view-panel active">
+        <header class="panel-header">
+          <div>
+            <h2><i class="ri-database-2-line"></i> 公司投标专家库</h2>
+            <p>统一完成过往资料入库与投标成果回灌，形成可复用专家知识库。</p>
+          </div>
+        </header>
 
-    <script src="/ui/app.js"></script>
-  </body>
+        <div class="office-grid cols-2">
+          <article class="card">
+            <h3><i class="ri-file-upload-line"></i> 投标资料入库</h3>
+            <div class="form-group">
+              <label>资料文件（可多选）</label>
+              <input id="expertPdfFiles" type="file" accept=".pdf,.md,.markdown,.doc,.docx" multiple />
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>资料类型</label>
+                <select id="expertDocType">
+                  <option value="EXPERT_HISTORY">过往投标文件</option>
+                  <option value="STANDARD_SPEC">规范</option>
+                  <option value="COMPANY_PERFORMANCE">公司业绩</option>
+                  <option value="COMPANY_QUALIFICATION">公司资质</option>
+                  <option value="PM_QUAL_PERFORMANCE">管理人员资质及业绩</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>工程类别</label>
+                <input id="expertIndustryTag" type="text" list="engineeringCategoryHistory"
+                  placeholder="默认使用顶部工程类别，可手动修改" />
+              </div>
+            </div>
+            <div class="form-actions">
+              <button id="btnExpertIngest" class="btn btn-primary">
+                <i class="ri-upload-cloud-2-line"></i> 开始入库
+              </button>
+            </div>
+            <pre id="expertIngestResult" class="result-box">等待上传...</pre>
+          </article>
+
+          <article class="card">
+            <h3><i class="ri-table-2"></i> 结构化补录</h3>
+            <p class="hint">用于补充无法从 PDF 直接抽取的条目，一行一条。</p>
+            <div class="form-group">
+              <label>规范</label>
+              <textarea id="structuredStandard" rows="4" placeholder="示例：施工组织设计必须提供进度网络图"></textarea>
+            </div>
+            <div class="form-group">
+              <label>公司业绩</label>
+              <textarea id="structuredCompanyPerformance" rows="4"
+                placeholder="示例：2024 年某智慧园区 EPC 项目，合同额 1.2 亿"></textarea>
+            </div>
+            <div class="form-group">
+              <label>公司资质</label>
+              <textarea id="structuredCompanyQualification" rows="4" placeholder="示例：建筑工程施工总承包一级"></textarea>
+            </div>
+            <div class="form-group">
+              <label>管理人员资质及业绩</label>
+              <textarea id="structuredPmQualificationPerformance" rows="4"
+                placeholder="示例：项目经理张某，一级建造师，近三年同类项目 5 个"></textarea>
+            </div>
+            <div class="form-actions">
+              <button id="btnStructuredIngest" class="btn btn-secondary">
+                <i class="ri-save-line"></i> 提交结构化补录
+              </button>
+            </div>
+            <pre id="structuredResult" class="result-box">等待提交...</pre>
+          </article>
+
+          <article class="card">
+            <h3><i class="ri-git-repository-private-line"></i> 投标文件回灌专家库</h3>
+            <p class="hint">将系统生成的投标成果回灌知识库，形成持续增强闭环。</p>
+            <div class="split-line"></div>
+
+            <div class="form-group">
+              <label>回灌方式一：上传最终 PDF</label>
+              <input id="feedbackPdfFile" type="file" accept=".pdf" />
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>回灌标题</label>
+                <input id="feedbackTitle" type="text" placeholder="示例：XX 项目最终投标书" />
+              </div>
+              <div class="form-group">
+                <label>回灌类型</label>
+                <select id="feedbackDocType">
+                  <option value="GENERATED_BID_FEEDBACK">系统生成标书回灌</option>
+                  <option value="EXPERT_HISTORY">过往投标文件补录</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-actions">
+              <button id="btnFeedbackPdfIngest" class="btn btn-secondary">
+                <i class="ri-file-add-line"></i> 上传 PDF 回灌
+              </button>
+            </div>
+
+            <div class="split-line"></div>
+
+            <div class="form-group">
+              <label>回灌方式二：将逐章确认内容回灌到指定专家文档</label>
+              <select id="feedbackTargetDoc"></select>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>outline_id</label>
+                <input id="feedbackOutlineId" type="text" placeholder="章节编制产生的 outline_id" />
+              </div>
+              <div class="form-group">
+                <label>section_key</label>
+                <input id="feedbackSectionKey" type="text" placeholder="例如：S-001" />
+              </div>
+            </div>
+            <div class="form-group">
+              <label>章节标题</label>
+              <input id="feedbackSectionTitle" type="text" placeholder="例如：技术方案" />
+            </div>
+            <div class="form-group">
+              <label>章节内容（确认后正文）</label>
+              <textarea id="feedbackContent" rows="5" placeholder="粘贴已确认章节的最终内容"></textarea>
+            </div>
+            <div class="form-actions">
+              <button id="btnFeedbackSectionUpsert" class="btn btn-primary">
+                <i class="ri-repeat-2-line"></i> 章节内容回灌
+              </button>
+            </div>
+            <pre id="feedbackResult" class="result-box">等待回灌...</pre>
+          </article>
+
+          <article class="card">
+            <h3><i class="ri-book-open-line"></i> 专家库浏览</h3>
+            <div class="form-row">
+              <div class="form-group">
+                <label>专家文档</label>
+                <select id="libraryDocSelect"></select>
+              </div>
+              <div class="form-group action-stack">
+                <button id="btnLibraryDocs" class="btn btn-outline btn-sm">
+                  <i class="ri-refresh-line"></i> 刷新列表
+                </button>
+                <button id="btnLibraryChunks" class="btn btn-outline btn-sm">
+                  <i class="ri-file-list-3-line"></i> 查看内容片段
+                </button>
+              </div>
+            </div>
+            <div id="libraryModulesView" class="modules-view">
+              <p class="hint">请选择文档后查看内容片段。</p>
+            </div>
+          </article>
+        </div>
+      </div>
+
+      <div id="panel-tender-hub" class="view-panel">
+        <header class="panel-header">
+          <div>
+            <h2><i class="ri-file-search-line"></i> 招标文件分析</h2>
+            <p>对新招标文件完成拆解分析，并生成投标要点以驱动后续编制。</p>
+          </div>
+        </header>
+
+        <div class="office-grid cols-2">
+          <article class="card">
+            <h3><i class="ri-upload-2-line"></i> 招标文件拆解</h3>
+            <div class="form-group">
+              <label>招标文件 PDF</label>
+              <input id="analysisPdfFile" type="file" accept=".pdf" />
+            </div>
+            <div class="form-actions">
+              <button id="btnTenderAnalyze" class="btn btn-primary">
+                <i class="ri-rocket-line"></i> 开始分析
+              </button>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>历史分析记录</label>
+                <select id="analysisRunSelect"></select>
+              </div>
+              <div class="form-group action-stack">
+                <button id="btnTenderRuns" class="btn btn-outline btn-sm">
+                  <i class="ri-history-line"></i> 刷新记录
+                </button>
+                <button id="btnTenderDetail" class="btn btn-outline btn-sm">
+                  <i class="ri-eye-line"></i> 查看详情
+                </button>
+              </div>
+            </div>
+            <pre id="tenderAnalyzeResult" class="result-box">等待分析...</pre>
+          </article>
+
+          <article class="card">
+            <h3><i class="ri-lightbulb-flash-line"></i> 拆解结果与投标要点</h3>
+            <div id="tenderSummaryCards" class="summary-cards"></div>
+            <div id="tenderPointsBoard" class="points-board">
+              <p class="hint">分析完成后，这里会显示可执行投标要点。</p>
+            </div>
+            <div class="form-group">
+              <label>投标要点汇总（可编辑）</label>
+              <textarea id="tenderPointsText" rows="8" placeholder="这里会自动生成投标要点"></textarea>
+            </div>
+            <div class="form-actions">
+              <button id="btnUsePointsForOutline" class="btn btn-secondary">
+                <i class="ri-send-plane-line"></i> 同步到“投标文件编制”
+              </button>
+            </div>
+          </article>
+        </div>
+      </div>
+
+      <div id="panel-bid-hub" class="view-panel">
+        <header class="panel-header">
+          <div>
+            <h2><i class="ri-quill-pen-line"></i> 投标文件编制</h2>
+            <p>先确认目录框架，再通过“用户交付 + 专家库 + AI”逐章编写并确认初稿。</p>
+          </div>
+        </header>
+
+        <article class="card">
+          <h3><i class="ri-flow-chart"></i> 标书生成流程</h3>
+          <div class="generation-stepbar">
+            <button id="btnStepUpload" class="step-btn" type="button">1. 文档上传</button>
+            <button id="btnStepParse" class="step-btn" type="button">2. 文档解析</button>
+            <button id="btnStepOutline" class="step-btn active" type="button">3. 大纲生成</button>
+            <button id="btnStepGenerate" class="step-btn" type="button">4. 内容生成</button>
+            <button id="btnStepExport" class="step-btn" type="button">5. 结果导出</button>
+          </div>
+          <div class="generation-config-row">
+            <div class="form-group">
+              <label>选择智能体</label>
+              <select id="generationAgentPreset">
+                <option value="content-v1">内容生成 1</option>
+                <option value="content-v2">内容生成 2（稳健）</option>
+                <option value="content-v3">内容生成 3（高质量）</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>并发数量</label>
+              <input id="generationConcurrency" type="number" min="1" max="8" value="2" />
+            </div>
+            <div class="form-group action-stack">
+              <button id="btnGenerateSelected" class="btn btn-primary btn-sm">
+                <i class="ri-play-circle-line"></i> 生成选中章节
+              </button>
+              <button id="btnGenerateAll" class="btn btn-secondary btn-sm">
+                <i class="ri-play-list-add-line"></i> 生成全部
+              </button>
+              <button id="btnExportGenerationResult" class="btn btn-outline btn-sm">
+                <i class="ri-file-transfer-line"></i> 导出生成结果
+              </button>
+            </div>
+          </div>
+        </article>
+
+        <article class="card">
+          <h3><i class="ri-node-tree"></i> 目录框架生成与确认</h3>
+          <div class="form-group">
+            <label>招标拆解输入（可直接使用上一环节投标要点）</label>
+            <textarea id="outlineRequirementText" rows="7" placeholder="粘贴招标文件关键要求，或点击“载入投标要点”自动填充"></textarea>
+          </div>
+          <div class="form-actions left">
+            <button id="btnLoadTenderPoints" class="btn btn-outline">
+              <i class="ri-file-copy-line"></i> 载入投标要点
+            </button>
+            <button id="btnCreateOutline" class="btn btn-primary">
+              <i class="ri-layout-top-line"></i> 生成目录框架
+            </button>
+            <button id="btnConfirmOutline" class="btn btn-secondary">
+              <i class="ri-checkbox-circle-line"></i> 用户确认并锁定目录
+            </button>
+            <span id="outlineStatusBadge" class="status-chip">未生成</span>
+          </div>
+          <div id="outlineSectionTable" class="outline-table">
+            <p class="hint">目录生成后会显示在这里，可在编写前逐项确认。</p>
+          </div>
+        </article>
+
+        <div class="generation-workspace">
+          <div class="tree-pane">
+            <div class="tree-pane-header">目录</div>
+            <ul id="editorSectionList" class="section-list compact">
+              <li class="empty-hint">请先生成并确认目录</li>
+            </ul>
+          </div>
+          <div class="preview-pane-wrap">
+            <div class="preview-pane-header">
+              <div id="generationPreviewTitle">内容预览</div>
+              <div id="generationPreviewMeta">选择目录节点后查看预览</div>
+            </div>
+            <pre id="generationPreviewPane" class="preview-pane">尚未生成内容。</pre>
+          </div>
+        </div>
+
+        <article class="card">
+          <h3><i class="ri-edit-box-line"></i> 章节内容生成与交付</h3>
+          <div class="editor-toolbar">
+            <div>
+              <div id="currentSectionTitle" class="current-section">未选择章节</div>
+              <div id="currentSectionMeta" class="current-meta">请先在左侧选择章节</div>
+            </div>
+            <div class="toolbar-actions">
+              <button id="btnRetrieveEvidence" class="btn btn-outline btn-sm">
+                <i class="ri-search-line"></i> 检索专家资料
+              </button>
+              <button id="btnGenerateSection" class="btn btn-primary btn-sm">
+                <i class="ri-sparkling-line"></i> AI 逐章生成
+              </button>
+              <button id="btnComposeDraft" class="btn btn-secondary btn-sm">
+                <i class="ri-scissors-cut-line"></i> 合成章节工作稿
+              </button>
+              <button id="btnSaveSection" class="btn btn-secondary btn-sm">
+                <i class="ri-save-line"></i> 章节确认
+              </button>
+            </div>
+          </div>
+
+          <div class="compose-grid">
+            <div class="pane-block">
+              <div class="pane-header">用户交付内容</div>
+              <textarea id="sectionUserInput" class="pane-editor" placeholder="填写本章人工交付内容、重点表达、禁用词、业主偏好等"></textarea>
+            </div>
+            <div class="pane-block">
+              <div class="pane-header">专家库内容</div>
+              <div id="sectionEvidencePane" class="pane-content">请先检索专家资料。</div>
+            </div>
+            <div class="pane-block">
+              <div class="pane-header">AI 生成内容</div>
+              <div id="sectionAiDraftPane" class="pane-content">请点击“AI 逐章生成”。</div>
+            </div>
+            <div class="pane-block">
+              <div class="pane-header">章节最终稿（可编辑）</div>
+              <textarea id="sectionFinalDraft" class="pane-editor" placeholder="系统会自动合成工作稿，你可在此继续调整"></textarea>
+            </div>
+          </div>
+          <pre id="sectionTaskLog" class="result-box">章节任务日志...</pre>
+        </article>
+      </div>
+
+      <div id="panel-review-hub" class="view-panel">
+        <header class="panel-header">
+          <div>
+            <h2><i class="ri-shield-check-line"></i> 审核评分与定稿</h2>
+            <p>按招标要求与专家库证据进行交互式审核、调整、评分，形成最终投标文件。</p>
+          </div>
+        </header>
+
+        <div class="office-grid cols-2">
+          <article class="card highlight">
+            <h3><i class="ri-bar-chart-2-line"></i> 审核 / 评分概览</h3>
+            <div class="grid-2">
+              <div class="metric-card" id="reviewSummaryCard">
+                <div class="metric-label">最新章节审核</div>
+                <div class="metric-value">--</div>
+                <div class="metric-sub">状态 / 时间</div>
+              </div>
+              <div class="metric-card" id="scoringSummaryCard">
+                <div class="metric-label">项目评分</div>
+                <div class="metric-value">--</div>
+                <div class="metric-sub">score_total</div>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group action-stack">
+                <button id="btnFetchReviewApi" class="btn btn-primary btn-sm"><i class="ri-search-eye-line"></i>
+                  拉取审核</button>
+                <button id="btnFetchScoreApi" class="btn btn-secondary btn-sm"><i class="ri-function-line"></i>
+                  拉取评分</button>
+              </div>
+            </div>
+            <pre id="reviewSummaryDetail" class="result-box compact">等待请求...</pre>
+          </article>
+
+          <article class="card">
+            <h3><i class="ri-shield-check-line"></i> 章节审核交互</h3>
+            <div class="form-group">
+              <label>选择章节</label>
+              <select id="reviewSectionSelect"></select>
+            </div>
+            <div class="form-group">
+              <label>用户交互结论</label>
+              <select id="reviewDecision">
+                <option value="PASS">通过</option>
+                <option value="ADJUST_PASS">调整后通过</option>
+                <option value="REWRITE">需重写</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>交互备注</label>
+              <textarea id="reviewUserNote" rows="5" placeholder="记录与用户确认后的修改意见"></textarea>
+            </div>
+            <div class="form-actions left">
+              <button id="btnRunSectionReview" class="btn btn-primary">
+                <i class="ri-search-eye-line"></i> 执行章节审核评分
+              </button>
+              <button id="btnApplyReviewNote" class="btn btn-secondary">
+                <i class="ri-edit-box-line"></i> 应用交互结果
+              </button>
+            </div>
+            <div id="reviewReport" class="review-report">
+              <p class="hint">审核后会显示本章合规与得分情况。</p>
+            </div>
+          </article>
+
+          <article class="card">
+            <h3><i class="ri-file-check-line"></i> 最终稿汇总</h3>
+            <div id="reviewOverallMetrics" class="summary-cards"></div>
+            <div class="form-actions">
+              <button id="btnBuildFinalDraft" class="btn btn-primary">
+                <i class="ri-file-text-line"></i> 形成最终投标文件
+              </button>
+            </div>
+            <div class="form-group">
+              <label>最终投标文件正文（可继续编辑）</label>
+              <textarea id="finalDraftPreview" rows="16" placeholder="汇总后的最终稿会显示在这里"></textarea>
+            </div>
+          </article>
+        </div>
+      </div>
+
+      <div id="panel-publish-hub" class="view-panel">
+        <header class="panel-header">
+          <div>
+            <h2><i class="ri-file-word-2-line"></i> WPS 排版与终审</h2>
+            <p>按招标文件格式导出排版文档，并在交付前完成最终符合性检查。</p>
+          </div>
+        </header>
+
+        <article class="card">
+          <h3><i class="ri-layout-grid-line"></i> 排版配置</h3>
+          <div class="typeset-block">
+            <h4>页面设置</h4>
+            <div class="typeset-cover-row" id="coverTemplateOptions">
+              <button class="cover-option active" type="button" data-cover-template="none">无封面</button>
+              <button class="cover-option" type="button" data-cover-template="blue-wave">投标书（蓝波）</button>
+              <button class="cover-option" type="button" data-cover-template="simple">投标文件（简洁）</button>
+              <button class="cover-option" type="button" data-cover-template="city">投标书（城市）</button>
+            </div>
+            <div class="typeset-grid">
+              <div class="form-group">
+                <label>页眉文字</label>
+                <input id="typesetHeaderText" type="text" value="" />
+              </div>
+              <div class="form-group">
+                <label>上边距（cm）</label>
+                <input id="typesetHeaderOffset" type="number" min="0" step="0.1" value="1.5" />
+              </div>
+              <div class="form-group">
+                <label>页脚文字</label>
+                <input id="typesetFooterText" type="text" value="" />
+              </div>
+              <div class="form-group">
+                <label>下边距（cm）</label>
+                <input id="typesetFooterOffset" type="number" min="0" step="0.1" value="0.0" />
+              </div>
+              <div class="form-group">
+                <label>页边距上（cm）</label>
+                <input id="typesetMarginTop" type="number" min="0" step="0.01" value="2.54" />
+              </div>
+              <div class="form-group">
+                <label>页边距下（cm）</label>
+                <input id="typesetMarginBottom" type="number" min="0" step="0.01" value="2.54" />
+              </div>
+              <div class="form-group">
+                <label>页边距左（cm）</label>
+                <input id="typesetMarginLeft" type="number" min="0" step="0.01" value="3.17" />
+              </div>
+              <div class="form-group">
+                <label>页边距右（cm）</label>
+                <input id="typesetMarginRight" type="number" min="0" step="0.01" value="3.17" />
+              </div>
+            </div>
+          </div>
+
+          <div class="typeset-block">
+            <h4>段落设置</h4>
+            <div class="typeset-table" id="typesetTable">
+              <div class="typeset-row typeset-row-head">
+                <span>样式</span>
+                <span>字体</span>
+                <span>字号</span>
+                <span>对齐</span>
+                <span>加粗</span>
+                <span>斜体</span>
+                <span>行距模式</span>
+                <span>行距值</span>
+                <span>首行缩进</span>
+              </div>
+              <div class="typeset-row" data-style-key="H1">
+                <span>一级标题</span>
+                <select class="fmt-font">
+                  <option>微软雅黑</option>
+                  <option>宋体</option>
+                  <option>仿宋</option>
+                </select>
+                <select class="fmt-size">
+                  <option>小二</option>
+                  <option selected>小三</option>
+                  <option>三号</option>
+                </select>
+                <select class="fmt-align">
+                  <option selected>居中对齐</option>
+                  <option>左对齐</option>
+                </select>
+                <input class="fmt-bold" type="checkbox" checked />
+                <input class="fmt-italic" type="checkbox" />
+                <select class="fmt-line-mode">
+                  <option selected>固定值</option>
+                  <option>1.5 倍</option>
+                </select>
+                <input class="fmt-line-value" type="number" step="0.1" value="28" />
+                <input class="fmt-indent" type="number" step="1" value="2" />
+              </div>
+              <div class="typeset-row" data-style-key="H2">
+                <span>二级标题</span>
+                <select class="fmt-font">
+                  <option selected>微软雅黑</option>
+                  <option>宋体</option>
+                  <option>仿宋</option>
+                </select>
+                <select class="fmt-size">
+                  <option selected>小三</option>
+                  <option>四号</option>
+                </select>
+                <select class="fmt-align">
+                  <option selected>左对齐</option>
+                  <option>居中对齐</option>
+                </select>
+                <input class="fmt-bold" type="checkbox" checked />
+                <input class="fmt-italic" type="checkbox" />
+                <select class="fmt-line-mode">
+                  <option selected>固定值</option>
+                  <option>1.5 倍</option>
+                </select>
+                <input class="fmt-line-value" type="number" step="0.1" value="28" />
+                <input class="fmt-indent" type="number" step="1" value="2" />
+              </div>
+              <div class="typeset-row" data-style-key="H3">
+                <span>三级标题</span>
+                <select class="fmt-font">
+                  <option selected>微软雅黑</option>
+                  <option>宋体</option>
+                  <option>仿宋</option>
+                </select>
+                <select class="fmt-size">
+                  <option selected>小三</option>
+                  <option>四号</option>
+                </select>
+                <select class="fmt-align">
+                  <option selected>左对齐</option>
+                  <option>居中对齐</option>
+                </select>
+                <input class="fmt-bold" type="checkbox" checked />
+                <input class="fmt-italic" type="checkbox" />
+                <select class="fmt-line-mode">
+                  <option selected>固定值</option>
+                  <option>1.5 倍</option>
+                </select>
+                <input class="fmt-line-value" type="number" step="0.1" value="28" />
+                <input class="fmt-indent" type="number" step="1" value="2" />
+              </div>
+              <div class="typeset-row" data-style-key="BODY">
+                <span>段落正文</span>
+                <select class="fmt-font">
+                  <option selected>微软雅黑</option>
+                  <option>宋体</option>
+                  <option>仿宋</option>
+                </select>
+                <select class="fmt-size">
+                  <option>小四</option>
+                  <option selected>四号</option>
+                  <option>小三</option>
+                </select>
+                <select class="fmt-align">
+                  <option selected>左对齐</option>
+                  <option>两端对齐</option>
+                </select>
+                <input class="fmt-bold" type="checkbox" />
+                <input class="fmt-italic" type="checkbox" />
+                <select class="fmt-line-mode">
+                  <option selected>固定值</option>
+                  <option>1.5 倍</option>
+                </select>
+                <input class="fmt-line-value" type="number" step="0.1" value="28" />
+                <input class="fmt-indent" type="number" step="1" value="2" />
+              </div>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>待排版最终稿（可编辑）</label>
+            <textarea id="publishFinalDraft" rows="10" placeholder="默认读取上一步最终稿"></textarea>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>输出文件名（docx）</label>
+              <input id="exportFileName" type="text" placeholder="投标文件_项目名.docx" />
+            </div>
+            <div class="form-group action-stack">
+              <button id="btnRenderWord" class="btn btn-primary">
+                <i class="ri-download-2-line"></i> 生成 WPS 排版稿
+              </button>
+            </div>
+          </div>
+          <pre id="renderResult" class="result-box">等待导出...</pre>
+        </article>
+
+        <div class="office-grid cols-2">
+          <article class="card">
+            <h3><i class="ri-shield-star-line"></i> 终审检查</h3>
+            <div class="form-actions left">
+              <button id="btnFinalCheck" class="btn btn-secondary">
+                <i class="ri-checkbox-multiple-line"></i> 执行终审检查
+              </button>
+              <button id="btnLockDelivery" class="btn btn-primary">
+                <i class="ri-lock-2-line"></i> 锁定最终交付
+              </button>
+            </div>
+            <div id="finalCheckBoard" class="review-report">
+              <p class="hint">执行终审后显示符合性结果。</p>
+            </div>
+            <div id="deliveryStatus" class="delivery-status">状态：未锁定</div>
+          </article>
+
+          <article class="card">
+            <h3><i class="ri-links-line"></i> 专家库闭环回灌</h3>
+            <p class="hint">终审通过后，建议将交付文件或章节回灌到专家库，形成知识闭环。</p>
+            <div class="form-actions">
+              <button id="btnJumpToFeedback" class="btn btn-outline btn-sm">
+                <i class="ri-arrow-left-right-line"></i> 前往“公司投标专家库”执行回灌
+              </button>
+            </div>
+          </article>
+        </div>
+      </div>
+
+      <div id="panel-completed-bids" class="view-panel">
+        <header class="panel-header">
+          <div>
+            <h2><i class="ri-folder-history-line"></i> 已完成投标</h2>
+            <p>归档已使用本系统完成的投标工程与投标文件信息，并记录中标结果。</p>
+          </div>
+        </header>
+
+        <div class="office-grid cols-2">
+          <article class="card">
+            <h3><i class="ri-add-circle-line"></i> 新增完成记录</h3>
+            <div class="form-row">
+              <div class="form-group">
+                <label>工程名称</label>
+                <input id="completedBidProjectName" type="text" placeholder="示例：光伏建设项目" />
+              </div>
+              <div class="form-group">
+                <label>项目 ID</label>
+                <input id="completedBidProjectId" type="text" placeholder="手动输入，建议与顶部项目 ID 一致" />
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>招标单位</label>
+                <input id="completedBidTenderer" type="text" placeholder="示例：中国移动" />
+              </div>
+              <div class="form-group">
+                <label>投标结果</label>
+                <select id="completedBidResult">
+                  <option value="WON">已中标</option>
+                  <option value="LOST">未中标</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>投标文件名</label>
+                <input id="completedBidFileName" type="text" placeholder="示例：光伏建设项目_投标文件.docx" />
+              </div>
+              <div class="form-group">
+                <label>完成日期</label>
+                <input id="completedBidDate" type="date" />
+              </div>
+            </div>
+            <div class="form-group">
+              <label>投标文件信息</label>
+              <textarea id="completedBidFileInfo" rows="5" placeholder="记录文档版本、交付包说明、关键里程碑等"></textarea>
+            </div>
+            <div class="form-actions left">
+              <button id="btnSaveCompletedBid" class="btn btn-primary">
+                <i class="ri-save-line"></i> 保存记录
+              </button>
+              <button id="btnResetCompletedBid" class="btn btn-outline">
+                <i class="ri-eraser-line"></i> 清空输入
+              </button>
+            </div>
+            <pre id="completedBidResultLog" class="result-box">等待录入...</pre>
+          </article>
+
+          <article class="card">
+            <h3><i class="ri-file-list-3-line"></i> 已完成投标清单</h3>
+            <div id="completedBidTable" class="completed-bid-table">
+              <p class="hint">暂无完成记录。</p>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div id="drawerByok" class="drawer-overlay hidden">
+    <div class="drawer byok-drawer">
+      <div class="drawer-header">
+        <h3><i class="ri-settings-4-line"></i> AI 模型设置</h3>
+        <button id="btnCloseByokSettings" class="btn btn-outline btn-sm" type="button">
+          <i class="ri-close-line"></i> 关闭
+        </button>
+      </div>
+      <div class="drawer-body">
+        <section class="drawer-section">
+          <h4>项目配置</h4>
+          <div class="form-row">
+            <div class="form-group">
+              <label>项目 ID</label>
+              <input id="byokProjectId" type="text" placeholder="来自顶部手动输入，可按需修改" />
+            </div>
+            <div class="form-group">
+              <label>接口认证 API Key（X-API-Key）</label>
+              <input id="apiKeyInput" type="password" placeholder="用于当前页面请求鉴权，可留空" />
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group action-stack">
+              <button id="btnByokLoadProfiles" class="btn btn-outline btn-sm" type="button">
+                <i class="ri-refresh-line"></i> 加载 Profiles
+              </button>
+              <button id="btnByokLoadPolicy" class="btn btn-outline btn-sm" type="button">
+                <i class="ri-file-search-line"></i> 加载流程策略
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <section class="drawer-section">
+          <h4>新增商用模型 Profile（默认百炼 Qwen3）</h4>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Provider</label>
+              <select id="byokProvider">
+                <option value="qwen">qwen（百炼）</option>
+                <option value="openai">openai</option>
+                <option value="deepseek">deepseek</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Model</label>
+              <input id="byokModelName" type="text" value="qwen3" />
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Base URL（可选）</label>
+              <input id="byokBaseUrl" type="text" placeholder="https://dashscope.aliyuncs.com/compatible-mode/v1" />
+            </div>
+            <div class="form-group">
+              <label>Key 存储方式</label>
+              <select id="byokKeyStorage">
+                <option value="ENCRYPTED_DB">ENCRYPTED_DB</option>
+                <option value="TEMP_REDIS">TEMP_REDIS</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>API Key</label>
+            <input id="byokApiKey" type="password" placeholder="输入商用模型 API Key" />
+          </div>
+          <div class="form-actions left">
+            <button id="btnByokCreateProfile" class="btn btn-primary btn-sm" type="button">
+              <i class="ri-add-line"></i> 创建 Profile
+            </button>
+            <button id="btnByokPresetQwen3" class="btn btn-secondary btn-sm" type="button">
+              <i class="ri-magic-line"></i> 预置百炼 Qwen3
+            </button>
+          </div>
+        </section>
+
+        <section class="drawer-section">
+          <h4>按工作流程绑定模型</h4>
+          <p class="hint">支持不同流程使用不同商用模型；Embedding 下拉仅展示向量模型；未选择时使用系统默认模型（通用为百炼 Qwen3）。</p>
+          <div class="form-group">
+            <label>公司投标专家库（抽取模型）</label>
+            <select id="byokWorkflowExpert"></select>
+          </div>
+          <div class="form-group">
+            <label>Embedding 专用模型（向量检索）</label>
+            <select id="byokWorkflowEmbed"></select>
+          </div>
+          <div class="form-group">
+            <label>招标文件分析（Query Rewrite）</label>
+            <select id="byokWorkflowTender"></select>
+          </div>
+          <div class="form-group">
+            <label>投标文件编制（内容生成）</label>
+            <select id="byokWorkflowBid"></select>
+          </div>
+          <div class="form-group">
+            <label>审核评分与定稿（Review）</label>
+            <select id="byokWorkflowReview"></select>
+          </div>
+          <div class="form-group">
+            <label>排版与终审（Program Support）</label>
+            <select id="byokWorkflowPublish"></select>
+          </div>
+          <div class="form-actions left">
+            <button id="btnByokSavePolicy" class="btn btn-primary btn-sm" type="button">
+              <i class="ri-save-line"></i> 保存流程策略
+            </button>
+          </div>
+        </section>
+
+        <section class="drawer-section">
+          <h4>当前 Profiles</h4>
+          <div id="byokProfileList" class="byok-profile-list">
+            <p class="hint">暂无 profile，请先创建。</p>
+          </div>
+        </section>
+
+        <section class="drawer-section">
+          <h4>操作结果</h4>
+          <pre id="byokResult" class="result-box">等待操作...</pre>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <footer class="statusbar">
+    <div class="status-left">
+      <span><i class="ri-cloud-line"></i> AI辅助投标系统</span>
+      <span class="divider">|</span>
+      <span id="taskStatusText">无后台任务</span>
+    </div>
+    <div class="status-right">
+      <span id="clock">--:--:--</span>
+    </div>
+  </footer>
+
+  <div id="toastContainer" class="toast-container"></div>
+
+  <script src="/ui/app.js"></script>
+</body>
+
 </html>
