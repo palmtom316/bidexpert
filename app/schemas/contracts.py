@@ -65,6 +65,7 @@ class RenderWordRequest(BaseModel):
     output_path: str
     placeholders: dict[str, str]
     template_path: str | None = None
+    style_config: dict | None = None
 
 
 class RenderWordResponse(BaseModel):

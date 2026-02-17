@@ -33,7 +33,9 @@ def _safe_path(raw_path: str, base_dir: Path) -> Path:
     return resolved_target
 
 
-def render_word(output_path: str, placeholders: dict[str, str], template_path: str | None = None) -> str:
+from docx.shared import Cm
+
+def render_word(output_path: str, placeholders: dict[str, str], template_path: str | None = None, style_config: dict | None = None) -> str:
     template_root = Path(settings.render_template_dir)
     export_root = Path(settings.render_output_dir)
     template_root.mkdir(parents=True, exist_ok=True)
@@ -48,10 +50,88 @@ def render_word(output_path: str, placeholders: dict[str, str], template_path: s
         raise ValueError("output_path must end with .docx")
     out.parent.mkdir(parents=True, exist_ok=True)
 
+    # 1. Render content using docxtpl
     tpl = DocxTemplate(str(template_file))
     tpl.render(placeholders)
     tpl.save(str(out))
+
+    # 2. Apply Page Layout Styles using python-docx
+    if style_config:
+        doc = Document(str(out))
+        page_cfg = style_config.get("page", {})
+        
+        # Apply margins to all sections
+        if page_cfg:
+            for section in doc.sections:
+                if "marginTop" in page_cfg:
+                    section.top_margin = Cm(float(page_cfg["marginTop"]))
+                if "marginBottom" in page_cfg:
+                    section.bottom_margin = Cm(float(page_cfg["marginBottom"]))
+                if "marginLeft" in page_cfg:
+                    section.left_margin = Cm(float(page_cfg["marginLeft"]))
+                if "marginRight" in page_cfg:
+                    section.right_margin = Cm(float(page_cfg["marginRight"]))
+                
+                # Header/Footer distance
+                if "headerOffset" in page_cfg:
+                    section.header_distance = Cm(float(page_cfg["headerOffset"]))
+                if "footerOffset" in page_cfg:
+                    section.footer_distance = Cm(float(page_cfg["footerOffset"]))
+
+        # 3. Generate TOC if requested
+        if style_config.get("generateTOC"):
+            add_toc(doc)
+            set_update_fields(doc)
+
+        doc.save(str(out))
+
     return str(out)
+
+
+from docx.oxml.ns import qn
+from docx.oxml import OxmlElement
+
+def add_toc(doc):
+    """
+    Insert a Table of Contents (TOC) field code at the beginning of the document (or after cover).
+    Field code: {TOC \o "1-3" \h \z \u}
+    """
+    paragraph = doc.add_paragraph()
+    # Insert at the beginning (index 0)
+    # doc.paragraphs.insert(0, paragraph) 
+    # But doc.paragraphs is not a list you can insert into directly in python-docx API easily without moving elements.
+    # The 'add_paragraph' appends to the end.
+    # To insert at start:
+    doc.element.body.insert(0, paragraph._element)
+    
+    run = paragraph.add_run()
+    
+    fldChar1 = OxmlElement('w:fldChar')
+    fldChar1.set(qn('w:fldCharType'), 'begin')
+    
+    instrText = OxmlElement('w:instrText')
+    instrText.set(qn('xml:space'), 'preserve')
+    instrText.text = r'TOC \o "1-3" \h \z \u'
+    
+    fldChar2 = OxmlElement('w:fldChar')
+    fldChar2.set(qn('w:fldCharType'), 'separate')
+    
+    fldChar3 = OxmlElement('w:fldChar')
+    fldChar3.set(qn('w:fldCharType'), 'end')
+    
+    run._r.append(fldChar1)
+    run._r.append(instrText)
+    run._r.append(fldChar2)
+    run._r.append(fldChar3)
+
+def set_update_fields(doc):
+    """
+    Set the document to update fields (like TOC) on opening.
+    """
+    settings = doc.settings.element
+    updateFields = OxmlElement('w:updateFields')
+    updateFields.set(qn('w:val'), 'true')
+    settings.append(updateFields)
 
 
 def render_word_sections(

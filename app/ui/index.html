@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>AI辅助投标系统 | 投标办公工作台</title>
   <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet" />
-  <link rel="stylesheet" href="/ui/styles.css?v=1.0" />
+  <link rel="stylesheet" href="/ui/styles.css?v=1.6" />
 </head>
 
 <body>
@@ -79,7 +79,7 @@
           <button type="button" class="flow-item" data-target="panel-publish-hub">
             <i class="ri-file-word-2-line"></i>
             <div>
-              <h4>WPS 排版与终审</h4>
+              <h4>排版与终审</h4>
               <p>排版导出与最终符合性检查</p>
             </div>
           </button>
@@ -526,8 +526,8 @@
       <div id="panel-publish-hub" class="view-panel">
         <header class="panel-header">
           <div>
-            <h2><i class="ri-file-word-2-line"></i> WPS 排版与终审</h2>
-            <p>按招标文件格式导出排版文档，并在交付前完成最终符合性检查。</p>
+            <h2><i class="ri-file-word-2-line"></i> 排版与终审</h2>
+            <p>按招标文件格式导出排版文档，并执行最后的符合性检查与交付锁定。</p>
           </div>
         </header>
 
@@ -571,172 +571,178 @@
                 <input id="typesetMarginLeft" type="number" min="0" step="0.01" value="3.17" />
               </div>
               <div class="form-group">
-                <label>页边距右（cm）</label>
+                <label for="typesetMarginRight">页边距右（cm）</label>
                 <input id="typesetMarginRight" type="number" min="0" step="0.01" value="3.17" />
               </div>
             </div>
-          </div>
-
-          <div class="typeset-block">
-            <h4>段落设置</h4>
-            <div class="typeset-table" id="typesetTable">
-              <div class="typeset-row typeset-row-head">
-                <span>样式</span>
-                <span>字体</span>
-                <span>字号</span>
-                <span>对齐</span>
-                <span>加粗</span>
-                <span>斜体</span>
-                <span>行距模式</span>
-                <span>行距值</span>
-                <span>首行缩进</span>
-              </div>
-              <div class="typeset-row" data-style-key="H1">
-                <span>一级标题</span>
-                <select class="fmt-font">
-                  <option>微软雅黑</option>
-                  <option>宋体</option>
-                  <option>仿宋</option>
-                </select>
-                <select class="fmt-size">
-                  <option>小二</option>
-                  <option selected>小三</option>
-                  <option>三号</option>
-                </select>
-                <select class="fmt-align">
-                  <option selected>居中对齐</option>
-                  <option>左对齐</option>
-                </select>
-                <input class="fmt-bold" type="checkbox" checked />
-                <input class="fmt-italic" type="checkbox" />
-                <select class="fmt-line-mode">
-                  <option selected>固定值</option>
-                  <option>1.5 倍</option>
-                </select>
-                <input class="fmt-line-value" type="number" step="0.1" value="28" />
-                <input class="fmt-indent" type="number" step="1" value="2" />
-              </div>
-              <div class="typeset-row" data-style-key="H2">
-                <span>二级标题</span>
-                <select class="fmt-font">
-                  <option selected>微软雅黑</option>
-                  <option>宋体</option>
-                  <option>仿宋</option>
-                </select>
-                <select class="fmt-size">
-                  <option selected>小三</option>
-                  <option>四号</option>
-                </select>
-                <select class="fmt-align">
-                  <option selected>左对齐</option>
-                  <option>居中对齐</option>
-                </select>
-                <input class="fmt-bold" type="checkbox" checked />
-                <input class="fmt-italic" type="checkbox" />
-                <select class="fmt-line-mode">
-                  <option selected>固定值</option>
-                  <option>1.5 倍</option>
-                </select>
-                <input class="fmt-line-value" type="number" step="0.1" value="28" />
-                <input class="fmt-indent" type="number" step="1" value="2" />
-              </div>
-              <div class="typeset-row" data-style-key="H3">
-                <span>三级标题</span>
-                <select class="fmt-font">
-                  <option selected>微软雅黑</option>
-                  <option>宋体</option>
-                  <option>仿宋</option>
-                </select>
-                <select class="fmt-size">
-                  <option selected>小三</option>
-                  <option>四号</option>
-                </select>
-                <select class="fmt-align">
-                  <option selected>左对齐</option>
-                  <option>居中对齐</option>
-                </select>
-                <input class="fmt-bold" type="checkbox" checked />
-                <input class="fmt-italic" type="checkbox" />
-                <select class="fmt-line-mode">
-                  <option selected>固定值</option>
-                  <option>1.5 倍</option>
-                </select>
-                <input class="fmt-line-value" type="number" step="0.1" value="28" />
-                <input class="fmt-indent" type="number" step="1" value="2" />
-              </div>
-              <div class="typeset-row" data-style-key="BODY">
-                <span>段落正文</span>
-                <select class="fmt-font">
-                  <option selected>微软雅黑</option>
-                  <option>宋体</option>
-                  <option>仿宋</option>
-                </select>
-                <select class="fmt-size">
-                  <option>小四</option>
-                  <option selected>四号</option>
-                  <option>小三</option>
-                </select>
-                <select class="fmt-align">
-                  <option selected>左对齐</option>
-                  <option>两端对齐</option>
-                </select>
-                <input class="fmt-bold" type="checkbox" />
-                <input class="fmt-italic" type="checkbox" />
-                <select class="fmt-line-mode">
-                  <option selected>固定值</option>
-                  <option>1.5 倍</option>
-                </select>
-                <input class="fmt-line-value" type="number" step="0.1" value="28" />
-                <input class="fmt-indent" type="number" step="1" value="2" />
+            <div class="form-group" style="margin-top: 0.5rem;">
+              <div class="checkbox-wrapper">
+                <input id="typesetGenerateTOC" type="checkbox" checked />
+                <label for="typesetGenerateTOC">生成目录 (打开文档时自动更新)</label>
               </div>
             </div>
           </div>
 
-          <div class="form-group">
-            <label>待排版最终稿（可编辑）</label>
-            <textarea id="publishFinalDraft" rows="10" placeholder="默认读取上一步最终稿"></textarea>
-          </div>
-          <div class="form-row">
-            <div class="form-group">
-              <label>输出文件名（docx）</label>
-              <input id="exportFileName" type="text" placeholder="投标文件_项目名.docx" />
+          <div class="split-line"></div>
+          <h4>段落设置</h4>
+          <div class="typeset-table" id="typesetTable">
+            <div class="typeset-row typeset-row-head">
+              <span>样式</span>
+              <span>字体</span>
+              <span>字号</span>
+              <span>对齐</span>
+              <span>加粗</span>
+              <span>斜体</span>
+              <span>行距模式</span>
+              <span>行距值</span>
+              <span>首行缩进</span>
             </div>
-            <div class="form-group action-stack">
-              <button id="btnRenderWord" class="btn btn-primary">
-                <i class="ri-download-2-line"></i> 生成 WPS 排版稿
-              </button>
+            <div class="typeset-row" data-style-key="H1">
+              <span>一级标题</span>
+              <select class="fmt-font">
+                <option>微软雅黑</option>
+                <option>宋体</option>
+                <option>仿宋</option>
+              </select>
+              <select class="fmt-size">
+                <option>小二</option>
+                <option selected>小三</option>
+                <option>三号</option>
+              </select>
+              <select class="fmt-align">
+                <option selected>居中对齐</option>
+                <option>左对齐</option>
+              </select>
+              <input class="fmt-bold" type="checkbox" checked />
+              <input class="fmt-italic" type="checkbox" />
+              <select class="fmt-line-mode">
+                <option selected>固定值</option>
+                <option>1.5 倍</option>
+              </select>
+              <input class="fmt-line-value" type="number" step="0.1" value="28" />
+              <input class="fmt-indent" type="number" step="1" value="2" />
+            </div>
+            <div class="typeset-row" data-style-key="H2">
+              <span>二级标题</span>
+              <select class="fmt-font">
+                <option selected>微软雅黑</option>
+                <option>宋体</option>
+                <option>仿宋</option>
+              </select>
+              <select class="fmt-size">
+                <option selected>小三</option>
+                <option>四号</option>
+              </select>
+              <select class="fmt-align">
+                <option selected>左对齐</option>
+                <option>居中对齐</option>
+              </select>
+              <input class="fmt-bold" type="checkbox" checked />
+              <input class="fmt-italic" type="checkbox" />
+              <select class="fmt-line-mode">
+                <option selected>固定值</option>
+                <option>1.5 倍</option>
+              </select>
+              <input class="fmt-line-value" type="number" step="0.1" value="28" />
+              <input class="fmt-indent" type="number" step="1" value="2" />
+            </div>
+            <div class="typeset-row" data-style-key="H3">
+              <span>三级标题</span>
+              <select class="fmt-font">
+                <option selected>微软雅黑</option>
+                <option>宋体</option>
+                <option>仿宋</option>
+              </select>
+              <select class="fmt-size">
+                <option selected>小三</option>
+                <option>四号</option>
+              </select>
+              <select class="fmt-align">
+                <option selected>左对齐</option>
+                <option>居中对齐</option>
+              </select>
+              <input class="fmt-bold" type="checkbox" checked />
+              <input class="fmt-italic" type="checkbox" />
+              <select class="fmt-line-mode">
+                <option selected>固定值</option>
+                <option>1.5 倍</option>
+              </select>
+              <input class="fmt-line-value" type="number" step="0.1" value="28" />
+              <input class="fmt-indent" type="number" step="1" value="2" />
+            </div>
+            <div class="typeset-row" data-style-key="BODY">
+              <span>段落正文</span>
+              <select class="fmt-font">
+                <option selected>微软雅黑</option>
+                <option>宋体</option>
+                <option>仿宋</option>
+              </select>
+              <select class="fmt-size">
+                <option>小四</option>
+                <option selected>四号</option>
+                <option>小三</option>
+              </select>
+              <select class="fmt-align">
+                <option selected>左对齐</option>
+                <option>两端对齐</option>
+              </select>
+              <input class="fmt-bold" type="checkbox" />
+              <input class="fmt-italic" type="checkbox" />
+              <select class="fmt-line-mode">
+                <option selected>固定值</option>
+                <option>1.5 倍</option>
+              </select>
+              <input class="fmt-line-value" type="number" step="0.1" value="28" />
+              <input class="fmt-indent" type="number" step="1" value="2" />
             </div>
           </div>
-          <pre id="renderResult" class="result-box">等待导出...</pre>
+      </div>
+
+      <div class="form-group">
+        <label>待排版最终稿（可编辑）</label>
+        <textarea id="publishFinalDraft" rows="10" placeholder="默认读取上一步最终稿"></textarea>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>输出文件名（docx）</label>
+          <input id="exportFileName" type="text" placeholder="投标文件_项目名.docx" />
+        </div>
+        <div class="form-group action-stack">
+          <button id="btnRenderWord" class="btn btn-primary">
+            <i class="ri-file-word-2-line"></i> 排版与终审
+          </button>
+        </div>
+      </div>
+      <pre id="renderResult" class="result-box">等待导出...</pre>
+      </article>
+
+      <div class="office-grid cols-2">
+        <article class="card">
+          <h3><i class="ri-shield-star-line"></i> 终审检查</h3>
+          <div class="form-actions left">
+            <button id="btnFinalCheck" class="btn btn-secondary">
+              <i class="ri-checkbox-multiple-line"></i> 执行终审检查
+            </button>
+            <button id="btnLockDelivery" class="btn btn-primary">
+              <i class="ri-lock-2-line"></i> 锁定最终交付
+            </button>
+          </div>
+          <div id="finalCheckBoard" class="review-report">
+            <p class="hint">执行终审后显示符合性结果。</p>
+          </div>
+          <div id="deliveryStatus" class="delivery-status">状态：未锁定</div>
         </article>
 
-        <div class="office-grid cols-2">
-          <article class="card">
-            <h3><i class="ri-shield-star-line"></i> 终审检查</h3>
-            <div class="form-actions left">
-              <button id="btnFinalCheck" class="btn btn-secondary">
-                <i class="ri-checkbox-multiple-line"></i> 执行终审检查
-              </button>
-              <button id="btnLockDelivery" class="btn btn-primary">
-                <i class="ri-lock-2-line"></i> 锁定最终交付
-              </button>
-            </div>
-            <div id="finalCheckBoard" class="review-report">
-              <p class="hint">执行终审后显示符合性结果。</p>
-            </div>
-            <div id="deliveryStatus" class="delivery-status">状态：未锁定</div>
-          </article>
-
-          <article class="card">
-            <h3><i class="ri-links-line"></i> 专家库闭环回灌</h3>
-            <p class="hint">终审通过后，建议将交付文件或章节回灌到专家库，形成知识闭环。</p>
-            <div class="form-actions">
-              <button id="btnJumpToFeedback" class="btn btn-outline btn-sm">
-                <i class="ri-arrow-left-right-line"></i> 前往“公司投标专家库”执行回灌
-              </button>
-            </div>
-          </article>
-        </div>
+        <article class="card">
+          <h3><i class="ri-links-line"></i> 专家库闭环回灌</h3>
+          <p class="hint">终审通过后，建议将交付文件或章节回灌到专家库，形成知识闭环。</p>
+          <div class="form-actions">
+            <button id="btnJumpToFeedback" class="btn btn-outline btn-sm">
+              <i class="ri-arrow-left-right-line"></i> 前往“公司投标专家库”执行回灌
+            </button>
+          </div>
+        </article>
+      </div>
       </div>
 
       <div id="panel-completed-bids" class="view-panel">
@@ -947,7 +953,7 @@
 
   <div id="toastContainer" class="toast-container"></div>
 
-  <script src="/ui/app.js"></script>
+  <script src="/ui/app.js?v=1.2"></script>
 </body>
 
 </html>

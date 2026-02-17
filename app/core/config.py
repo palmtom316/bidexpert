@@ -45,7 +45,6 @@ class Settings(BaseSettings):
     context_compression_max_chars: int = 4000
     context_compression_snippet_chars: int = 800
     expert_chunk_min_tokens: int = 800
-    expert_chunk_max_tokens: int = 1200
     expert_chunk_overlap_tokens: int = 120
 
     model_config = SettingsConfigDict(env_prefix="BIDEXPERT_", extra="ignore")

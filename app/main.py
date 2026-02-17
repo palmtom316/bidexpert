@@ -7,6 +7,7 @@ from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.api.routes import router
+from app.api.endpoints.stats import router as stats_router
 from app.core.config import settings
 from app.db.init_db import init_db
 
@@ -34,6 +35,7 @@ app.add_middleware(
 )
 
 app.include_router(router)
+app.include_router(stats_router, prefix="/stats", tags=["stats"])
 app.mount("/ui", StaticFiles(directory="app/ui", html=True), name="ui")
 
 

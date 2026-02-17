@@ -1792,6 +1792,8 @@ const PublishHub = {
       marginRight: parseNumber("#typesetMarginRight", 3.17),
     };
 
+    const generateTOC = $("#typesetGenerateTOC")?.checked ?? false;
+
     const styles = Array.from(document.querySelectorAll("#typesetTable .typeset-row[data-style-key]")).map((row) => ({
       key: row.dataset.styleKey || "",
       font: row.querySelector(".fmt-font")?.value || "",
@@ -1804,12 +1806,13 @@ const PublishHub = {
       indent: Number.parseInt(row.querySelector(".fmt-indent")?.value || "0", 10) || 0,
     }));
 
-    return { page, styles };
+    return { page, styles, generateTOC };
   },
 
   buildTypesetSummary(config) {
     const page = config.page;
-    const pageLine = `封面=${page.coverTemplate} | 页眉="${page.headerText}"(${page.headerOffset}cm) | 页脚="${page.footerText}"(${page.footerOffset}cm) | 页边距 上${page.marginTop}/下${page.marginBottom}/左${page.marginLeft}/右${page.marginRight} cm`;
+    const tocLine = config.generateTOC ? " | 已启用目录生成" : "";
+    const pageLine = `封面=${page.coverTemplate} | 页眉="${page.headerText}"(${page.headerOffset}cm) | 页边距 上${page.marginTop}/下${page.marginBottom}/左${page.marginLeft}/右${page.marginRight} cm${tocLine}`;
     const styleLine = config.styles
       .map((item) => `${item.key}:${item.font}/${item.size}/${item.align}/${item.lineMode}${item.lineValue}/首行${item.indent}`)
       .join("；");
@@ -1830,7 +1833,7 @@ const PublishHub = {
     const technicalPlan = `${formatLine}\n\n${finalDraft.slice(0, middle)}`;
     const implementationPlan = finalDraft.slice(middle);
 
-    setTaskStatus("WPS 排版导出中");
+    setTaskStatus("排版导出中");
     $("#renderResult").textContent = "正在生成 docx，请稍候...";
 
     const res = await api("/v1/render/word", {
@@ -1838,6 +1841,7 @@ const PublishHub = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         output_path: filename,
+        style_config: typesetConfig, // Send style config
         placeholders: {
           project_name: state.projectId || "未命名项目",
           technical_plan: technicalPlan,
@@ -1847,8 +1851,8 @@ const PublishHub = {
     });
 
     $("#renderResult").textContent = `导出完成：${res.output_path}`;
-    setTaskStatus("WPS 排版导出完成");
-    Toast.success("WPS 排版稿已生成");
+    setTaskStatus("排版导出完成");
+    Toast.success("排版稿已生成");
   },
 
   async runFinalCheck() {
@@ -2115,6 +2119,7 @@ const ByokSettings = {
 
     this.applyQwen3Preset();
     this.renderProfileOptions();
+    $("#btnRefreshUsage").addEventListener("click", guarded(() => this.loadUsageStats()));
   },
 
   async open() {
@@ -2123,6 +2128,7 @@ const ByokSettings = {
     $("#drawerByok").classList.remove("hidden");
     await this.loadProfiles();
     await this.loadPolicy();
+    this.loadUsageStats(); // Load stats on open, but non-blocking
   },
 
   close() {
@@ -2368,6 +2374,53 @@ const ByokSettings = {
     });
     $("#byokResult").textContent = JSON.stringify(res, null, 2);
     Toast.success("流程模型策略已保存");
+  },
+
+  async loadUsageStats() {
+    const container = $("#usageStatsContainer");
+    container.innerHTML = '<p class="hint">加载中...</p>';
+
+    try {
+      const res = await api("/stats/usage");
+      const items = res.items || [];
+      const totalCost = res.total_cost_usd || 0;
+
+      if (!items.length) {
+        container.innerHTML = '<p class="hint">暂无用量数据。</p>';
+        return;
+      }
+
+      const rows = items.map(item => `
+        <tr>
+          <td>${escapeHtml(item.model_name)}</td>
+          <td class="num">${(item.total_tokens || 0).toLocaleString()}</td>
+          <td class="num">${item.currency === "USD" ? "$" : "¥"}${Number(item.estimated_cost).toFixed(4)}</td>
+        </tr>
+      `).join("");
+
+      const table = `
+        <table class="usage-table">
+          <thead>
+            <tr>
+              <th>模型</th>
+              <th style="text-align: right">Tokens</th>
+              <th style="text-align: right">预估成本</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows}
+          </tbody>
+        </table>
+        <div class="usage-total">
+          总计 (USD): $${Number(totalCost).toFixed(4)}
+        </div>
+      `;
+
+      container.innerHTML = table;
+    } catch (e) {
+      console.error(e);
+      container.innerHTML = `<p class="hint" style="color:var(--danger)">加载失败: ${escapeHtml(String(e))}</p>`;
+    }
   },
 };
 

@@ -904,6 +904,7 @@ def render_doc(payload: RenderWordRequest) -> RenderWordResponse:
             output_path=payload.output_path,
             placeholders=payload.placeholders,
             template_path=payload.template_path,
+            style_config=payload.style_config,
         )
         return RenderWordResponse(output_path=output)
     except ValueError as exc:
