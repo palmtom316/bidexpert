@@ -1,68 +1,123 @@
 from __future__ import annotations
 
+import json
+import logging
 from dataclasses import dataclass
+from functools import lru_cache
+from pathlib import Path
+
+from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 
-@dataclass
+@dataclass(frozen=True)
 class ModelPricing:
-    input_price_per_m: float  # Price per 1M input tokens
-    output_price_per_m: float  # Price per 1M output tokens
+    input_price_per_m: float
+    output_price_per_m: float
     currency: str = "USD"
 
 
-# Pricing dictionary: model_name -> ModelPricing
-# Prices are approximated as of late 2024 / early 2025.
-PRICING_MAP: dict[str, ModelPricing] = {
-    # OpenAI
+DEFAULT_PRICING_MAP: dict[str, ModelPricing] = {
     "gpt-4o": ModelPricing(5.00, 15.00),
     "gpt-4o-mini": ModelPricing(0.15, 0.60),
     "o1-preview": ModelPricing(15.00, 60.00),
     "o1-mini": ModelPricing(3.00, 12.00),
-    
-    # DeepSeek (API pricing is very low, often noted in CNY but mapped to strict USD for consistency if needed)
-    # DeepSeek V3: Input 2元/百万, Output 8元/百万 (approx $0.28 / $1.12)
     "deepseek-chat": ModelPricing(0.28, 1.12),
-    "deepseek-reasoner": ModelPricing(0.28, 1.12),  # R1 pricing similar to V3 in some contexts, or slightly higher
-
-    # Qwen (Alibaba Cloud Bailian)
-    # Qwen-Turbo: 0.002元/千 -> 2元/百万 ($0.28)
-    # Qwen-Plus: 0.004元/千 -> 4元/百万 ($0.56)
-    # Qwen-Max: 0.02元/千 -> 20元/百万 ($2.80)
-    "qwen-turbo": ModelPricing(0.28, 0.28),  # Often distinct in/out, simplified here
+    "deepseek-reasoner": ModelPricing(0.28, 1.12),
+    "qwen-turbo": ModelPricing(0.28, 0.28),
     "qwen-plus": ModelPricing(0.56, 1.68),
     "qwen-max": ModelPricing(2.80, 8.40),
-    "qwen3": ModelPricing(0.56, 1.68), # Valid alias
-    
-    # Anthropic
+    "qwen3": ModelPricing(0.56, 1.68),
     "claude-3-5-sonnet-20241022": ModelPricing(3.00, 15.00),
     "claude-3-5-haiku-20241022": ModelPricing(1.00, 5.00),
 }
 
 
-def get_estimated_cost(model_name: str, input_tokens: int, output_tokens: int) -> tuple[float, str]:
-    """
-    Calculate estimated cost for a given model and token usage.
-    Returns (cost, currency).
-    """
-    # Normalize model name for matching (simple containment or exact match)
-    key = model_name.lower()
-    
-    # Direct match
-    if key in PRICING_MAP:
-        pricing = PRICING_MAP[key]
-        cost = (input_tokens / 1_000_000 * pricing.input_price_per_m) + \
-               (output_tokens / 1_000_000 * pricing.output_price_per_m)
-        return cost, pricing.currency
+def _coerce_pricing(model_name: str, payload: object) -> ModelPricing:
+    if not isinstance(payload, dict):
+        raise ValueError(f"invalid pricing entry type for model={model_name}")
+    input_price = float(payload["input_price_per_m"])
+    output_price = float(payload["output_price_per_m"])
+    currency = str(payload.get("currency", "USD")).strip().upper() or "USD"
+    return ModelPricing(
+        input_price_per_m=input_price,
+        output_price_per_m=output_price,
+        currency=currency,
+    )
 
-    # Partial match heuristics
-    for p_key, pricing in PRICING_MAP.items():
-        if p_key in key:
-            cost = (input_tokens / 1_000_000 * pricing.input_price_per_m) + \
-                   (output_tokens / 1_000_000 * pricing.output_price_per_m)
-            return cost, pricing.currency
-            
-    # Fallback: Assume GPT-4o-mini rates for unknown models
-    fallback = PRICING_MAP["gpt-4o-mini"]
-    cost = (input_tokens / 1_000_000 * fallback.input_price_per_m) + \
-           (output_tokens / 1_000_000 * fallback.output_price_per_m)
-    return cost, fallback.currency
+
+def _load_pricing_from_file(path_str: str) -> dict[str, ModelPricing]:
+    path = Path(path_str).expanduser()
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(raw, dict):
+        raise ValueError("pricing file must be a JSON object")
+
+    pricing_map: dict[str, ModelPricing] = {}
+    for model, entry in raw.items():
+        key = str(model).strip().lower()
+        if not key:
+            continue
+        try:
+            pricing_map[key] = _coerce_pricing(key, entry)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Skip invalid pricing entry for model=%s: %s", key, exc)
+    if not pricing_map:
+        raise ValueError("pricing file has no valid entries")
+    return pricing_map
+
+
+@lru_cache(maxsize=1)
+def get_pricing_map() -> dict[str, ModelPricing]:
+    pricing_file = (settings.pricing_file or "").strip()
+    if pricing_file:
+        try:
+            return _load_pricing_from_file(pricing_file)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Failed to load BIDEXPERT_PRICING_FILE=%s: %s", pricing_file, exc)
+    return DEFAULT_PRICING_MAP
+
+
+def reset_pricing_cache() -> None:
+    get_pricing_map.cache_clear()
+
+
+def _resolve_pricing_key(model_name: str, pricing_map: dict[str, ModelPricing]) -> str | None:
+    normalized = str(model_name or "").strip().lower()
+    if not normalized:
+        return None
+
+    if normalized in pricing_map:
+        return normalized
+
+    alias = normalized.split("/")[-1]
+    if alias in pricing_map:
+        return alias
+
+    separators = ("-", ":", "@", "/")
+    candidates: list[str] = []
+
+    def _collect_prefix_matches(source: str) -> None:
+        for key in pricing_map:
+            if any(source.startswith(f"{key}{sep}") for sep in separators):
+                candidates.append(key)
+
+    _collect_prefix_matches(normalized)
+    if alias and alias != normalized:
+        _collect_prefix_matches(alias)
+
+    if not candidates:
+        return None
+    return max(candidates, key=len)
+
+
+def get_estimated_cost(model_name: str, input_tokens: int, output_tokens: int) -> tuple[float, str]:
+    pricing_map = get_pricing_map()
+    key = _resolve_pricing_key(model_name, pricing_map)
+    pricing = pricing_map[key] if key else pricing_map.get("gpt-4o-mini") or next(iter(pricing_map.values()))
+
+    cost = (
+        (input_tokens / 1_000_000 * pricing.input_price_per_m)
+        + (output_tokens / 1_000_000 * pricing.output_price_per_m)
+    )
+    return cost, pricing.currency

@@ -13,7 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.config import settings
-from app.db.session import SessionLocal
+from app.db.session import session_scope
 from app.llm import default_model_for_role, get_fallback_chain, normalize_role
 from app.models.tables import KeyStorage, ProjectModelPolicy, ProviderProfile, ProviderScope
 from app.secrets.crypto import decrypt, encrypt, load_master_key
@@ -223,7 +223,7 @@ def create_provider_profile(
         except Exception as exc:  # noqa: BLE001
             raise ValueError("vault is unavailable for VAULT storage") from exc
 
-    with SessionLocal() as db:
+    with session_scope() as db:
         db.add(profile)
         db.commit()
         db.refresh(profile)
@@ -232,7 +232,7 @@ def create_provider_profile(
 
 def list_provider_profiles(project_id: str) -> list[ProviderProfile]:
     project_uuid = _try_uuid(project_id)
-    with SessionLocal() as db:
+    with session_scope() as db:
         stmt = select(ProviderProfile).where(
             ProviderProfile.scope == ProviderScope.PROJECT,
             ProviderProfile.scope_id == project_uuid,
@@ -242,13 +242,13 @@ def list_provider_profiles(project_id: str) -> list[ProviderProfile]:
 
 def get_provider_profile(profile_id: str) -> ProviderProfile | None:
     profile_uuid = _try_uuid(profile_id)
-    with SessionLocal() as db:
+    with session_scope() as db:
         return db.execute(select(ProviderProfile).where(ProviderProfile.id == profile_uuid)).scalar_one_or_none()
 
 
 def delete_provider_profile(profile_id: str) -> bool:
     profile_uuid = _try_uuid(profile_id)
-    with SessionLocal() as db:
+    with session_scope() as db:
         profile = db.execute(select(ProviderProfile).where(ProviderProfile.id == profile_uuid)).scalar_one_or_none()
         if not profile:
             return False
@@ -301,7 +301,7 @@ def upsert_project_model_policy(
     def _opt_uuid(value: str | None) -> uuid.UUID | None:
         return _try_uuid(value) if value else None
 
-    with SessionLocal() as db:
+    with session_scope() as db:
         stmt = select(ProjectModelPolicy).where(ProjectModelPolicy.project_id == project_uuid)
         policy = db.execute(stmt).scalar_one_or_none()
         if not policy:
@@ -327,7 +327,7 @@ def upsert_project_model_policy(
 
 def get_project_model_policy(project_id: str) -> ProjectModelPolicy | None:
     project_uuid = _try_uuid(project_id)
-    with SessionLocal() as db:
+    with session_scope() as db:
         stmt = select(ProjectModelPolicy).where(ProjectModelPolicy.project_id == project_uuid)
         return db.execute(stmt).scalar_one_or_none()
 
@@ -343,7 +343,7 @@ def resolve_profile_for_task(project_id: str | None, task_type: str) -> Resolved
     except ValueError:
         return fallback_profile
 
-    with SessionLocal() as db:
+    with session_scope() as db:
         policy = db.execute(
             select(ProjectModelPolicy).where(ProjectModelPolicy.project_id == project_uuid)
         ).scalar_one_or_none()

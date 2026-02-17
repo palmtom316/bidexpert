@@ -6,7 +6,7 @@ from datetime import datetime
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.db.session import SessionLocal
+from app.db.session import session_scope
 from app.models.tables import Requirement, ReviewReport, ScoringReport, SectionContent
 
 TOKEN_PATTERN = re.compile(r"[\w\u4e00-\u9fff]+", re.UNICODE)
@@ -45,8 +45,12 @@ def _estimate_requirement_coverage(
                 if overlap_bigrams >= 2:
                     return True, 0.6
 
-    if len(section_text.strip()) >= 120:
-        return True, 0.55
+    # As a last resort, allow a weak estimated pass only when long content has
+    # minimal lexical overlap with the requirement.
+    if len(section_text.strip()) >= 120 and req_tokens:
+        loose_overlap = len(req_tokens & section_tokens) / len(req_tokens)
+        if loose_overlap >= 0.15:
+            return True, 0.55
     return False, 0.0
 
 
@@ -177,6 +181,6 @@ class SimulatedScorer:
 
 
 def run_scoring_service(project_id: str) -> ScoringReport:
-    with SessionLocal() as db:
+    with session_scope() as db:
         scorer = SimulatedScorer(db)
         return scorer.calculate_score(project_id)

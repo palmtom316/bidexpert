@@ -6,8 +6,7 @@ from app.main import app
 from app.services.api_rate_limiter import reset_local_rate_limit_state
 
 
-
-def test_api_rate_limit_blocks_excess_requests(monkeypatch) -> None:
+def test_api_rate_limit_blocks_excess_requests_on_api_routes(monkeypatch) -> None:
     from app.main import settings
 
     monkeypatch.setattr(settings, "api_rate_limit_enabled", True, raising=False)
@@ -18,16 +17,15 @@ def test_api_rate_limit_blocks_excess_requests(monkeypatch) -> None:
     client = TestClient(app)
     headers = {"X-Forwarded-For": "198.51.100.10"}
 
-    assert client.get("/health", headers=headers).status_code == 200
-    assert client.get("/health", headers=headers).status_code == 200
+    assert client.post("/v1/policy/pricing-fuse", json={"text": "仅技术说明"}, headers=headers).status_code == 200
+    assert client.post("/v1/policy/pricing-fuse", json={"text": "仅技术说明"}, headers=headers).status_code == 200
 
-    blocked = client.get("/health", headers=headers)
+    blocked = client.post("/v1/policy/pricing-fuse", json={"text": "仅技术说明"}, headers=headers)
     assert blocked.status_code == 429
     assert blocked.headers.get("Retry-After")
 
 
-
-def test_api_rate_limit_isolated_by_client_ip(monkeypatch) -> None:
+def test_api_rate_limit_skips_health_and_isolated_by_client_ip(monkeypatch) -> None:
     from app.main import settings
 
     monkeypatch.setattr(settings, "api_rate_limit_enabled", True, raising=False)
@@ -38,5 +36,9 @@ def test_api_rate_limit_isolated_by_client_ip(monkeypatch) -> None:
     client = TestClient(app)
 
     assert client.get("/health", headers={"X-Forwarded-For": "203.0.113.1"}).status_code == 200
-    assert client.get("/health", headers={"X-Forwarded-For": "203.0.113.2"}).status_code == 200
-    assert client.get("/health", headers={"X-Forwarded-For": "203.0.113.1"}).status_code == 429
+    assert client.get("/health", headers={"X-Forwarded-For": "203.0.113.1"}).status_code == 200
+    assert client.get("/health", headers={"X-Forwarded-For": "203.0.113.1"}).status_code == 200
+
+    assert client.post("/v1/policy/pricing-fuse", json={"text": "技术能力"}, headers={"X-Forwarded-For": "203.0.113.1"}).status_code == 200
+    assert client.post("/v1/policy/pricing-fuse", json={"text": "技术能力"}, headers={"X-Forwarded-For": "203.0.113.2"}).status_code == 200
+    assert client.post("/v1/policy/pricing-fuse", json={"text": "技术能力"}, headers={"X-Forwarded-For": "203.0.113.1"}).status_code == 429

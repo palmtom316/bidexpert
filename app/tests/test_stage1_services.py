@@ -9,6 +9,11 @@ def test_pricing_guard_blocks_pricing_text() -> None:
     assert len(reasons) >= 1
 
 
+def test_pricing_guard_does_not_block_generic_summary_without_amount_context() -> None:
+    blocked, _ = detect_pricing_content("本章节为工作内容合计说明，不涉及任何金额或报价。")
+    assert blocked is False
+
+
 def test_tender_parser_extracts_requirements() -> None:
     text = "第一章 总则。投标人必须具备ISO9001资质。技术评分分值10分。"
     result = parse_tender_requirements(text)

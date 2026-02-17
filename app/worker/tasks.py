@@ -14,7 +14,7 @@ from app.schemas.contracts import EvidenceUpsertItem
 from app.services.evidence_validator import run_three_gates
 from app.services.generation_pipeline import generate_draft_with_retrieval
 from app.services.pdf_ingest import ingest_pdf_bytes
-from app.services.qdrant_store import QdrantStore
+from app.services.qdrant_store import get_qdrant_store
 from app.services.word_renderer import render_word_structured
 from app.worker.celery_app import celery_app
 
@@ -211,7 +211,7 @@ def render_export_task(self, section_outputs: list[dict]) -> dict:  # type: igno
 @celery_app.task(bind=True, name="tasks.upsert_evidence", max_retries=settings.task_max_retries)
 def upsert_evidence_task(self, expert_doc_id: str, chunks: list[dict]) -> dict:  # type: ignore[no-untyped-def]
     self.update_state(state="PROGRESS", meta={"stage": "UPSERT_EVIDENCE"})
-    store = QdrantStore()
+    store = get_qdrant_store()
     chunk_objs = [EvidenceUpsertItem(**chunk) for chunk in chunks]
     count = store.upsert_chunks(expert_doc_id=expert_doc_id, chunks=chunk_objs)
     return {"status": "SUCCEEDED", "upserted": count}
@@ -226,7 +226,7 @@ def extract_upsert_historical_task(
     model_id: str | None = None,
 ) -> dict:  # type: ignore[no-untyped-def]
     self.update_state(state="PROGRESS", meta={"stage": "EXTRACT_HISTORICAL"})
-    store = QdrantStore()
+    store = get_qdrant_store()
     chunks = extract_evidence_chunks_from_text(
         text=text,
         industry_tag=industry_tag,

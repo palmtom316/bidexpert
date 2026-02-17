@@ -29,7 +29,7 @@ def test_evidence_search_maps_runtime_error_to_503(monkeypatch: pytest.MonkeyPat
         def search(self, **_: object) -> list[object]:
             raise RuntimeError("qdrant unavailable")
 
-    monkeypatch.setattr(routes, "QdrantStore", _Store)
+    monkeypatch.setattr(routes, "get_qdrant_store", lambda: _Store())
 
     with pytest.raises(HTTPException) as exc_info:
         routes.evidence_search(EvidenceSearchRequest(query="q"))
@@ -97,7 +97,7 @@ def test_reserve_budget_persistent_uses_row_lock(monkeypatch: pytest.MonkeyPatch
     project = _Project()
     session = _Session(project)
 
-    monkeypatch.setattr(llm_audit, "SessionLocal", lambda: session)
+    monkeypatch.setattr(llm_audit, "session_scope", lambda: session)
 
     ok, remaining = llm_audit.reserve_budget_persistent(str(uuid.uuid4()), 20)
 

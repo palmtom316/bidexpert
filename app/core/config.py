@@ -25,6 +25,8 @@ class Settings(BaseSettings):
     metrics_enabled: bool = True
     auth_mode: str = "api_key"
     jwt_secret: str | None = None
+    jwt_public_key_pem: str | None = None
+    jwt_allowed_algorithms: str = "RS256,ES256"
     jwt_issuer: str | None = None
     jwt_audience: str | None = None
     max_upload_bytes: int = 50 * 1024 * 1024
@@ -52,6 +54,11 @@ class Settings(BaseSettings):
     task_max_retries: int = 2
     task_max_fallbacks: int = 1
     max_parallel_sections: int = 4
+    task_status_stream_timeout_seconds: int = 300
+    semantic_cache_cleanup_interval_seconds: int = 300
+    semantic_cache_max_local_entries: int = 4096
+    evidence_fuzzy_partial_ratio_threshold: int = 88
+    pricing_file: str | None = None
     master_key_b64: str | None = None
     vault_addr: str | None = None
     vault_token: str | None = None

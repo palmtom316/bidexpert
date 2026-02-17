@@ -11,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.config import settings
-from app.db.session import SessionLocal
+from app.db.session import session_scope
 from app.models.tables import (
     DocKind,
     Document,
@@ -67,7 +67,7 @@ def _parse_project_uuid(project_id: str | None) -> uuid.UUID | None:
 def _ensure_project(project_uuid: uuid.UUID | None) -> None:
     if not project_uuid:
         return
-    with SessionLocal() as db:
+    with session_scope() as db:
         exists = db.execute(select(Project.id).where(Project.id == project_uuid)).scalar_one_or_none()
         if exists:
             return
@@ -343,7 +343,7 @@ def analyze_and_persist_tender_pdf(
     storage_path = _save_file(filename, content)
 
     try:
-        with SessionLocal() as db:
+        with session_scope() as db:
             source_doc = Document(
                 project_id=project_uuid,
                 kind=DocKind.TENDER,
@@ -403,7 +403,7 @@ def analyze_and_persist_tender_pdf(
 
 def list_tender_analysis_runs(project_id: str | None, limit: int = 50) -> list[TenderAnalysisRunItem]:
     project_uuid = _parse_project_uuid(project_id)
-    with SessionLocal() as db:
+    with session_scope() as db:
         stmt = select(TenderAnalysisRun).order_by(TenderAnalysisRun.created_at.desc()).limit(max(1, min(limit, 200)))
         if project_uuid:
             stmt = stmt.where(TenderAnalysisRun.project_id == project_uuid)
@@ -427,7 +427,7 @@ def get_tender_analysis_detail(run_id: str) -> TenderAnalysisDetailResponse:
     except ValueError as exc:
         raise ValueError("invalid run_id") from exc
 
-    with SessionLocal() as db:
+    with session_scope() as db:
         run = db.execute(select(TenderAnalysisRun).where(TenderAnalysisRun.id == run_uuid)).scalar_one_or_none()
         if not run:
             raise ValueError("analysis run not found")

@@ -8,7 +8,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.db.session import SessionLocal
+from app.db.session import session_scope
 from app.models.tables import Requirement, ReviewReport, SectionContent
 from app.services.byok import resolve_profile_chain_for_task
 from app.services.llm_gateway import compliance_review_with_ensemble, compliance_review_with_fallback_chain
@@ -312,7 +312,7 @@ class ComplianceReviewer:
 
 def run_compliance_review(project_id: str, section_key: str) -> ReviewReport:
     """Orchestrate compliance review with session management."""
-    with SessionLocal() as db:
+    with session_scope() as db:
         stmt = select(SectionContent).where(
             SectionContent.project_id == uuid.UUID(project_id),
             SectionContent.section_key == section_key
@@ -332,7 +332,7 @@ def run_full_compliance_review(
     enable_ensemble: bool = False,
     ensemble_size: int | None = None,
 ) -> ReviewReport:
-    with SessionLocal() as db:
+    with session_scope() as db:
         reviewer = ComplianceReviewer(db)
         return reviewer.review_full_document(
             project_id=project_id,

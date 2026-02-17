@@ -5,6 +5,8 @@ from dataclasses import dataclass
 
 from rapidfuzz import fuzz
 
+from app.core.config import settings
+
 SENTENCE_SPLIT = re.compile(r"[。；;!?！？\n]+")
 MUST_PATTERN = re.compile(r"(必须|应当|不得|需|须|满足)")
 
@@ -31,6 +33,7 @@ def gate1_evidence_binding(evidence_ids: list[str]) -> bool:
 def gate2_deterministic_check(generated_text: str, evidence_texts: list[str]) -> list[str]:
     evidence_pool = [_normalize(x) for x in evidence_texts]
     missing: list[str] = []
+    threshold = max(0, min(100, int(settings.evidence_fuzzy_partial_ratio_threshold)))
     for sentence in _extract_fact_sentences(generated_text):
         norm_sentence = _normalize(sentence)
         matched = False
@@ -38,7 +41,7 @@ def gate2_deterministic_check(generated_text: str, evidence_texts: list[str]) ->
             if norm_sentence in ev:
                 matched = True
                 break
-            if fuzz.partial_ratio(norm_sentence, ev) >= 88:
+            if fuzz.partial_ratio(norm_sentence, ev) >= threshold:
                 matched = True
                 break
         if not matched:

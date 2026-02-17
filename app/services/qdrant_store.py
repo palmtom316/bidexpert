@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import hashlib
 import logging
 import re
 import uuid
 from collections import Counter
 from dataclasses import dataclass
 from datetime import date
+from functools import lru_cache
 from typing import cast
 
 from app.core.config import settings
@@ -39,7 +41,8 @@ def _build_sparse_vector(text: str) -> dict[int, float]:
     total = len(tokens)
     indices_values: dict[int, float] = {}
     for token, count in tf.items():
-        idx = int.from_bytes(token.encode("utf-8")[:4].ljust(4, b"\x00"), "big") % (2**31)
+        digest = hashlib.blake2b(token.encode("utf-8"), digest_size=8).digest()
+        idx = int.from_bytes(digest, byteorder="big", signed=False) % (2**31)
         indices_values[idx] = count / total
     return indices_values
 
@@ -81,13 +84,14 @@ def _rerank_hits(query: str, items: list[RetrievedEvidence], top_k: int) -> list
         quality = max(0.0, min(1.0, quality))
         return base_score * 0.55 + overlap * 0.40 + quality * 0.05
 
-    ranked = sorted(items, key=_rerank_score, reverse=True)
+    scored = [(item, _rerank_score(item)) for item in items]
+    ranked = sorted(scored, key=lambda pair: pair[1], reverse=True)
     result: list[RetrievedEvidence] = []
-    for item in ranked[:top_k]:
+    for item, score in ranked[:top_k]:
         result.append(
             RetrievedEvidence(
                 chunk_id=item.chunk_id,
-                score=_rerank_score(item),
+                score=score,
                 text=item.text,
                 payload=item.payload,
             )
@@ -378,6 +382,11 @@ class QdrantStore:
             return self._fuse_hybrid(vector_hits=vector_hits, sparse_hits=sparse_hits, top_k=top_k)
 
         return []
+
+
+@lru_cache(maxsize=1)
+def get_qdrant_store() -> QdrantStore:
+    return QdrantStore()
 
 
 def to_search_hits(items: list[RetrievedEvidence]) -> list[EvidenceSearchHit]:

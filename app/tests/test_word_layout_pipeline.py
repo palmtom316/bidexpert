@@ -117,6 +117,23 @@ def test_structured_render_api_rejects_forbidden_content(monkeypatch, tmp_path: 
     assert response.status_code == 400
 
 
+def test_render_api_rejects_path_traversal(monkeypatch, tmp_path: Path) -> None:
+    template_name = _prepare_template(monkeypatch, tmp_path, template_name="safe-template.docx")
+    client = TestClient(app)
+
+    response = client.post(
+        "/v1/render/word",
+        json={
+            "output_path": "../escape.docx",
+            "template_path": template_name,
+            "placeholders": {"project_name": "示例项目"},
+            "style_config": {},
+        },
+    )
+    assert response.status_code == 400
+    assert "path traversal" in str(response.json().get("detail", "")).lower()
+
+
 def test_structured_render_runs_soffice_for_pdf_export(monkeypatch, tmp_path: Path) -> None:
     template_name = _prepare_template(monkeypatch, tmp_path)
     called: dict[str, list[str]] = {}

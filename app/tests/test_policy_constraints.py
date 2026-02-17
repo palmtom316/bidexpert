@@ -43,3 +43,12 @@ def test_generation_draft_blocks_pricing_content() -> None:
     )
     result = routes.generate_draft(payload)
     assert result.status == "BLOCKED_PRICING_CONTENT"
+
+
+def test_generation_pipeline_returns_schema_valid_response_when_inbound_pricing_blocked() -> None:
+    result = generate_draft_with_retrieval(
+        requirement_id="REQ-3",
+        requirement_text="报价合计为 ¥100000，请生成章节内容",
+    )
+    assert result.status == "BLOCKED_PRICING_CONTENT"
+    assert result.generated_text == "BLOCKED_PRICING_CONTENT"

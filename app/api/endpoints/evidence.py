@@ -1,0 +1,179 @@
+from __future__ import annotations
+
+from fastapi import APIRouter, File, Form, UploadFile
+
+from app.api.handlers.evidence_expert_render import (
+    cache_invalidate_handler,
+    evidence_extract_upsert_handler,
+    evidence_search_handler,
+    evidence_upsert_handler,
+    expert_library_doc_chunks_handler,
+    expert_library_docs_handler,
+    expert_library_ingest_structured_handler,
+    expert_library_ingest_upload_handler,
+    expert_library_ingest_uploads_handler,
+    feedback_upsert_section_handler,
+)
+from app.schemas.contracts import (
+    EnqueueIngestResponse,
+    ExpertLibraryBatchIngestResponse,
+    ExpertLibraryChunkListResponse,
+    ExpertLibraryDocListResponse,
+    ExpertLibraryIngestResponse,
+    ExpertLibraryStructuredIngestRequest,
+    ExpertLibraryStructuredIngestResponse,
+    EvidenceSearchRequest,
+    EvidenceSearchResponse,
+    EvidenceUpsertRequest,
+    HistoricalExtractRequest,
+    PricingFuseResponse,
+    SectionFeedbackUpsertRequest,
+)
+
+router = APIRouter()
+
+
+def _ctx():
+    from app.api import routes
+
+    return routes
+
+
+@router.post("/v1/evidence/upsert", response_model=EnqueueIngestResponse)
+def evidence_upsert(payload: EvidenceUpsertRequest) -> EnqueueIngestResponse:
+    ctx = _ctx()
+    return evidence_upsert_handler(
+        payload,
+        upsert_evidence_task_obj=ctx.upsert_evidence_task,
+        service_unavailable_exc_factory=ctx._service_unavailable,
+    )
+
+
+@router.post("/v1/evidence/extract-upsert", response_model=EnqueueIngestResponse)
+def evidence_extract_upsert(payload: HistoricalExtractRequest) -> EnqueueIngestResponse:
+    ctx = _ctx()
+    return evidence_extract_upsert_handler(
+        payload,
+        extract_upsert_historical_task_obj=ctx.extract_upsert_historical_task,
+        service_unavailable_exc_factory=ctx._service_unavailable,
+    )
+
+
+@router.post("/v1/expert-library/ingest-upload", response_model=ExpertLibraryIngestResponse)
+async def expert_library_ingest_upload(
+    file: UploadFile = File(...),
+    project_id: str | None = Form(default=None),
+    industry_tag: str | None = Form(default=None),
+    title: str | None = Form(default=None),
+    created_by: str = Form(default="system"),
+    doc_type: str = Form(default="EXPERT_HISTORY"),
+    model_id: str | None = Form(default=None),
+) -> ExpertLibraryIngestResponse:
+    ctx = _ctx()
+    return await expert_library_ingest_upload_handler(
+        file=file,
+        project_id=project_id,
+        industry_tag=industry_tag,
+        title=title,
+        created_by=created_by,
+        doc_type=doc_type,
+        model_id=model_id,
+        read_upload_with_limit_fn=ctx._read_upload_with_limit,
+        ingest_historical_pdf_fn=ctx.ingest_historical_pdf,
+        resolved_created_by_fn=ctx._resolved_created_by,
+        service_unavailable_exc_factory=ctx._service_unavailable,
+    )
+
+
+@router.post("/v1/expert-library/ingest-uploads", response_model=ExpertLibraryBatchIngestResponse)
+async def expert_library_ingest_uploads(
+    files: list[UploadFile] = File(...),
+    project_id: str | None = Form(default=None),
+    industry_tag: str | None = Form(default=None),
+    title: str | None = Form(default=None),
+    created_by: str = Form(default="system"),
+    doc_type: str = Form(default="EXPERT_HISTORY"),
+    model_id: str | None = Form(default=None),
+) -> ExpertLibraryBatchIngestResponse:
+    ctx = _ctx()
+    return await expert_library_ingest_uploads_handler(
+        files=files,
+        project_id=project_id,
+        industry_tag=industry_tag,
+        title=title,
+        created_by=created_by,
+        doc_type=doc_type,
+        model_id=model_id,
+        read_upload_with_limit_fn=ctx._read_upload_with_limit,
+        ingest_historical_pdf_fn=ctx.ingest_historical_pdf,
+        resolved_created_by_fn=ctx._resolved_created_by,
+    )
+
+
+@router.post("/v1/expert-library/ingest-structured", response_model=ExpertLibraryStructuredIngestResponse)
+def expert_library_ingest_structured(
+    payload: ExpertLibraryStructuredIngestRequest,
+) -> ExpertLibraryStructuredIngestResponse:
+    ctx = _ctx()
+    return expert_library_ingest_structured_handler(
+        payload,
+        ingest_structured_expert_knowledge_fn=ctx.ingest_structured_expert_knowledge,
+        resolved_created_by_fn=ctx._resolved_created_by,
+        service_unavailable_exc_factory=ctx._service_unavailable,
+    )
+
+
+@router.get("/v1/expert-library/docs", response_model=ExpertLibraryDocListResponse)
+def expert_library_docs(
+    project_id: str | None = None,
+    industry_tag: str | None = None,
+    limit: int = 50,
+) -> ExpertLibraryDocListResponse:
+    ctx = _ctx()
+    return expert_library_docs_handler(
+        project_id=project_id,
+        industry_tag=industry_tag,
+        limit=limit,
+        list_expert_docs_fn=ctx.list_expert_docs,
+        service_unavailable_exc_factory=ctx._service_unavailable,
+    )
+
+
+@router.get("/v1/expert-library/docs/{expert_doc_id}/chunks", response_model=ExpertLibraryChunkListResponse)
+def expert_library_doc_chunks(expert_doc_id: str, limit: int = 200) -> ExpertLibraryChunkListResponse:
+    ctx = _ctx()
+    return expert_library_doc_chunks_handler(
+        expert_doc_id=expert_doc_id,
+        limit=limit,
+        list_expert_chunks_fn=ctx.list_expert_chunks,
+        service_unavailable_exc_factory=ctx._service_unavailable,
+    )
+
+
+@router.post("/v1/evidence/feedback-upsert", response_model=EnqueueIngestResponse)
+def feedback_upsert_section(payload: SectionFeedbackUpsertRequest) -> EnqueueIngestResponse:
+    ctx = _ctx()
+    return feedback_upsert_section_handler(
+        payload,
+        get_section_status_fn=ctx.get_section_status,
+        detect_pricing_content_fn=ctx.detect_pricing_content,
+        standardize_section_feedback_chunks_fn=ctx.standardize_section_feedback_chunks,
+        upsert_evidence_task_obj=ctx.upsert_evidence_task,
+    )
+
+
+@router.post("/v1/evidence/search", response_model=EvidenceSearchResponse)
+def evidence_search(payload: EvidenceSearchRequest) -> EvidenceSearchResponse:
+    ctx = _ctx()
+    return evidence_search_handler(
+        payload,
+        get_qdrant_store_fn=ctx.get_qdrant_store,
+        to_search_hits_fn=ctx.to_search_hits,
+        service_unavailable_exc_factory=ctx._service_unavailable,
+    )
+
+
+@router.post("/v1/cache/invalidate", response_model=PricingFuseResponse)
+def cache_invalidate(prefix: str | None = None) -> PricingFuseResponse:
+    ctx = _ctx()
+    return cache_invalidate_handler(prefix, invalidate_cache_fn=ctx.invalidate_cache)

@@ -22,10 +22,30 @@ class SanitizeResult:
     warnings: list[str]
 
 
+_ID_CARD_WEIGHTS = (7, 9, 10, 5, 8, 4, 2, 1, 6, 3, 7, 9, 10, 5, 8, 4, 2)
+_ID_CARD_CHECKSUM_MAP = "10X98765432"
+
+
+def _is_valid_id_card(candidate: str) -> bool:
+    if len(candidate) != 18 or not candidate[:17].isdigit():
+        return False
+    checksum = sum(int(digit) * weight for digit, weight in zip(candidate[:17], _ID_CARD_WEIGHTS, strict=True)) % 11
+    expected = _ID_CARD_CHECKSUM_MAP[checksum]
+    return candidate[-1].upper() == expected
+
+
+def _mask_id_cards(text: str) -> str:
+    def replace(match: re.Match[str]) -> str:
+        token = match.group(0)
+        return "******************" if _is_valid_id_card(token) else token
+
+    return ID_CARD_PATTERN.sub(replace, text)
+
+
 def _mask_pii(text: str) -> str:
     masked = EMAIL_PATTERN.sub("***@***", text)
     masked = PHONE_PATTERN.sub("***********", masked)
-    masked = ID_CARD_PATTERN.sub("******************", masked)
+    masked = _mask_id_cards(masked)
     return masked
 
 

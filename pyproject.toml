@@ -36,12 +36,20 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
   "pytest>=8.3.3",
+  "pytest-cov>=6.0.0",
   "ruff>=0.8.3"
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["app/tests"]
+testpaths = ["tests"]
 pythonpath = ["."]
+
+[tool.coverage.run]
+source = ["app"]
+
+[tool.coverage.report]
+show_missing = true
+skip_empty = true
 
 [tool.ruff]
 line-length = 100

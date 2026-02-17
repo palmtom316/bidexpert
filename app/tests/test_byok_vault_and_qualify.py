@@ -47,7 +47,7 @@ def test_create_provider_profile_supports_vault_storage(monkeypatch) -> None:
     project_id = str(uuid.uuid4())
 
     monkeypatch.setattr(profiles, "_write_vault_key", lambda secret_ref, api_key: stored.setdefault(secret_ref, api_key))
-    monkeypatch.setattr(profiles, "SessionLocal", lambda: _SessionCtx(session))
+    monkeypatch.setattr(profiles, "session_scope", lambda: _SessionCtx(session))
 
     profile = profiles.create_provider_profile(
         project_id=project_id,
@@ -78,7 +78,7 @@ def test_delete_provider_profile_cleans_vault_secret(monkeypatch) -> None:
     calls: list[str] = []
 
     monkeypatch.setattr(profiles, "_delete_vault_key", lambda secret_ref: calls.append(secret_ref))
-    monkeypatch.setattr(profiles, "SessionLocal", lambda: _SessionCtx(session))
+    monkeypatch.setattr(profiles, "session_scope", lambda: _SessionCtx(session))
 
     deleted = profiles.delete_provider_profile(str(uuid.uuid4()))
 

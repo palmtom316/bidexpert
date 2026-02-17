@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import JSON, Date, DateTime, Enum, ForeignKey, Integer, LargeBinary, Numeric, Text
+from sqlalchemy import JSON, Date, DateTime, Enum, ForeignKey, Index, Integer, LargeBinary, Numeric, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -81,7 +81,7 @@ class WorkflowRun(Base):
     sections_json: Mapped[dict] = mapped_column(JSON, default=dict)
     section_status_json: Mapped[dict] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
 
 class Project(Base):
@@ -99,7 +99,7 @@ class Project(Base):
     token_budget_total: Mapped[int] = mapped_column(Integer, default=500000)
     token_budget_used: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
 
 class Document(Base):
@@ -209,6 +209,7 @@ class EvidenceChunk(Base):
 
 class ComplianceMatrix(Base):
     __tablename__ = "compliance_matrix"
+    __table_args__ = (Index("idx_compliance_matrix_project_id", "project_id"),)
 
     id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
     project_id: Mapped[uuid.UUID] = mapped_column(
@@ -223,7 +224,7 @@ class ComplianceMatrix(Base):
     planned_section: Mapped[str | None] = mapped_column(Text)
     evidence_ids: Mapped[list[uuid.UUID]] = mapped_column(UUIDListType(), default=list)
     notes: Mapped[str | None] = mapped_column(Text)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
 
 class GenerationVersion(Base):
@@ -244,6 +245,7 @@ class GenerationVersion(Base):
 
 class SectionContent(Base):
     __tablename__ = "section_content"
+    __table_args__ = (Index("idx_section_content_project_section_key", "project_id", "section_key"),)
 
     id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
     project_id: Mapped[uuid.UUID] = mapped_column(
@@ -331,7 +333,7 @@ class ProviderProfile(Base):
     allowed_tasks: Mapped[list[str]] = mapped_column(JSON, default=lambda: ["*"])
     created_by: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
 
 class ProjectModelPolicy(Base):
@@ -373,7 +375,7 @@ class ProjectModelPolicy(Base):
         },
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
 
 class CompletedBid(Base):
@@ -390,11 +392,12 @@ class CompletedBid(Base):
     completed_date: Mapped[Date | None] = mapped_column(Date)
     created_by: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
 
 class LLMCallLog(Base):
     __tablename__ = "llm_call_log"
+    __table_args__ = (Index("idx_llm_call_log_project_id", "project_id"),)
 
     id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
     project_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -438,7 +441,7 @@ class TenderAnalysisRun(Base):
     summary_json: Mapped[dict] = mapped_column(JSON, default=dict)
     created_by: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
 
 class TenderKeyInfo(Base):
@@ -470,6 +473,7 @@ class TenderKeyInfo(Base):
 
 class ReviewReport(Base):
     __tablename__ = "review_report"
+    __table_args__ = (Index("idx_review_report_project_section", "project_id", "section_key"),)
 
     id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
     project_id: Mapped[uuid.UUID] = mapped_column(

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+from functools import lru_cache
 
 import httpx
 
@@ -33,6 +34,12 @@ def _local_compose(requirement_text: str, evidence_texts: list[str]) -> str:
     if not snippets:
         return ""
     return f"针对要求“{requirement_text}”，我们具备以下能力：" + "；".join(snippets[:3]) + "。"
+
+
+@lru_cache(maxsize=4)
+def _shared_http_client(timeout_seconds: float) -> httpx.Client:
+    timeout = httpx.Timeout(timeout_seconds)
+    return httpx.Client(timeout=timeout)
 
 
 class MockAdapter(LLMAdapter):
@@ -117,19 +124,18 @@ class OpenAICompatibleAdapter(LLMAdapter):
             "messages": [{"role": "user", "content": prompt}],
             "temperature": 0.2,
         }
-        timeout = httpx.Timeout(float(settings.llm_http_timeout_seconds))
         try:
-            with httpx.Client(timeout=timeout) as client:
-                resp = client.post(
-                    url,
-                    headers={
-                        "Content-Type": "application/json",
-                        "Authorization": f"Bearer {api_key}",
-                    },
-                    json=body,
-                )
-                resp.raise_for_status()
-                raw = resp.json()
+            client = _shared_http_client(float(settings.llm_http_timeout_seconds))
+            resp = client.post(
+                url,
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {api_key}",
+                },
+                json=body,
+            )
+            resp.raise_for_status()
+            raw = resp.json()
         except httpx.TimeoutException as exc:
             raise AdapterUnavailableError("provider timeout") from exc
         except httpx.HTTPStatusError as exc:

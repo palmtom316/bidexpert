@@ -6,6 +6,7 @@ import threading
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from functools import lru_cache
+from time import sleep
 
 import redis
 from redis.exceptions import RedisError
@@ -22,6 +23,7 @@ class CacheRecord:
 _CACHE: dict[str, CacheRecord] = {}
 _LOCK = threading.Lock()
 _CACHE_PREFIX = "semantic_cache:"
+_CLEANUP_STARTED = False
 
 
 @lru_cache(maxsize=1)
@@ -63,13 +65,46 @@ def build_cache_key(
     )
 
 
-def _get_cache_local(cache_key: str) -> dict | None:
+def _prune_local_cache_locked(now: datetime | None = None) -> None:
+    now = now or datetime.now(UTC)
+    expired_keys = [key for key, record in _CACHE.items() if now >= record.expires_at]
+    for key in expired_keys:
+        _CACHE.pop(key, None)
+
+    max_entries = max(1, int(settings.semantic_cache_max_local_entries))
+    overflow = len(_CACHE) - max_entries
+    if overflow > 0:
+        evict_keys = sorted(_CACHE.items(), key=lambda item: item[1].expires_at)[:overflow]
+        for key, _ in evict_keys:
+            _CACHE.pop(key, None)
+
+
+def _cleanup_loop() -> None:
+    interval = max(1, int(settings.semantic_cache_cleanup_interval_seconds))
+    while True:
+        sleep(interval)
+        with _LOCK:
+            _prune_local_cache_locked()
+
+
+def _ensure_local_cleanup_thread() -> None:
+    global _CLEANUP_STARTED
+    if _CLEANUP_STARTED:
+        return
     with _LOCK:
+        if _CLEANUP_STARTED:
+            return
+        worker = threading.Thread(target=_cleanup_loop, name="semantic-cache-cleaner", daemon=True)
+        worker.start()
+        _CLEANUP_STARTED = True
+
+
+def _get_cache_local(cache_key: str) -> dict | None:
+    _ensure_local_cleanup_thread()
+    with _LOCK:
+        _prune_local_cache_locked()
         record = _CACHE.get(cache_key)
         if not record:
-            return None
-        if datetime.now(UTC) >= record.expires_at:
-            _CACHE.pop(cache_key, None)
             return None
         return dict(record.payload)
 
@@ -86,7 +121,9 @@ def get_cache(cache_key: str) -> dict | None:
 
 
 def _set_cache_local(cache_key: str, payload: dict, ttl_seconds: int) -> None:
+    _ensure_local_cleanup_thread()
     with _LOCK:
+        _prune_local_cache_locked()
         _CACHE[cache_key] = CacheRecord(
             payload=dict(payload),
             expires_at=datetime.now(UTC) + timedelta(seconds=ttl_seconds),

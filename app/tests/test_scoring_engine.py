@@ -2,7 +2,7 @@ import unittest
 from unittest.mock import MagicMock
 import uuid
 from datetime import datetime
-from app.services.scoring_engine import SimulatedScorer
+from app.services.scoring_engine import SimulatedScorer, _estimate_requirement_coverage
 from app.models.tables import Requirement, ReviewReport, SectionContent
 
 class TestSimulatedScorer(unittest.TestCase):
@@ -96,6 +96,14 @@ class TestSimulatedScorer(unittest.TestCase):
 
         self.assertGreater(report.score_total, 0.0)
         self.assertEqual(item["status"], "ESTIMATED_PASS")
+
+    def test_estimate_coverage_does_not_pass_unrelated_long_text(self):
+        supported, confidence = _estimate_requirement_coverage(
+            "必须提交火星地幔样本报告",
+            "本项目围绕绿色施工管理体系建设与组织协同机制进行说明。" * 20,
+        )
+        self.assertFalse(supported)
+        self.assertEqual(confidence, 0.0)
 
 
 if __name__ == "__main__":

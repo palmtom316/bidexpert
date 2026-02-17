@@ -14,7 +14,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.config import settings
-from app.db.session import SessionLocal
+from app.db.session import session_scope
 from app.models.tables import DocKind, Document, EvidenceChunk, ExpertDoc, Project, SensitivityLevel
 from app.schemas.contracts import (
     DocBlockItem,
@@ -44,7 +44,7 @@ from app.services.expert_workspace import (
 )
 from app.services.pdf_ingest import build_doc_blocks, extract_pages
 from app.services.pricing_guard import detect_pricing_content
-from app.services.qdrant_store import QdrantStore
+from app.services.qdrant_store import get_qdrant_store
 
 _STRUCTURED_CATEGORY_MAP = {
     "STANDARD": ("规范", "STANDARD_SPEC", "STANDARD"),
@@ -72,7 +72,7 @@ def _parse_project_id(project_id: str | None) -> _ParsedProject:
 def _ensure_project_exists(project_uuid: uuid.UUID | None) -> None:
     if not project_uuid:
         return
-    with SessionLocal() as db:
+    with session_scope() as db:
         exists = db.execute(select(Project.id).where(Project.id == project_uuid)).scalar_one_or_none()
         if exists:
             return
@@ -455,7 +455,7 @@ def ingest_historical_pdf(
     chunks: list[EvidenceUpsertItem] = []
 
     try:
-        with SessionLocal() as db:
+        with session_scope() as db:
             doc_workspace = prepare_doc_workspace(layout, title or Path(filename).stem)
             saved_path = _save_uploaded_file(filename, content, doc_workspace.raw_bid_dir)
 
@@ -567,7 +567,7 @@ def ingest_historical_pdf(
     except SQLAlchemyError as exc:
         raise RuntimeError(f"failed to persist expert library records: {exc}") from exc
 
-    store = QdrantStore()
+    store = get_qdrant_store()
     upserted = store.upsert_chunks(str(expert_doc_id), chunks, project_id=parsed_project.project_raw)
 
     if source_document_id and doc_workspace and structure and merged and markdown is not None:
@@ -620,7 +620,7 @@ def ingest_historical_pdf(
 
 def list_expert_docs(project_id: str | None, industry_tag: str | None, limit: int = 50) -> list[ExpertLibraryDocItem]:
     parsed_project = _parse_project_id(project_id)
-    with SessionLocal() as db:
+    with session_scope() as db:
         stmt = (
             select(
                 ExpertDoc.id,
@@ -662,7 +662,7 @@ def list_expert_chunks(expert_doc_id: str, limit: int = 200) -> list[ExpertLibra
     except ValueError as exc:
         raise ValueError("invalid expert_doc_id") from exc
 
-    with SessionLocal() as db:
+    with session_scope() as db:
         stmt = (
             select(EvidenceChunk)
             .where(EvidenceChunk.expert_doc_id == doc_uuid)
@@ -734,7 +734,7 @@ def _persist_structured_category(
         warnings.extend([f"pricing_detected:{reason}" for reason in reasons])
 
     try:
-        with SessionLocal() as db:
+        with session_scope() as db:
             source_doc = Document(
                 project_id=project_uuid,
                 kind=DocKind.EXPERT,
@@ -794,7 +794,7 @@ def _persist_structured_category(
     except SQLAlchemyError as exc:
         raise RuntimeError(f"failed to persist structured expert library records: {exc}") from exc
 
-    store = QdrantStore()
+    store = get_qdrant_store()
     upserted = store.upsert_chunks(expert_doc_id, chunks, project_id=project_id)
     return ExpertLibraryStructuredIngestItem(
         category=category_key,

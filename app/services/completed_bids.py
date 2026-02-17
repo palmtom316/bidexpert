@@ -6,7 +6,7 @@ from datetime import UTC, date, datetime
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 
-from app.db.session import SessionLocal
+from app.db.session import session_scope
 from app.models.tables import CompletedBid
 
 _ALLOWED_BID_RESULTS = {"WON", "LOST"}
@@ -76,7 +76,7 @@ def create_completed_bid(
     )
 
     try:
-        with SessionLocal() as db:
+        with session_scope() as db:
             db.add(record)
             db.commit()
             db.refresh(record)
@@ -89,7 +89,7 @@ def list_completed_bids(*, project_id: str | None = None, limit: int = 200) -> l
     project_id_norm = _normalize_optional_project_id(project_id)
     safe_limit = max(1, min(int(limit), 500))
     try:
-        with SessionLocal() as db:
+        with session_scope() as db:
             stmt = select(CompletedBid).order_by(CompletedBid.created_at.desc()).limit(safe_limit)
             if project_id_norm:
                 stmt = stmt.where(CompletedBid.project_id == project_id_norm)
@@ -101,7 +101,7 @@ def list_completed_bids(*, project_id: str | None = None, limit: int = 200) -> l
 def delete_completed_bid(record_id: str) -> bool:
     try:
         record_uuid = uuid.UUID(record_id)
-        with SessionLocal() as db:
+        with session_scope() as db:
             record = db.execute(select(CompletedBid).where(CompletedBid.id == record_uuid)).scalar_one_or_none()
             if not record:
                 return False

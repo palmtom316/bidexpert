@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from uuid import uuid4
 
-from app.db.session import SessionLocal, engine
+from app.db.session import session_scope, engine
 from app.extract.tender_parser import parse_tender_requirements
 from app.models.tables import WorkflowRun
 from app.schemas.contracts import OutlineSection
@@ -40,7 +40,7 @@ def create_outline_run(project_id: str, tender_text: str) -> tuple[str, list[Out
     outline_id = str(uuid4())
     sections = _build_outline_sections(tender_text)
     now = datetime.now(UTC)
-    with SessionLocal() as db:
+    with session_scope() as db:
         db.add(
             WorkflowRun(
                 id=outline_id,
@@ -58,7 +58,7 @@ def create_outline_run(project_id: str, tender_text: str) -> tuple[str, list[Out
 
 def confirm_outline_run(outline_id: str, approved: bool) -> str:
     _ensure_table()
-    with SessionLocal() as db:
+    with session_scope() as db:
         run = db.query(WorkflowRun).filter(WorkflowRun.id == outline_id).with_for_update().first()
         if not run:
             raise ValueError("outline not found")
@@ -71,7 +71,7 @@ def confirm_outline_run(outline_id: str, approved: bool) -> str:
 
 def get_outline_status(outline_id: str) -> str | None:
     _ensure_table()
-    with SessionLocal() as db:
+    with session_scope() as db:
         run = db.query(WorkflowRun).filter(WorkflowRun.id == outline_id).first()
         if not run:
             return None
@@ -80,7 +80,7 @@ def get_outline_status(outline_id: str) -> str | None:
 
 def mark_section_pending(outline_id: str, section_key: str) -> None:
     _ensure_table()
-    with SessionLocal() as db:
+    with session_scope() as db:
         run = db.query(WorkflowRun).filter(WorkflowRun.id == outline_id).with_for_update().first()
         if not run:
             raise ValueError("outline not found")
@@ -94,7 +94,7 @@ def mark_section_pending(outline_id: str, section_key: str) -> None:
 
 def confirm_section_run(outline_id: str, section_key: str, approved: bool) -> str:
     _ensure_table()
-    with SessionLocal() as db:
+    with session_scope() as db:
         run = db.query(WorkflowRun).filter(WorkflowRun.id == outline_id).with_for_update().first()
         if not run:
             raise ValueError("outline not found")
@@ -109,7 +109,7 @@ def confirm_section_run(outline_id: str, section_key: str, approved: bool) -> st
 
 def get_section_status(outline_id: str, section_key: str) -> str | None:
     _ensure_table()
-    with SessionLocal() as db:
+    with session_scope() as db:
         run = db.query(WorkflowRun).filter(WorkflowRun.id == outline_id).first()
         if not run:
             return None

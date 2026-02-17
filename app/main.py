@@ -1,13 +1,14 @@
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 from time import perf_counter
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from app.api.routes import router
+from app.api.routes import _require_auth, router
 from app.api.endpoints.stats import router as stats_router
 from app.core.config import settings
 from app.core.logging import configure_logging
@@ -34,11 +35,10 @@ app = FastAPI(title="BidExpert API", version="1.0.0", lifespan=lifespan)
 
 def _should_apply_rate_limit(path: str) -> bool:
     return (
-        path == "/health"
-        or path.startswith("/v1/")
+        path.startswith("/v1/")
         or path.startswith("/api/")
         or path.startswith("/stats/")
-    )
+    ) and path != "/health"
 
 
 def _client_identifier(request) -> str:
@@ -75,9 +75,11 @@ async def api_rate_limit_middleware(request, call_next):  # type: ignore[no-unty
     finally:
         if settings.metrics_enabled:
             status_code = response.status_code if response is not None else 500
+            route = request.scope.get("route")
+            path_template = getattr(route, "path", request.url.path)
             record_http_request(
                 method=request.method,
-                path=request.url.path,
+                path=path_template,
                 status_code=int(status_code),
                 duration_seconds=perf_counter() - started_at,
             )
@@ -87,14 +89,15 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
+    allow_headers=["Authorization", "Content-Type", "X-API-Key"],
 )
 
 app.include_router(router)
-app.include_router(stats_router, prefix="/stats", tags=["stats"])
+app.include_router(stats_router, prefix="/stats", tags=["stats"], dependencies=[Depends(_require_auth)])
 if settings.serve_ui_static:
-    app.mount("/ui", StaticFiles(directory="app/ui", html=True), name="ui")
+    ui_dir = Path(__file__).resolve().parent / "ui"
+    app.mount("/ui", StaticFiles(directory=str(ui_dir), html=True), name="ui")
 
 
 @app.get("/", include_in_schema=False)

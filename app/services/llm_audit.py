@@ -6,7 +6,7 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 
-from app.db.session import SessionLocal
+from app.db.session import session_scope
 from app.models.tables import LLMCallLog, Project
 from app.services.governance import reserve_budget
 
@@ -35,7 +35,7 @@ def reserve_budget_persistent(project_id: str | None, estimated_tokens: int) -> 
         return reserve_budget(project_id, estimated_tokens)
 
     try:
-        with SessionLocal() as db:
+        with session_scope() as db:
             stmt = select(Project).where(Project.id == project_uuid).with_for_update()
             project = db.execute(stmt).scalar_one_or_none()
             if not project:
@@ -79,7 +79,7 @@ def log_llm_call(
     prompt_hash = hashlib.sha256(prompt_text.encode("utf-8")).hexdigest()
 
     try:
-        with SessionLocal() as db:
+        with session_scope() as db:
             db.add(
                 LLMCallLog(
                     project_id=project_uuid,

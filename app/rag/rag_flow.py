@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from app.services.adapters import AdapterUnavailableError
 from app.services.byok import resolve_profile_for_task
 from app.services.llm_gateway import rewrite_query_with_profile
-from app.services.qdrant_store import QdrantStore, RetrievedEvidence
+from app.services.qdrant_store import RetrievedEvidence, get_qdrant_store
 
 
 @dataclass
@@ -45,7 +45,7 @@ def retrieve_for_subrequirements(
     industry_tag: str | None,
     project_id: str | None = None,
 ) -> tuple[dict[str, list[RetrievedEvidence]], list[dict]]:
-    store = QdrantStore()
+    store = get_qdrant_store()
     retrieval: dict[str, list[RetrievedEvidence]] = {}
     retrieval_log: list[dict] = []
     for sub in sub_requirements:

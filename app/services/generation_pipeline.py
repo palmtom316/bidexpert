@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import date, datetime
 from time import perf_counter
 
@@ -63,6 +64,262 @@ def _safe_generation_json(payload) -> dict:
     return dict(payload)
 
 
+@dataclass
+class RetrievalContext:
+    retrieval_log: list[dict]
+    merged_evidence_ids: list[str]
+    coverage_map: dict[str, list[str]]
+    merged_hits: list[object]
+    evidence_texts: list[str]
+    generation_evidence_texts: list[str]
+    warnings: list[str]
+
+
+@dataclass
+class GenerationStepResult:
+    generation_payload: object
+    generated_text: str
+    llm_provider: str
+    llm_model: str
+    generation_fallback_index: int
+    input_tokens: int
+    output_tokens: int
+    warnings: list[str]
+
+
+@dataclass
+class ReviewStepResult:
+    status: str
+    warnings: list[str]
+    review_report: dict | None
+    review_fallback_index: int
+
+
+def _blocked_pricing_response(warnings: list[str]) -> DraftGenerationResponse:
+    return DraftGenerationResponse(
+        generated_text="BLOCKED_PRICING_CONTENT",
+        evidence_ids=[],
+        status="BLOCKED_PRICING_CONTENT",
+        missing_sentences=["pricing_blocked"],
+        coverage=0.0,
+        warnings=warnings,
+        coverage_map={},
+        retrieval_log=[],
+        generation_json={},
+        review_json=None,
+    )
+
+
+def _build_retrieval_context(
+    *,
+    requirement_text: str,
+    effective_top_k: int,
+    industry_tag: str | None,
+    project_id: str | None,
+) -> RetrievalContext:
+    sub_requirements = decompose_requirement(requirement_text)
+    retrieval_result = retrieve_for_subrequirements(
+        sub_requirements=sub_requirements,
+        top_k=effective_top_k,
+        industry_tag=industry_tag,
+        project_id=project_id,
+    )
+    if isinstance(retrieval_result, tuple):
+        retrieval, retrieval_log = retrieval_result
+    else:
+        retrieval, retrieval_log = retrieval_result, []
+
+    merged_evidence_ids, coverage_map, merged_hits = merge_retrieval(retrieval)
+
+    evidence_texts = [hit.text for hit in merged_hits]
+    compressed_context = compress_evidence_context(requirement_text=requirement_text, evidence_texts=evidence_texts)
+    generation_evidence_texts = compressed_context.evidence_texts
+
+    warnings = _expiry_warnings([hit.payload for hit in merged_hits])
+    if compressed_context.compressed:
+        warnings.append(
+            f"context_compressed:{compressed_context.original_chars}->{compressed_context.compressed_chars}"
+        )
+        if compressed_context.dropped_count > 0:
+            warnings.append(f"context_compression_dropped={compressed_context.dropped_count}")
+
+    return RetrievalContext(
+        retrieval_log=retrieval_log,
+        merged_evidence_ids=merged_evidence_ids,
+        coverage_map=coverage_map,
+        merged_hits=merged_hits,
+        evidence_texts=evidence_texts,
+        generation_evidence_texts=generation_evidence_texts,
+        warnings=warnings,
+    )
+
+
+def _run_generation_step(
+    *,
+    gen_chain: list[object],
+    project_id: str | None,
+    requirement_text: str,
+    generation_evidence_texts: list[str],
+    merged_evidence_ids: list[str],
+    llm_provider: str,
+    llm_model: str,
+    warnings: list[str],
+) -> GenerationStepResult:
+    next_warnings = list(warnings)
+    generation_fallback_index = 0
+    generation_payload = build_generation_payload("NEED_HUMAN_INPUT", _schema_evidence_ids(merged_evidence_ids))
+    try:
+        generated, generation_fallback_index = generate_with_fallback_chain(
+            profile_chain=gen_chain,
+            project_id=project_id,
+            requirement_text=requirement_text,
+            evidence_texts=generation_evidence_texts,
+            evidence_ids=merged_evidence_ids,
+        )
+        llm_provider = generated.provider
+        llm_model = generated.model
+        if generation_fallback_index > 0:
+            next_warnings.append(f"generate_fallback_index={generation_fallback_index}")
+        try:
+            if generated.content_json:
+                generation_payload = ensure_generation_evidence_binding(
+                    validate_generation_payload(generated.content_json),
+                    allowed_evidence_ids=merged_evidence_ids,
+                )
+            else:
+                generation_payload = build_generation_payload(generated.text, _schema_evidence_ids(merged_evidence_ids))
+                next_warnings.append("generate_schema_wrapped_from_text")
+        except ValueError as exc:
+            generation_payload = build_generation_payload("NEED_HUMAN_INPUT", _schema_evidence_ids(merged_evidence_ids))
+            if "unknown evidence_ids" in str(exc):
+                next_warnings.append("generate_evidence_binding_invalid")
+            else:
+                next_warnings.append("generate_schema_validation_failed")
+    except AdapterUnavailableError:
+        generation_fallback_index = len(gen_chain)
+        generated_text_fallback = _compose_draft(requirement_text, generation_evidence_texts) or "NEED_HUMAN_INPUT"
+        generation_payload = build_generation_payload(generated_text_fallback, _schema_evidence_ids(merged_evidence_ids))
+        next_warnings.append("generate_all_providers_failed_local_template")
+
+    generated_text = flatten_generation_payload(generation_payload)
+    input_tokens = estimate_tokens(requirement_text + "\n" + "\n".join(generation_evidence_texts))
+    output_tokens = estimate_tokens(generated_text)
+
+    return GenerationStepResult(
+        generation_payload=generation_payload,
+        generated_text=generated_text,
+        llm_provider=llm_provider,
+        llm_model=llm_model,
+        generation_fallback_index=generation_fallback_index,
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        warnings=next_warnings,
+    )
+
+
+def _run_review_step(
+    *,
+    review_enabled: bool,
+    status: str,
+    warnings: list[str],
+    review_chain: list[object],
+    project_id: str | None,
+    draft_text: str,
+    evidence_texts: list[str],
+    merged_evidence_ids: list[str],
+    begin: float,
+    budget_remaining: int | None,
+    retry_count: int,
+    fallback_count: int,
+    generation_fallback_index: int,
+) -> ReviewStepResult:
+    next_status = status
+    next_warnings = list(warnings)
+    review_fallback_index = 0
+    review_issues: list[str] = []
+    review_report: dict | None = None
+
+    if not review_enabled:
+        return ReviewStepResult(
+            status=next_status,
+            warnings=next_warnings,
+            review_report=review_report,
+            review_fallback_index=review_fallback_index,
+        )
+
+    try:
+        review_result, review_fallback_index = review_with_fallback_chain(
+            profile_chain=review_chain,
+            project_id=project_id,
+            draft_text=draft_text,
+            evidence_texts=evidence_texts,
+        )
+        review_report = review_result.report
+        if review_fallback_index > 0:
+            next_warnings.append(f"review_fallback_index={review_fallback_index}")
+        if not review_result.approved:
+            next_status = "NEED_HUMAN_INPUT"
+            review_issues = review_result.issues or ["review_rejected"]
+            next_warnings.extend([f"review_issue:{item}" for item in review_issues])
+        review_profile_id = None
+        if 0 <= review_fallback_index < len(review_chain):
+            review_profile_id = review_chain[review_fallback_index].profile_id
+        log_llm_call(
+            project_id=project_id,
+            model_name=review_result.model,
+            purpose="SECTION_REVIEW",
+            provider_profile_id=review_profile_id,
+            evidence_ids=merged_evidence_ids,
+            prompt_text=draft_text,
+            input_tokens=estimate_tokens(draft_text),
+            output_tokens=0,
+            latency_ms=int((perf_counter() - begin) * 1000),
+            budget_remaining=budget_remaining,
+            retry_count=retry_count,
+            fallback_count=fallback_count + generation_fallback_index + review_fallback_index,
+            cache_hit=False,
+            pricing_blocked=False,
+            blocked_reason="REVIEW_REJECTED" if review_issues else None,
+        )
+    except AdapterUnavailableError:
+        review_fallback_index = len(review_chain)
+        next_warnings.append("review_all_providers_failed_local_validator")
+        next_status = "NEED_HUMAN_INPUT"
+        review_report = {
+            "missing_requirements": [],
+            "logical_inconsistencies": [],
+            "risk_points": ["review_all_providers_failed"],
+            "coverage_estimate": 0.0,
+            "score_estimate": 0.0,
+            "approved": False,
+            "issues": ["review_all_providers_failed"],
+        }
+        log_llm_call(
+            project_id=project_id,
+            model_name=review_chain[0].model if review_chain else "unknown",
+            purpose="SECTION_REVIEW",
+            provider_profile_id=review_chain[0].profile_id if review_chain else None,
+            evidence_ids=merged_evidence_ids,
+            prompt_text=draft_text,
+            input_tokens=estimate_tokens(draft_text),
+            output_tokens=0,
+            latency_ms=int((perf_counter() - begin) * 1000),
+            budget_remaining=budget_remaining,
+            retry_count=retry_count,
+            fallback_count=fallback_count + generation_fallback_index + review_fallback_index,
+            cache_hit=False,
+            pricing_blocked=False,
+            blocked_reason="REVIEW_ALL_PROVIDERS_FAILED",
+        )
+
+    return ReviewStepResult(
+        status=next_status,
+        warnings=next_warnings,
+        review_report=review_report,
+        review_fallback_index=review_fallback_index,
+    )
+
+
 def generate_draft_with_retrieval(
     requirement_id: str,
     requirement_text: str,
@@ -82,14 +339,7 @@ def generate_draft_with_retrieval(
 
     inbound_result = sanitize_inbound_text(requirement_text)
     if inbound_result.pricing_blocked:
-        return DraftGenerationResponse(
-            draft="",
-            evidence_ids=[],
-            review_passed=False,
-            review_comment="requirement text blocked by pricing fuse",
-            gate_results={},
-            warnings=inbound_result.warnings,
-        )
+        return _blocked_pricing_response(inbound_result.warnings)
     requirement_text = inbound_result.text
 
     resolved_profile = resolve_profile_for_task(project_id=project_id, task_type="GENERATE")
@@ -108,25 +358,18 @@ def generate_draft_with_retrieval(
         f"{tender_template_id or '_'}|p={project_id or '_'}|g={llm_provider}:{llm_model}|r={int(review_enabled)}"
     )
 
-    sub_requirements = decompose_requirement(requirement_text)
-    retrieval_result = retrieve_for_subrequirements(
-        sub_requirements=sub_requirements,
-        top_k=effective_top_k,
+    retrieval_ctx = _build_retrieval_context(
+        requirement_text=requirement_text,
+        effective_top_k=effective_top_k,
         industry_tag=industry_tag,
         project_id=project_id,
     )
-    if isinstance(retrieval_result, tuple):
-        retrieval, retrieval_log = retrieval_result
-    else:
-        retrieval, retrieval_log = retrieval_result, []
-
-    merged_evidence_ids, coverage_map, merged_hits = merge_retrieval(retrieval)
 
     cache_key = build_cache_key(
         industry_tag=industry_tag,
         tender_template_id=cache_scope,
         requirement_text=requirement_text,
-        evidence_ids=merged_evidence_ids,
+        evidence_ids=retrieval_ctx.merged_evidence_ids,
     )
     cached = get_cache(cache_key)
     if cached and not review_enabled:
@@ -136,7 +379,7 @@ def generate_draft_with_retrieval(
         response.llm_provider = llm_provider
         response.llm_model = llm_model
         if not response.retrieval_log:
-            response.retrieval_log = retrieval_log
+            response.retrieval_log = retrieval_ctx.retrieval_log
         log_llm_call(
             project_id=project_id,
             model_name=llm_model,
@@ -156,61 +399,26 @@ def generate_draft_with_retrieval(
         )
         return response
 
-    evidence_texts = [hit.text for hit in merged_hits]
-    compressed_context = compress_evidence_context(requirement_text=requirement_text, evidence_texts=evidence_texts)
-    generation_evidence_texts = compressed_context.evidence_texts
+    generation_step = _run_generation_step(
+        gen_chain=gen_chain,
+        project_id=project_id,
+        requirement_text=requirement_text,
+        generation_evidence_texts=retrieval_ctx.generation_evidence_texts,
+        merged_evidence_ids=retrieval_ctx.merged_evidence_ids,
+        llm_provider=llm_provider,
+        llm_model=llm_model,
+        warnings=retrieval_ctx.warnings,
+    )
+    llm_provider = generation_step.llm_provider
+    llm_model = generation_step.llm_model
 
-    warnings = _expiry_warnings([hit.payload for hit in merged_hits])
-    if compressed_context.compressed:
-        warnings.append(
-            f"context_compressed:{compressed_context.original_chars}->{compressed_context.compressed_chars}"
-        )
-        if compressed_context.dropped_count > 0:
-            warnings.append(f"context_compression_dropped={compressed_context.dropped_count}")
-
-    generation_fallback_index = 0
-    generation_payload = build_generation_payload("NEED_HUMAN_INPUT", _schema_evidence_ids(merged_evidence_ids))
-    try:
-        generated, generation_fallback_index = generate_with_fallback_chain(
-            profile_chain=gen_chain,
-            project_id=project_id,
-            requirement_text=requirement_text,
-            evidence_texts=generation_evidence_texts,
-            evidence_ids=merged_evidence_ids,
-        )
-        llm_provider = generated.provider
-        llm_model = generated.model
-        if generation_fallback_index > 0:
-            warnings.append(f"generate_fallback_index={generation_fallback_index}")
-        try:
-            if generated.content_json:
-                generation_payload = ensure_generation_evidence_binding(
-                    validate_generation_payload(generated.content_json),
-                    allowed_evidence_ids=merged_evidence_ids,
-                )
-            else:
-                generation_payload = build_generation_payload(generated.text, _schema_evidence_ids(merged_evidence_ids))
-                warnings.append("generate_schema_wrapped_from_text")
-        except ValueError as exc:
-            generation_payload = build_generation_payload("NEED_HUMAN_INPUT", _schema_evidence_ids(merged_evidence_ids))
-            if "unknown evidence_ids" in str(exc):
-                warnings.append("generate_evidence_binding_invalid")
-            else:
-                warnings.append("generate_schema_validation_failed")
-    except AdapterUnavailableError:
-        generation_fallback_index = len(gen_chain)
-        generated_text_fallback = _compose_draft(requirement_text, generation_evidence_texts) or "NEED_HUMAN_INPUT"
-        generation_payload = build_generation_payload(generated_text_fallback, _schema_evidence_ids(merged_evidence_ids))
-        warnings.append("generate_all_providers_failed_local_template")
-
-    generated_text = flatten_generation_payload(generation_payload)
-    input_tokens = estimate_tokens(requirement_text + "\n" + "\n".join(generation_evidence_texts))
-    output_tokens = estimate_tokens(generated_text)
-
-    if input_tokens > settings.section_max_input_tokens or output_tokens > settings.section_max_output_tokens:
+    if (
+        generation_step.input_tokens > settings.section_max_input_tokens
+        or generation_step.output_tokens > settings.section_max_output_tokens
+    ):
         return DraftGenerationResponse(
             generated_text="NEED_HUMAN_INPUT",
-            evidence_ids=merged_evidence_ids,
+            evidence_ids=retrieval_ctx.merged_evidence_ids,
             status="NEED_HUMAN_INPUT",
             llm_provider=llm_provider,
             llm_model=llm_model,
@@ -218,44 +426,48 @@ def generate_draft_with_retrieval(
             coverage=0.0,
             budget_remaining=None,
             cache_hit=False,
-            warnings=warnings + [f"input_tokens={input_tokens}", f"output_tokens={output_tokens}"],
-            coverage_map=coverage_map,
-            retrieval_log=retrieval_log,
-            generation_json=_safe_generation_json(generation_payload),
+            warnings=[
+                *generation_step.warnings,
+                f"input_tokens={generation_step.input_tokens}",
+                f"output_tokens={generation_step.output_tokens}",
+            ],
+            coverage_map=retrieval_ctx.coverage_map,
+            retrieval_log=retrieval_ctx.retrieval_log,
+            generation_json=_safe_generation_json(generation_step.generation_payload),
         )
 
     ok, budget_remaining = reserve_budget_persistent(
         project_id=project_id,
-        estimated_tokens=input_tokens + output_tokens,
+        estimated_tokens=generation_step.input_tokens + generation_step.output_tokens,
     )
     budget_warning = "budget_exceeded_non_blocking" if not ok else None
 
     gate_result = run_three_gates(
-        generated_text=generated_text,
-        evidence_ids=merged_evidence_ids,
-        evidence_texts=evidence_texts,
-        requirement_mapped=sum(1 for ids in coverage_map.values() if ids),
-        requirement_total=max(len(coverage_map), 1),
+        generated_text=generation_step.generated_text,
+        evidence_ids=retrieval_ctx.merged_evidence_ids,
+        evidence_texts=retrieval_ctx.evidence_texts,
+        requirement_mapped=sum(1 for ids in retrieval_ctx.coverage_map.values() if ids),
+        requirement_total=max(len(retrieval_ctx.coverage_map), 1),
         coverage_threshold=settings.min_matrix_coverage,
         requirement_text=requirement_text,
     )
 
     sanitize = sanitize_outbound_text(
-        text=generated_text,
+        text=generation_step.generated_text,
         sensitive_strategy=sensitive_strategy,
         allowlist=allowlist,
     )
 
     if sanitize.pricing_blocked:
-        total_fallbacks = fallback_count + generation_fallback_index
+        total_fallbacks = fallback_count + generation_step.generation_fallback_index
         log_llm_call(
             project_id=project_id,
             model_name=llm_model,
             purpose="SECTION_GENERATE",
             provider_profile_id=resolved_profile.profile_id,
-            evidence_ids=merged_evidence_ids,
+            evidence_ids=retrieval_ctx.merged_evidence_ids,
             prompt_text=requirement_text,
-            input_tokens=input_tokens,
+            input_tokens=generation_step.input_tokens,
             output_tokens=0,
             latency_ms=int((perf_counter() - begin) * 1000),
             budget_remaining=budget_remaining,
@@ -267,7 +479,7 @@ def generate_draft_with_retrieval(
         )
         return DraftGenerationResponse(
             generated_text="BLOCKED_PRICING_CONTENT",
-            evidence_ids=merged_evidence_ids,
+            evidence_ids=retrieval_ctx.merged_evidence_ids,
             status="BLOCKED_PRICING_CONTENT",
             llm_provider=llm_provider,
             llm_model=llm_model,
@@ -275,107 +487,53 @@ def generate_draft_with_retrieval(
             coverage=0.0,
             budget_remaining=budget_remaining,
             cache_hit=False,
-            warnings=warnings + sanitize.warnings,
-            coverage_map=coverage_map,
-            retrieval_log=retrieval_log,
-            generation_json=_safe_generation_json(generation_payload),
+            warnings=generation_step.warnings + sanitize.warnings,
+            coverage_map=retrieval_ctx.coverage_map,
+            retrieval_log=retrieval_ctx.retrieval_log,
+            generation_json=_safe_generation_json(generation_step.generation_payload),
         )
 
     status = gate_result.status
-    if "generate_evidence_binding_invalid" in warnings:
+    if "generate_evidence_binding_invalid" in generation_step.warnings:
         status = "NEED_HUMAN_INPUT"
     if not sanitize.text:
         status = "NEED_HUMAN_INPUT"
-    if any(w.startswith("evidence_near_expiry") for w in warnings):
+    if any(w.startswith("evidence_near_expiry") for w in generation_step.warnings):
         status = "NEED_HUMAN_INPUT"
 
-    review_fallback_index = 0
-    review_issues: list[str] = []
-    review_report: dict | None = None
+    review_step = _run_review_step(
+        review_enabled=review_enabled,
+        status=status,
+        warnings=generation_step.warnings,
+        review_chain=review_chain,
+        project_id=project_id,
+        draft_text=sanitize.text or generation_step.generated_text,
+        evidence_texts=retrieval_ctx.generation_evidence_texts,
+        merged_evidence_ids=retrieval_ctx.merged_evidence_ids,
+        begin=begin,
+        budget_remaining=budget_remaining,
+        retry_count=retry_count,
+        fallback_count=fallback_count,
+        generation_fallback_index=generation_step.generation_fallback_index,
+    )
 
-    if review_enabled:
-        try:
-            review_result, review_fallback_index = review_with_fallback_chain(
-                profile_chain=review_chain,
-                project_id=project_id,
-                draft_text=sanitize.text or generated_text,
-                evidence_texts=generation_evidence_texts,
-            )
-            review_report = review_result.report
-            if review_fallback_index > 0:
-                warnings.append(f"review_fallback_index={review_fallback_index}")
-            if not review_result.approved:
-                status = "NEED_HUMAN_INPUT"
-                review_issues = review_result.issues or ["review_rejected"]
-                warnings.extend([f"review_issue:{item}" for item in review_issues])
-            review_profile_id = None
-            if 0 <= review_fallback_index < len(review_chain):
-                review_profile_id = review_chain[review_fallback_index].profile_id
-            log_llm_call(
-                project_id=project_id,
-                model_name=review_result.model,
-                purpose="SECTION_REVIEW",
-                provider_profile_id=review_profile_id,
-                evidence_ids=merged_evidence_ids,
-                prompt_text=sanitize.text or generated_text,
-                input_tokens=estimate_tokens(sanitize.text or generated_text),
-                output_tokens=0,
-                latency_ms=int((perf_counter() - begin) * 1000),
-                budget_remaining=budget_remaining,
-                retry_count=retry_count,
-                fallback_count=fallback_count + generation_fallback_index + review_fallback_index,
-                cache_hit=False,
-                pricing_blocked=False,
-                blocked_reason="REVIEW_REJECTED" if review_issues else None,
-            )
-        except AdapterUnavailableError:
-            review_fallback_index = len(review_chain)
-            warnings.append("review_all_providers_failed_local_validator")
-            status = "NEED_HUMAN_INPUT"
-            review_report = {
-                "missing_requirements": [],
-                "logical_inconsistencies": [],
-                "risk_points": ["review_all_providers_failed"],
-                "coverage_estimate": 0.0,
-                "score_estimate": 0.0,
-                "approved": False,
-                "issues": ["review_all_providers_failed"],
-            }
-            log_llm_call(
-                project_id=project_id,
-                model_name=review_chain[0].model if review_chain else "unknown",
-                purpose="SECTION_REVIEW",
-                provider_profile_id=review_chain[0].profile_id if review_chain else None,
-                evidence_ids=merged_evidence_ids,
-                prompt_text=sanitize.text or generated_text,
-                input_tokens=estimate_tokens(sanitize.text or generated_text),
-                output_tokens=0,
-                latency_ms=int((perf_counter() - begin) * 1000),
-                budget_remaining=budget_remaining,
-                retry_count=retry_count,
-                fallback_count=fallback_count + generation_fallback_index + review_fallback_index,
-                cache_hit=False,
-                pricing_blocked=False,
-                blocked_reason="REVIEW_ALL_PROVIDERS_FAILED",
-            )
-
-    total_fallbacks = fallback_count + generation_fallback_index + review_fallback_index
+    total_fallbacks = fallback_count + generation_step.generation_fallback_index + review_step.review_fallback_index
 
     response = DraftGenerationResponse(
         generated_text=sanitize.text or "NEED_HUMAN_INPUT",
-        evidence_ids=merged_evidence_ids,
-        status=status,
+        evidence_ids=retrieval_ctx.merged_evidence_ids,
+        status=review_step.status,
         llm_provider=llm_provider,
         llm_model=llm_model,
         missing_sentences=gate_result.missing_sentences,
         coverage=gate_result.coverage,
         budget_remaining=budget_remaining,
         cache_hit=False,
-        warnings=warnings + sanitize.warnings + ([budget_warning] if budget_warning else []),
-        coverage_map=coverage_map,
-        retrieval_log=retrieval_log,
-        generation_json=_safe_generation_json(generation_payload),
-        review_json=review_report,
+        warnings=review_step.warnings + sanitize.warnings + ([budget_warning] if budget_warning else []),
+        coverage_map=retrieval_ctx.coverage_map,
+        retrieval_log=retrieval_ctx.retrieval_log,
+        generation_json=_safe_generation_json(generation_step.generation_payload),
+        review_json=review_step.review_report,
     )
 
     log_llm_call(
@@ -383,10 +541,10 @@ def generate_draft_with_retrieval(
         model_name=llm_model,
         purpose="SECTION_GENERATE",
         provider_profile_id=resolved_profile.profile_id,
-        evidence_ids=merged_evidence_ids,
+        evidence_ids=retrieval_ctx.merged_evidence_ids,
         prompt_text=requirement_text,
-        input_tokens=input_tokens,
-        output_tokens=output_tokens,
+        input_tokens=generation_step.input_tokens,
+        output_tokens=generation_step.output_tokens,
         latency_ms=int((perf_counter() - begin) * 1000),
         budget_remaining=budget_remaining,
         retry_count=retry_count,
