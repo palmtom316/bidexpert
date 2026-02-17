@@ -59,6 +59,8 @@ from app.schemas.contracts import (
     SectionFeedbackUpsertRequest,
     RenderWordRequest,
     RenderWordResponse,
+    RenderWordStructuredRequest,
+    RenderWordStructuredResponse,
     SectionConfirmRequest,
     SectionConfirmResponse,
     TaskStatusResponse,
@@ -111,7 +113,7 @@ from app.services.workflow_runs import (
 )
 from app.services.review_engine import run_compliance_review
 from app.services.scoring_engine import run_scoring_service
-from app.services.word_renderer import render_word
+from app.services.word_renderer import render_word, render_word_structured
 from app.worker.tasks import (
     generate_draft_task,
     get_task_result,
@@ -909,3 +911,21 @@ def render_doc(payload: RenderWordRequest) -> RenderWordResponse:
         return RenderWordResponse(output_path=output)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/v1/render/word/structured", response_model=RenderWordStructuredResponse)
+def render_structured_doc(payload: RenderWordStructuredRequest) -> RenderWordStructuredResponse:
+    try:
+        output_path, pdf_path = render_word_structured(
+            output_path=payload.output_path,
+            content=payload.content.model_dump(mode="json"),
+            placeholders=payload.placeholders,
+            template_path=payload.template_path,
+            style_config=payload.style_config,
+            export_pdf=payload.export_pdf,
+        )
+        return RenderWordStructuredResponse(output_path=output_path, pdf_path=pdf_path)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc

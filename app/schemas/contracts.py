@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Annotated, Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -70,6 +72,62 @@ class RenderWordRequest(BaseModel):
 
 class RenderWordResponse(BaseModel):
     output_path: str
+
+
+class WordHeadingBlock(BaseModel):
+    type: Literal["heading"]
+    style: Literal["Title1", "Title2", "Title3", "Title4"]
+    text: str = Field(min_length=1)
+
+
+class WordParagraphBlock(BaseModel):
+    type: Literal["paragraph"]
+    style: Literal["BodyText", "BodyText_Indent", "ClauseText"]
+    text: str = Field(min_length=1)
+
+
+class WordTableBlock(BaseModel):
+    type: Literal["table"]
+    table_data: list[dict[str, str]] = Field(min_length=1)
+
+
+class WordImageMetaBlock(BaseModel):
+    type: Literal["image_meta"]
+    name: str = Field(min_length=1)
+    caption: str = Field(min_length=1)
+    file_ref: str = Field(min_length=1)
+
+
+class WordAttachmentMetaBlock(BaseModel):
+    type: Literal["attachment_meta"]
+    name: str = Field(min_length=1)
+    description: str = Field(min_length=1)
+    file_ref: str = Field(min_length=1)
+
+
+WordContentBlock = Annotated[
+    WordHeadingBlock | WordParagraphBlock | WordTableBlock | WordImageMetaBlock | WordAttachmentMetaBlock,
+    Field(discriminator="type"),
+]
+
+
+class WordStructuredContent(BaseModel):
+    body: list[WordContentBlock] = Field(default_factory=list)
+    appendix: list[WordContentBlock] = Field(default_factory=list)
+
+
+class RenderWordStructuredRequest(BaseModel):
+    output_path: str
+    placeholders: dict[str, str] = Field(default_factory=dict)
+    content: WordStructuredContent
+    template_path: str | None = None
+    style_config: dict | None = None
+    export_pdf: bool = False
+
+
+class RenderWordStructuredResponse(BaseModel):
+    output_path: str
+    pdf_path: str | None = None
 
 
 class DocBlockItem(BaseModel):
