@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "bidexpert"
-version = "0.1.0"
+version = "1.0.0"
 description = "AI assisted tender system stage-1 implementation"
 readme = "docs/README.md"
 requires-python = ">=3.11"

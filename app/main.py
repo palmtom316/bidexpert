@@ -22,7 +22,7 @@ async def lifespan(_: FastAPI):
     yield
 
 
-app = FastAPI(title="BidExpert API", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="BidExpert API", version="1.0.0", lifespan=lifespan)
 
 _origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
 app.add_middleware(

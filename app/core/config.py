@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     render_output_dir: str = "data/exports"
     render_template_dir: str = "templates"
     enable_ocr_fallback: bool = True
-    schema_version: str = "v3.7"
+    schema_version: str = "v1.0"
     top_k_default: int = 6
     evidence_expiry_warning_days: int = 30
     project_token_budget_default: int = 500000
