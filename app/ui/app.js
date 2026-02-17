@@ -847,7 +847,6 @@ const BidWorkbench = {
 
     $("#btnRetrieveEvidence").addEventListener("click", guarded(() => this.retrieveEvidence()));
     $("#btnGenerateSection").addEventListener("click", guarded(() => this.generateSection()));
-    $("#btnGenerateSelected").addEventListener("click", guarded(() => this.generateSection()));
     $("#btnGenerateAll").addEventListener("click", guarded(() => this.generateAllSections()));
     $("#btnExportGenerationResult").addEventListener("click", guarded(() => this.exportGenerationResult()));
     $("#btnComposeDraft").addEventListener("click", guarded(() => this.composeSectionDraft()));

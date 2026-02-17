@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>AI辅助投标系统 | 投标办公工作台</title>
   <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet" />
-  <link rel="stylesheet" href="/ui/styles.css?v=1.6" />
+  <link rel="stylesheet" href="/ui/styles.css?v=1.7" />
 </head>
 
 <body>
@@ -693,56 +693,54 @@
                 <option>1.5 倍</option>
               </select>
               <input class="fmt-line-value" type="number" step="0.1" value="28" />
-              <input class="fmt-indent" type="number" step="1" value="2" />
             </div>
           </div>
-      </div>
 
-      <div class="form-group">
-        <label>待排版最终稿（可编辑）</label>
-        <textarea id="publishFinalDraft" rows="10" placeholder="默认读取上一步最终稿"></textarea>
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label>输出文件名（docx）</label>
-          <input id="exportFileName" type="text" placeholder="投标文件_项目名.docx" />
-        </div>
-        <div class="form-group action-stack">
-          <button id="btnRenderWord" class="btn btn-primary">
-            <i class="ri-file-word-2-line"></i> 排版与终审
-          </button>
-        </div>
-      </div>
-      <pre id="renderResult" class="result-box">等待导出...</pre>
-      </article>
-
-      <div class="office-grid cols-2">
-        <article class="card">
-          <h3><i class="ri-shield-star-line"></i> 终审检查</h3>
-          <div class="form-actions left">
-            <button id="btnFinalCheck" class="btn btn-secondary">
-              <i class="ri-checkbox-multiple-line"></i> 执行终审检查
-            </button>
-            <button id="btnLockDelivery" class="btn btn-primary">
-              <i class="ri-lock-2-line"></i> 锁定最终交付
-            </button>
+          <div class="form-group">
+            <label>待排版最终稿（可编辑）</label>
+            <textarea id="publishFinalDraft" rows="10" placeholder="默认读取上一步最终稿"></textarea>
           </div>
-          <div id="finalCheckBoard" class="review-report">
-            <p class="hint">执行终审后显示符合性结果。</p>
+          <div class="form-row">
+            <div class="form-group">
+              <label>输出文件名（docx）</label>
+              <input id="exportFileName" type="text" placeholder="投标文件_项目名.docx" />
+            </div>
+            <div class="form-group action-stack">
+              <button id="btnRenderWord" class="btn btn-primary">
+                <i class="ri-file-word-2-line"></i> 排版与终审
+              </button>
+            </div>
           </div>
-          <div id="deliveryStatus" class="delivery-status">状态：未锁定</div>
+          <pre id="renderResult" class="result-box">等待导出...</pre>
         </article>
 
-        <article class="card">
-          <h3><i class="ri-links-line"></i> 专家库闭环回灌</h3>
-          <p class="hint">终审通过后，建议将交付文件或章节回灌到专家库，形成知识闭环。</p>
-          <div class="form-actions">
-            <button id="btnJumpToFeedback" class="btn btn-outline btn-sm">
-              <i class="ri-arrow-left-right-line"></i> 前往“公司投标专家库”执行回灌
-            </button>
-          </div>
-        </article>
-      </div>
+        <div class="office-grid cols-2">
+          <article class="card">
+            <h3><i class="ri-shield-star-line"></i> 终审检查</h3>
+            <div class="form-actions left">
+              <button id="btnFinalCheck" class="btn btn-secondary">
+                <i class="ri-checkbox-multiple-line"></i> 执行终审检查
+              </button>
+              <button id="btnLockDelivery" class="btn btn-primary">
+                <i class="ri-lock-2-line"></i> 锁定最终交付
+              </button>
+            </div>
+            <div id="finalCheckBoard" class="review-report">
+              <p class="hint">执行终审后显示符合性结果。</p>
+            </div>
+            <div id="deliveryStatus" class="delivery-status">状态：未锁定</div>
+          </article>
+
+          <article class="card">
+            <h3><i class="ri-links-line"></i> 专家库闭环回灌</h3>
+            <p class="hint">终审通过后，建议将交付文件或章节回灌到专家库，形成知识闭环。</p>
+            <div class="form-actions">
+              <button id="btnJumpToFeedback" class="btn btn-outline btn-sm">
+                <i class="ri-arrow-left-right-line"></i> 前往“公司投标专家库”执行回灌
+              </button>
+            </div>
+          </article>
+        </div>
       </div>
 
       <div id="panel-completed-bids" class="view-panel">
