@@ -17,6 +17,8 @@ from app.services.embedding import embed_text
 
 logger = logging.getLogger(__name__)
 TOKEN_PATTERN = re.compile(r"[\w\u4e00-\u9fff]+", re.UNICODE)
+NUMERIC_TOKEN_PATTERN = re.compile(r"\d+(?:\.\d+)?\s*(?:kV|KV|kv|V|A|kW|MW|Hz|MHz|GHz|mm|cm|m)")
+MODEL_TOKEN_PATTERN = re.compile(r"\b[A-Za-z]{1,6}[-_ ]?\d{2,}[A-Za-z0-9-]*\b")
 
 SPARSE_VECTOR_NAME = "bm25_sparse"
 
@@ -85,6 +87,75 @@ def _rerank_hits(query: str, items: list[RetrievedEvidence], top_k: int) -> list
         return base_score * 0.55 + overlap * 0.40 + quality * 0.05
 
     scored = [(item, _rerank_score(item)) for item in items]
+    ranked = sorted(scored, key=lambda pair: pair[1], reverse=True)
+    result: list[RetrievedEvidence] = []
+    for item, score in ranked[:top_k]:
+        result.append(
+            RetrievedEvidence(
+                chunk_id=item.chunk_id,
+                score=score,
+                text=item.text,
+                payload=item.payload,
+            )
+        )
+    return result
+
+
+def _extract_key_fact_tokens(query: str) -> set[str]:
+    normalized_query = (query or "").strip()
+    tokens: set[str] = set()
+    for match in NUMERIC_TOKEN_PATTERN.findall(normalized_query):
+        token = re.sub(r"\s+", "", match).lower()
+        if token:
+            tokens.add(token)
+    for match in MODEL_TOKEN_PATTERN.findall(normalized_query):
+        token = re.sub(r"\s+", "", match).lower()
+        if token:
+            tokens.add(token)
+    return tokens
+
+
+def _apply_key_fact_filter(query: str, items: list[RetrievedEvidence]) -> list[RetrievedEvidence]:
+    key_tokens = _extract_key_fact_tokens(query)
+    if not key_tokens:
+        return items
+
+    filtered: list[RetrievedEvidence] = []
+    for item in items:
+        target = re.sub(r"\s+", "", item.text.lower())
+        payload_text = str(item.payload.get("parent_context", "") or "").lower()
+        payload_target = re.sub(r"\s+", "", payload_text)
+        if any(token in target or token in payload_target for token in key_tokens):
+            filtered.append(item)
+    return filtered or items
+
+
+@lru_cache(maxsize=1)
+def _load_cross_encoder(model_name: str):
+    from sentence_transformers import CrossEncoder
+
+    return CrossEncoder(model_name)
+
+
+def _cross_encoder_rerank_hits(query: str, items: list[RetrievedEvidence], top_k: int) -> list[RetrievedEvidence]:
+    if not items:
+        return []
+    if not bool(getattr(settings, "qdrant_cross_encoder_enabled", False)):
+        return _rerank_hits(query=query, items=items, top_k=top_k)
+
+    model_name = str(getattr(settings, "qdrant_cross_encoder_model", "")).strip()
+    if not model_name:
+        return _rerank_hits(query=query, items=items, top_k=top_k)
+
+    try:
+        model = _load_cross_encoder(model_name)
+        pairs = [(query, item.text) for item in items]
+        scores = model.predict(pairs)
+    except Exception:
+        logger.warning("cross-encoder rerank unavailable; fallback to lexical rerank")
+        return _rerank_hits(query=query, items=items, top_k=top_k)
+
+    scored = list(zip(items, [float(score) for score in scores], strict=False))
     ranked = sorted(scored, key=lambda pair: pair[1], reverse=True)
     result: list[RetrievedEvidence] = []
     for item, score in ranked[:top_k]:
@@ -177,6 +248,9 @@ class QdrantStore:
                 "section_id": source_locator.get("section_id"),
                 "discipline": source_locator.get("discipline"),
                 "source_page": source_locator.get("source_page"),
+                "parent_chunk_id": chunk.parent_chunk_id or source_locator.get("parent_chunk_id"),
+                "anchor_type": chunk.anchor_type or source_locator.get("anchor_type"),
+                "parent_context": source_locator.get("parent_context"),
             }
 
             dense_vector = embed_text(
@@ -352,6 +426,17 @@ class QdrantStore:
     ) -> list[RetrievedEvidence]:
         embed_profile = resolve_profile_for_task(project_id=project_id, task_type="EMBED")
         query_filter = self._build_query_filter(industry_tag=industry_tag)
+        prompt_top_n = max(
+            int(settings.qdrant_prompt_topn_min),
+            min(int(top_k), int(settings.qdrant_prompt_topn_max)),
+        )
+        candidate_limit = max(
+            int(settings.qdrant_hybrid_topk_min),
+            min(
+                max(prompt_top_n * 5, int(settings.qdrant_hybrid_candidate_limit)),
+                int(settings.qdrant_hybrid_topk_max),
+            ),
+        )
 
         dense_query = embed_text(
             query,
@@ -362,7 +447,11 @@ class QdrantStore:
             base_url=embed_profile.base_url,
             project_id=project_id,
         )
-        vector_hits = self._vector_search(query_vector=dense_query, query_filter=query_filter, limit=max(top_k * 4, 8))
+        vector_hits = self._vector_search(
+            query_vector=dense_query,
+            query_filter=query_filter,
+            limit=max(candidate_limit, 8),
+        )
 
         sparse_hits: list[object] = []
         if self._sparse_enabled:
@@ -370,16 +459,22 @@ class QdrantStore:
             sparse_hits = self._sparse_search(
                 sparse_vector=sparse_query,
                 query_filter=query_filter,
-                limit=max(top_k * 8, int(settings.qdrant_hybrid_candidate_limit)),
+                limit=max(candidate_limit, int(settings.qdrant_hybrid_candidate_limit)),
             )
 
         if vector_hits or sparse_hits:
             rerank_enabled = bool(getattr(settings, "qdrant_enable_rerank", False))
             if rerank_enabled:
-                candidate_limit = max(top_k, int(settings.qdrant_rerank_candidate_limit))
-                fused = self._fuse_hybrid(vector_hits=vector_hits, sparse_hits=sparse_hits, top_k=candidate_limit)
-                return _rerank_hits(query=query, items=fused, top_k=top_k)
-            return self._fuse_hybrid(vector_hits=vector_hits, sparse_hits=sparse_hits, top_k=top_k)
+                rerank_candidate_limit = max(candidate_limit, int(settings.qdrant_rerank_candidate_limit))
+                fused = self._fuse_hybrid(
+                    vector_hits=vector_hits,
+                    sparse_hits=sparse_hits,
+                    top_k=rerank_candidate_limit,
+                )
+                reranked = _cross_encoder_rerank_hits(query=query, items=fused, top_k=prompt_top_n)
+                return _apply_key_fact_filter(query=query, items=reranked)[:prompt_top_n]
+            fused = self._fuse_hybrid(vector_hits=vector_hits, sparse_hits=sparse_hits, top_k=prompt_top_n)
+            return _apply_key_fact_filter(query=query, items=fused)[:prompt_top_n]
 
         return []
 

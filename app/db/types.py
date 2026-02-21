@@ -5,6 +5,7 @@ from typing import Any
 
 from sqlalchemy import JSON, CHAR, Text
 from sqlalchemy.dialects.postgresql import ARRAY as PGARRAY
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.engine import Dialect
 from sqlalchemy.types import TypeDecorator
@@ -38,6 +39,33 @@ class GUID(TypeDecorator[uuid.UUID]):
         if isinstance(value, uuid.UUID):
             return value
         return uuid.UUID(str(value))
+
+
+class JSONDictType(TypeDecorator[dict]):
+    """Cross-dialect JSON object type.
+
+    Uses PostgreSQL JSONB in Postgres and JSON elsewhere.
+    """
+
+    impl = JSON
+    cache_ok = True
+
+    def load_dialect_impl(self, dialect: Dialect):
+        if dialect.name == "postgresql":
+            return dialect.type_descriptor(JSONB())
+        return dialect.type_descriptor(JSON)
+
+    def process_bind_param(self, value: Any, dialect: Dialect):
+        if value is None:
+            return {}
+        return value
+
+    def process_result_value(self, value: Any, dialect: Dialect):
+        if value is None:
+            return {}
+        if isinstance(value, dict):
+            return value
+        return {}
 
 
 class StringListType(TypeDecorator[list[str]]):

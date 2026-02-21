@@ -7,6 +7,11 @@ from functools import lru_cache
 import httpx
 
 from app.core.config import settings
+from app.llm.prompt_suite_v11 import (
+    CLAUDE_PROMPT_TEMPERATURE,
+    build_review_prompt,
+    build_section_generation_prompt,
+)
 from app.services.adapters.base import (
     AdapterUnavailableError,
     ComplianceReviewRequest,
@@ -114,7 +119,15 @@ class OpenAICompatibleAdapter(LLMAdapter):
     def __init__(self, provider: str) -> None:
         self.provider = provider
 
-    def _post_chat(self, *, model: str, prompt: str, api_key: str | None, base_url: str | None) -> str:
+    def _post_chat(
+        self,
+        *,
+        model: str,
+        prompt: str,
+        api_key: str | None,
+        base_url: str | None,
+        temperature: float = 0.2,
+    ) -> str:
         if not api_key or not base_url:
             raise AdapterUnavailableError("missing api_key or base_url")
 
@@ -122,7 +135,7 @@ class OpenAICompatibleAdapter(LLMAdapter):
         body = {
             "model": model,
             "messages": [{"role": "user", "content": prompt}],
-            "temperature": 0.2,
+            "temperature": temperature,
         }
         try:
             client = _shared_http_client(float(settings.llm_http_timeout_seconds))
@@ -153,26 +166,31 @@ class OpenAICompatibleAdapter(LLMAdapter):
         return content
 
     def generate(self, payload: GenerationRequest) -> GenerationResult:
-        evidence_rows = []
         evidence_ids = payload.evidence_ids or ["NEED_EVIDENCE"]
-        for idx, text in enumerate(payload.evidence_texts[:6], start=1):
-            eid = payload.evidence_ids[idx - 1] if idx - 1 < len(payload.evidence_ids) else f"e-{idx}"
-            evidence_rows.append(f"- evidence_id={eid}: {text}")
-        evidence = "\n".join(evidence_rows)
-        prompt = (
-            "你是投标写作助手。仅基于证据写作。\n"
-            "必须输出JSON对象："
-            '{"content_blocks":[{"type":"paragraph","text":"...","evidence_ids":["e-1"]}]}\n'
-            "若证据不足，text 输出 NEED_HUMAN_INPUT。\n"
-            f"要求：{payload.requirement_text}\n"
-            f"证据：\n{evidence}\n"
-            "不要输出 JSON 以外内容。"
+        top_chunks = payload.top_chunks
+        if not top_chunks:
+            top_chunks = []
+            for idx, text in enumerate(payload.evidence_texts[:20], start=1):
+                eid = payload.evidence_ids[idx - 1] if idx - 1 < len(payload.evidence_ids) else f"e-{idx}"
+                top_chunks.append(
+                    {
+                        "chunk_id": eid,
+                        "text": text,
+                        "parent_context": text,
+                    }
+                )
+        prompt = build_section_generation_prompt(
+            global_facts_json=payload.global_facts or {},
+            relevant_requirements=payload.relevant_requirements or [payload.requirement_text],
+            relevant_scoring=payload.relevant_scoring or [],
+            top_chunks=top_chunks,
         )
         content = self._post_chat(
             model=payload.model,
             prompt=prompt,
             api_key=payload.api_key,
             base_url=payload.base_url,
+            temperature=float(CLAUDE_PROMPT_TEMPERATURE["section_generate"]),
         )
         try:
             structured = ensure_generation_evidence_binding(
@@ -189,19 +207,13 @@ class OpenAICompatibleAdapter(LLMAdapter):
         )
 
     def review(self, payload: ReviewRequest) -> ReviewResult:
-        evidence = "\n".join(payload.evidence_texts[:6])
-        prompt = (
-            "你是审查员。仅输出JSON对象："
-            '{"missing_requirements":[],"logical_inconsistencies":[],"risk_points":[],"coverage_estimate":0.0,"score_estimate":0.0,"approved":true,"issues":[]}\n'
-            "不得改写正文，只输出分析。\n"
-            f"草稿：{payload.draft_text}\n"
-            f"证据：\n{evidence}"
-        )
+        prompt = build_review_prompt({"draft_text": payload.draft_text, "evidence": payload.evidence_texts[:20]})
         content = self._post_chat(
             model=payload.model,
             prompt=prompt,
             api_key=payload.api_key,
             base_url=payload.base_url,
+            temperature=float(CLAUDE_PROMPT_TEMPERATURE["review"]),
         )
         try:
             parsed = validate_review_payload(content)

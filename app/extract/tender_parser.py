@@ -17,9 +17,11 @@ SCORE_PATTERN = re.compile(r"(?:评分|分值|得分)\D{0,5}(\d+(?:\.\d+)?)")
 ANCHOR_PATTERN = re.compile(r"^\s*(?:第?[一二三四五六七八九十0-9]+[章节条款、.]|\d+(?:\.\d+)+)")
 
 _PROMPT_DESCRIPTION = (
-    "从招标文本中提取可执行要求。"
+    "你是招标规则拆解引擎。"
+    "任务：抽取 mandatory_requirements、scoring_items、deliverables。"
     "每条要求必须保留原文片段，不要改写。"
     "尽量补充页码、章节锚点、强制性标记和分值信息。"
+    "只允许输出结构化结果，不得编造缺失信息。"
 )
 
 

@@ -11,6 +11,7 @@ from app.services.byok import get_project_model_policy, resolve_profile_chain_fo
 from app.services.context_compressor import compress_evidence_context
 from app.services.evidence_validator import run_three_gates
 from app.services.governance import estimate_tokens
+from app.services.global_facts import detect_global_fact_conflicts, extract_global_facts_from_text
 from app.services.llm_audit import log_llm_call, reserve_budget_persistent
 from app.services.llm_gateway import generate_with_fallback_chain, review_with_fallback_chain
 from app.services.pii_policy import sanitize_inbound_text, sanitize_outbound_text
@@ -72,6 +73,7 @@ class RetrievalContext:
     merged_hits: list[object]
     evidence_texts: list[str]
     generation_evidence_texts: list[str]
+    top_chunks: list[dict]
     warnings: list[str]
 
 
@@ -131,7 +133,20 @@ def _build_retrieval_context(
 
     merged_evidence_ids, coverage_map, merged_hits = merge_retrieval(retrieval)
 
-    evidence_texts = [hit.text for hit in merged_hits]
+    evidence_texts: list[str] = []
+    top_chunks: list[dict] = []
+    for hit in merged_hits:
+        parent_context = str(hit.payload.get("parent_context", "") or "").strip()
+        snippet = parent_context or hit.text
+        evidence_texts.append(snippet)
+        top_chunks.append(
+            {
+                "chunk_id": hit.chunk_id,
+                "text": hit.text,
+                "parent_context": parent_context,
+                "payload": hit.payload,
+            }
+        )
     compressed_context = compress_evidence_context(requirement_text=requirement_text, evidence_texts=evidence_texts)
     generation_evidence_texts = compressed_context.evidence_texts
 
@@ -150,6 +165,7 @@ def _build_retrieval_context(
         merged_hits=merged_hits,
         evidence_texts=evidence_texts,
         generation_evidence_texts=generation_evidence_texts,
+        top_chunks=top_chunks,
         warnings=warnings,
     )
 
@@ -161,6 +177,8 @@ def _run_generation_step(
     requirement_text: str,
     generation_evidence_texts: list[str],
     merged_evidence_ids: list[str],
+    top_chunks: list[dict],
+    global_facts: dict | None,
     llm_provider: str,
     llm_model: str,
     warnings: list[str],
@@ -175,6 +193,10 @@ def _run_generation_step(
             requirement_text=requirement_text,
             evidence_texts=generation_evidence_texts,
             evidence_ids=merged_evidence_ids,
+            global_facts=global_facts,
+            relevant_requirements=[requirement_text],
+            relevant_scoring=[],
+            top_chunks=top_chunks,
         )
         llm_provider = generated.provider
         llm_model = generated.model
@@ -215,6 +237,17 @@ def _run_generation_step(
         output_tokens=output_tokens,
         warnings=next_warnings,
     )
+
+
+def _global_fact_conflict_warnings(global_facts: dict | None, generated_text: str) -> list[str]:
+    if not global_facts:
+        return []
+    try:
+        candidate = extract_global_facts_from_text(generated_text)
+    except ValueError:
+        return []
+    conflicts = detect_global_fact_conflicts(global_facts, candidate)
+    return [f"global_facts_conflict:{field}" for field in conflicts]
 
 
 def _run_review_step(
@@ -329,18 +362,27 @@ def generate_draft_with_retrieval(
     tender_template_id: str | None = None,
     sensitive_strategy: str = "mask",
     allowlist: list[str] | None = None,
+    global_facts: dict | None = None,
     retry_count: int = 0,
     fallback_count: int = 0,
 ) -> DraftGenerationResponse:
     del requirement_id
 
     begin = perf_counter()
-    effective_top_k = max(1, min(top_k, 8))
+    effective_top_k = max(
+        int(settings.qdrant_prompt_topn_min),
+        min(int(top_k), int(settings.qdrant_prompt_topn_max)),
+    )
 
     inbound_result = sanitize_inbound_text(requirement_text)
     if inbound_result.pricing_blocked:
         return _blocked_pricing_response(inbound_result.warnings)
     requirement_text = inbound_result.text
+    if global_facts is None:
+        try:
+            global_facts = extract_global_facts_from_text(requirement_text)
+        except ValueError:
+            global_facts = {}
 
     resolved_profile = resolve_profile_for_task(project_id=project_id, task_type="GENERATE")
     gen_chain = resolve_profile_chain_for_task(project_id=project_id, task_type="GENERATE")
@@ -405,6 +447,8 @@ def generate_draft_with_retrieval(
         requirement_text=requirement_text,
         generation_evidence_texts=retrieval_ctx.generation_evidence_texts,
         merged_evidence_ids=retrieval_ctx.merged_evidence_ids,
+        top_chunks=retrieval_ctx.top_chunks,
+        global_facts=global_facts,
         llm_provider=llm_provider,
         llm_model=llm_model,
         warnings=retrieval_ctx.warnings,
@@ -494,17 +538,21 @@ def generate_draft_with_retrieval(
         )
 
     status = gate_result.status
-    if "generate_evidence_binding_invalid" in generation_step.warnings:
+    global_fact_warnings = _global_fact_conflict_warnings(global_facts, generation_step.generated_text)
+    generation_warnings = generation_step.warnings + global_fact_warnings
+    if "generate_evidence_binding_invalid" in generation_warnings:
         status = "NEED_HUMAN_INPUT"
     if not sanitize.text:
         status = "NEED_HUMAN_INPUT"
-    if any(w.startswith("evidence_near_expiry") for w in generation_step.warnings):
+    if any(w.startswith("evidence_near_expiry") for w in generation_warnings):
+        status = "NEED_HUMAN_INPUT"
+    if any(w.startswith("global_facts_conflict:") for w in generation_warnings):
         status = "NEED_HUMAN_INPUT"
 
     review_step = _run_review_step(
         review_enabled=review_enabled,
         status=status,
-        warnings=generation_step.warnings,
+        warnings=generation_warnings,
         review_chain=review_chain,
         project_id=project_id,
         draft_text=sanitize.text or generation_step.generated_text,

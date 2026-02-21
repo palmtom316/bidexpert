@@ -13,6 +13,10 @@ class GenerationRequest:
     requirement_text: str
     evidence_texts: list[str]
     evidence_ids: list[str]
+    global_facts: dict | None
+    relevant_requirements: list[str]
+    relevant_scoring: list[str]
+    top_chunks: list[dict]
     api_key: str | None
     base_url: str | None
 

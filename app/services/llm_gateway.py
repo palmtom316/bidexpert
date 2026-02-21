@@ -141,6 +141,10 @@ def generate_with_profile(
     requirement_text: str,
     evidence_texts: list[str],
     evidence_ids: list[str],
+    global_facts: dict | None = None,
+    relevant_requirements: list[str] | None = None,
+    relevant_scoring: list[str] | None = None,
+    top_chunks: list[dict] | None = None,
 ) -> GenerationResult:
     adapter = _select_adapter(provider)
     payload = GenerationRequest(
@@ -148,6 +152,10 @@ def generate_with_profile(
         requirement_text=requirement_text,
         evidence_texts=evidence_texts,
         evidence_ids=evidence_ids,
+        global_facts=global_facts,
+        relevant_requirements=relevant_requirements or [],
+        relevant_scoring=relevant_scoring or [],
+        top_chunks=top_chunks or [],
         api_key=api_key,
         base_url=base_url,
     )
@@ -165,6 +173,10 @@ def generate_with_fallback_chain(
     requirement_text: str,
     evidence_texts: list[str],
     evidence_ids: list[str],
+    global_facts: dict | None = None,
+    relevant_requirements: list[str] | None = None,
+    relevant_scoring: list[str] | None = None,
+    top_chunks: list[dict] | None = None,
 ) -> tuple[GenerationResult, int]:
     """Try each profile in *profile_chain* until one succeeds.
 
@@ -190,6 +202,10 @@ def generate_with_fallback_chain(
                 requirement_text=requirement_text,
                 evidence_texts=evidence_texts,
                 evidence_ids=evidence_ids,
+                global_facts=global_facts,
+                relevant_requirements=relevant_requirements,
+                relevant_scoring=relevant_scoring,
+                top_chunks=top_chunks,
             )
             _record_feedback(
                 project_id=project_id,

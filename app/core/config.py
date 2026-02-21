@@ -18,6 +18,12 @@ class Settings(BaseSettings):
     qdrant_rrf_k: int = 60
     qdrant_enable_rerank: bool = True
     qdrant_rerank_candidate_limit: int = 24
+    qdrant_hybrid_topk_min: int = 50
+    qdrant_hybrid_topk_max: int = 100
+    qdrant_prompt_topn_min: int = 10
+    qdrant_prompt_topn_max: int = 20
+    qdrant_cross_encoder_enabled: bool = False
+    qdrant_cross_encoder_model: str = "BAAI/bge-reranker-base"
 
     llm_http_timeout_seconds: int = 120
     log_level: str = "INFO"
@@ -39,6 +45,7 @@ class Settings(BaseSettings):
     expert_library_root: str = "data/tender-expert-lib"
     render_output_dir: str = "data/exports"
     render_template_dir: str = "templates"
+    workflow_artifact_dir: str = "data/workflow-runs"
     enable_ocr_fallback: bool = True
     ocr_provider: str = "tesseract"
     hunyuan_ocr_api_key: str | None = None

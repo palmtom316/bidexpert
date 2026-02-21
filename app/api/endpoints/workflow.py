@@ -61,6 +61,7 @@ def enqueue_section_workflow(payload: WorkflowSectionRequest) -> WorkflowSection
     return enqueue_section_workflow_handler(
         payload,
         get_outline_status_fn=ctx.get_outline_status,
+        get_resume_from_step_fn=ctx.get_resume_from_step,
         detect_pricing_content_fn=ctx.detect_pricing_content,
         chain_fn=ctx.chain,
         section_extract_stage_task_obj=ctx.section_extract_stage_task,

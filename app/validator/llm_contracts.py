@@ -42,6 +42,7 @@ class ComplianceReviewPayload(BaseModel):
 
 
 _FENCE = re.compile(r"^\s*```(?:json)?\s*|\s*```\s*$", re.IGNORECASE)
+_TRAILING_COMMA = re.compile(r",\s*([}\]])")
 
 
 def _strip_code_fence(raw: str) -> str:
@@ -55,16 +56,63 @@ def parse_json_payload(raw: str | dict[str, Any]) -> dict[str, Any]:
     try:
         parsed = json.loads(cleaned)
     except json.JSONDecodeError as exc:
-        raise ValueError("llm output is not valid JSON") from exc
+        repaired = _attempt_json_repair(cleaned)
+        if repaired is None:
+            raise ValueError("llm output is not valid JSON") from exc
+        parsed = repaired
     if not isinstance(parsed, dict):
         raise ValueError("llm output JSON must be an object")
     return parsed
 
 
+def _attempt_json_repair(raw: str) -> dict[str, Any] | None:
+    start = raw.find("{")
+    end = raw.rfind("}")
+    if start < 0 or end <= start:
+        return None
+    candidate = raw[start : end + 1]
+    candidate = _TRAILING_COMMA.sub(r"\1", candidate)
+    try:
+        parsed = json.loads(candidate)
+    except json.JSONDecodeError:
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
+def _normalize_v11_generation_payload(payload: dict[str, Any]) -> dict[str, Any] | None:
+    if "content_blocks" in payload:
+        return payload
+    if "content" not in payload:
+        return None
+
+    content_text = str(payload.get("content") or "").strip() or "NEED_HUMAN_INPUT"
+    evidence_items = payload.get("evidence")
+    evidence_ids: list[str] = []
+    if isinstance(evidence_items, list):
+        for item in evidence_items:
+            if not isinstance(item, dict):
+                continue
+            chunk_id = str(item.get("chunk_id", "")).strip()
+            if chunk_id:
+                evidence_ids.append(chunk_id)
+    if not evidence_ids:
+        evidence_ids = ["NEED_EVIDENCE"]
+    return {
+        "content_blocks": [
+            {
+                "type": "paragraph",
+                "text": content_text,
+                "evidence_ids": evidence_ids,
+            }
+        ]
+    }
+
+
 def validate_generation_payload(raw: str | dict[str, Any]) -> SectionGenerationPayload:
     payload = parse_json_payload(raw)
+    normalized_payload = _normalize_v11_generation_payload(payload) or payload
     try:
-        parsed = SectionGenerationPayload.model_validate(payload)
+        parsed = SectionGenerationPayload.model_validate(normalized_payload)
     except ValidationError as exc:
         raise ValueError("generation payload schema validation failed") from exc
     return parsed

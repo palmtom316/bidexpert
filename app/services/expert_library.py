@@ -560,6 +560,8 @@ def ingest_historical_pdf(
                         quality_score=float(chunk.quality_score),
                         forbidden_tags=chunk.forbidden_tags or [],
                         qdrant_point_id=str(uuid.uuid5(uuid.NAMESPACE_URL, f"{expert_doc_id}:{chunk.chunk_id}")),
+                        parent_chunk_id=chunk.parent_chunk_id or source_locator.get("parent_chunk_id"),
+                        anchor_type=chunk.anchor_type or source_locator.get("anchor_type"),
                     )
                 )
 
@@ -786,6 +788,8 @@ def _persist_structured_category(
                         quality_score=float(chunk.quality_score),
                         forbidden_tags=chunk.forbidden_tags or [],
                         qdrant_point_id=str(uuid.uuid5(uuid.NAMESPACE_URL, f"{expert_doc.id}:{chunk.chunk_id}")),
+                        parent_chunk_id=chunk.parent_chunk_id or source_locator.get("parent_chunk_id"),
+                        anchor_type=chunk.anchor_type or source_locator.get("anchor_type"),
                     )
                 )
 

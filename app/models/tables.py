@@ -6,7 +6,7 @@ from sqlalchemy import JSON, Date, DateTime, Enum, ForeignKey, Index, Integer, L
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
-from app.db.types import GUID, StringListType, UUIDListType
+from app.db.types import GUID, JSONDictType, StringListType, UUIDListType
 
 
 def utcnow() -> datetime:
@@ -78,8 +78,13 @@ class WorkflowRun(Base):
     id: Mapped[str] = mapped_column(Text, primary_key=True)
     project_id: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(Text, nullable=False)
-    sections_json: Mapped[dict] = mapped_column(JSON, default=dict)
-    section_status_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    sections_json: Mapped[dict] = mapped_column(JSONDictType(), default=dict)
+    section_status_json: Mapped[dict] = mapped_column(JSONDictType(), default=dict)
+    current_step: Mapped[str] = mapped_column(Text, default="G0")
+    step_status: Mapped[str] = mapped_column(Text, default="paused")
+    resume_from_step: Mapped[str] = mapped_column(Text, default="G1")
+    retry_count: Mapped[int] = mapped_column(Integer, default=0)
+    last_error: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
@@ -134,7 +139,7 @@ class DocBlock(Base):
     page_no: Mapped[int | None] = mapped_column(Integer)
     section_anchor: Mapped[str | None] = mapped_column(Text)
     content_text: Mapped[str | None] = mapped_column(Text)
-    content_json: Mapped[dict | None] = mapped_column(JSON)
+    content_json: Mapped[dict | None] = mapped_column(JSONDictType())
     char_start: Mapped[int | None] = mapped_column(Integer)
     char_end: Mapped[int | None] = mapped_column(Integer)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
@@ -204,6 +209,8 @@ class EvidenceChunk(Base):
     quality_score: Mapped[float] = mapped_column(Numeric(5, 2), default=0)
     forbidden_tags: Mapped[list[str]] = mapped_column(StringListType(), default=list)
     qdrant_point_id: Mapped[str | None] = mapped_column(Text)
+    parent_chunk_id: Mapped[str | None] = mapped_column(Text)
+    anchor_type: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
@@ -260,7 +267,7 @@ class SectionContent(Base):
     section_key: Mapped[str] = mapped_column(Text, nullable=False)
     section_title: Mapped[str] = mapped_column(Text, nullable=False)
     content_md: Mapped[str] = mapped_column(Text, nullable=False)
-    content_json: Mapped[dict | None] = mapped_column(JSON)
+    content_json: Mapped[dict | None] = mapped_column(JSONDictType())
     requirement_codes: Mapped[list[str]] = mapped_column(StringListType(), default=list)
     evidence_ids: Mapped[list[uuid.UUID]] = mapped_column(UUIDListType(), default=list)
     origin: Mapped[SectionOrigin] = mapped_column(Enum(SectionOrigin, name="section_origin"), default=SectionOrigin.AI)
@@ -294,7 +301,7 @@ class IngestJob(Base):
         GUID(), ForeignKey("document.id", ondelete="SET NULL")
     )
     status: Mapped[JobStatus] = mapped_column(Enum(JobStatus, name="job_status"), default=JobStatus.PENDING)
-    report_json: Mapped[dict | None] = mapped_column(JSON)
+    report_json: Mapped[dict | None] = mapped_column(JSONDictType())
     created_by: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -310,7 +317,7 @@ class AuditLog(Base):
     actor_user_id: Mapped[str] = mapped_column(Text, nullable=False)
     action: Mapped[str] = mapped_column(Text, nullable=False)
     target_id: Mapped[str | None] = mapped_column(Text)
-    metadata_json: Mapped[dict] = mapped_column("metadata", JSON, default=dict)
+    metadata_json: Mapped[dict] = mapped_column("metadata", JSONDictType(), default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
@@ -438,7 +445,7 @@ class TenderAnalysisRun(Base):
     )
     filename: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(Text, nullable=False)
-    summary_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    summary_json: Mapped[dict] = mapped_column(JSONDictType(), default=dict)
     created_by: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
@@ -482,7 +489,7 @@ class ReviewReport(Base):
     section_key: Mapped[str] = mapped_column(Text, nullable=False)
     outline_id: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(Text, nullable=False)
-    report_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    report_json: Mapped[dict] = mapped_column(JSONDictType(), default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
@@ -494,5 +501,5 @@ class ScoringReport(Base):
         GUID(), ForeignKey("project.id", ondelete="CASCADE"), nullable=False
     )
     score_total: Mapped[float] = mapped_column(Numeric(6, 2))
-    details_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    details_json: Mapped[dict] = mapped_column(JSONDictType(), default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

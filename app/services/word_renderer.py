@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from docx import Document
+from docx.enum.text import WD_COLOR_INDEX
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Cm
@@ -177,6 +178,28 @@ def _append_paragraph_block(doc: Document, block: dict[str, Any]) -> None:
     text = _validate_text(str(block.get("text") or ""))
     paragraph = doc.add_paragraph(text)
     paragraph.style = style_name
+    risk_level = str(block.get("risk_level") or "").strip().lower()
+    if risk_level == "high" and paragraph.runs:
+        paragraph.runs[0].font.highlight_color = WD_COLOR_INDEX.YELLOW
+
+    evidence = block.get("evidence")
+    if isinstance(evidence, list) and evidence:
+        _ensure_paragraph_style(doc, "ClauseText", _PARAGRAPH_STYLES)
+        evidence_rows: list[str] = []
+        for idx, item in enumerate(evidence, start=1):
+            if not isinstance(item, dict):
+                continue
+            doc_id = _validate_text(str(item.get("doc_id") or "unknown"))
+            chunk_id = _validate_text(str(item.get("chunk_id") or "unknown"))
+            page_range = item.get("page_range") if isinstance(item.get("page_range"), dict) else {}
+            start_page = int(page_range.get("start_page", 0) or 0)
+            end_page = int(page_range.get("end_page", 0) or 0)
+            evidence_rows.append(
+                f"[证据{idx}] doc_id={doc_id}, page={start_page}-{end_page}, chunk_id={chunk_id}"
+            )
+        if evidence_rows:
+            note = doc.add_paragraph("证据：" + "；".join(evidence_rows))
+            note.style = "ClauseText"
 
 
 def _normalize_table_data(table_data: Any) -> tuple[list[str], list[dict[str, str]]]:

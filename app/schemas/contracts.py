@@ -74,6 +74,17 @@ class RenderWordResponse(BaseModel):
     output_path: str
 
 
+class EvidencePageRange(BaseModel):
+    start_page: int = Field(ge=0)
+    end_page: int = Field(ge=0)
+
+
+class EvidenceReference(BaseModel):
+    doc_id: str
+    page_range: EvidencePageRange
+    chunk_id: str
+
+
 class WordHeadingBlock(BaseModel):
     type: Literal["heading"]
     style: Literal["Title1", "Title2", "Title3", "Title4"]
@@ -84,6 +95,8 @@ class WordParagraphBlock(BaseModel):
     type: Literal["paragraph"]
     style: Literal["BodyText", "BodyText_Indent", "ClauseText"]
     text: str = Field(min_length=1)
+    evidence: list[EvidenceReference] = Field(default_factory=list)
+    risk_level: Literal["high", "medium", "low"] | None = None
 
 
 class WordTableBlock(BaseModel):
@@ -188,6 +201,8 @@ class EvidenceUpsertItem(BaseModel):
     forbidden_tags: list[str] = Field(default_factory=list)
     quality_score: float = 80.0
     source_locator: dict | None = None
+    parent_chunk_id: str | None = None
+    anchor_type: Literal["clause", "table", "paragraph"] | None = None
 
 
 class EvidenceUpsertRequest(BaseModel):

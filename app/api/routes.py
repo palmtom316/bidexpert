@@ -103,8 +103,10 @@ from app.services.workflow_runs import (
     confirm_section_run,
     create_outline_run,
     get_outline_status,
+    get_resume_from_step,
     get_section_status,
     mark_section_pending,
+    update_run_progress,
 )
 from app.services.word_renderer import render_word, render_word_structured
 from app.worker.tasks import (
@@ -205,8 +207,10 @@ __all__ = [
     "confirm_section_run",
     "create_outline_run",
     "get_outline_status",
+    "get_resume_from_step",
     "get_section_status",
     "mark_section_pending",
+    "update_run_progress",
     "render_word",
     "render_word_structured",
     "extract_upsert_historical_task",

@@ -528,6 +528,10 @@ def qualify_provider_profile(
                     requirement_text="验证模型基础生成能力",
                     evidence_texts=["证据片段 A"],
                     evidence_ids=["e-1"],
+                    global_facts={},
+                    relevant_requirements=["验证模型基础生成能力"],
+                    relevant_scoring=[],
+                    top_chunks=[],
                     api_key=effective_api_key,
                     base_url=effective_base_url,
                 )

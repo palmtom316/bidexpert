@@ -50,6 +50,9 @@ def _chunk_locator(
     discipline: str,
     source_page: int | str,
     block_type: str,
+    parent_chunk_id: str | None,
+    anchor_type: str,
+    parent_context: str | None,
 ) -> dict:
     meta = section.get("meta", {}) or {}
     return {
@@ -62,6 +65,9 @@ def _chunk_locator(
         "source_page": source_page,
         "section_title": section.get("title"),
         "block_type": block_type,
+        "parent_chunk_id": parent_chunk_id,
+        "anchor_type": anchor_type,
+        "parent_context": parent_context,
     }
 
 
@@ -156,6 +162,9 @@ def chunk_sections_for_rag(
                 if text:
                     text_blocks.append((page, text))
 
+        section_parent_context = "\n\n".join(text for _, text in text_blocks).strip() or None
+        section_parent_chunk_id = f"{doc_id[:8]}-{section_id}-parent-text"
+
         text_fragments = _split_text_blocks(
             text_blocks=text_blocks,
             min_tokens=min_tokens,
@@ -170,6 +179,9 @@ def chunk_sections_for_rag(
                 discipline=discipline,
                 source_page=source_page,
                 block_type="text",
+                parent_chunk_id=section_parent_chunk_id,
+                anchor_type="paragraph",
+                parent_context=section_parent_context,
             )
             chunks.append(
                 EvidenceUpsertItem(
@@ -180,10 +192,13 @@ def chunk_sections_for_rag(
                     industry_tag=industry_tag,
                     quality_score=quality_score,
                     source_locator=locator,
+                    parent_chunk_id=section_parent_chunk_id,
+                    anchor_type="paragraph",
                 )
             )
 
         for idx, (page, table_md) in enumerate(table_blocks, start=1):
+            table_parent_chunk_id = f"{doc_id[:8]}-{section_id}-parent-table-{idx}"
             locator = _chunk_locator(
                 doc_id=doc_id,
                 section=section,
@@ -191,6 +206,9 @@ def chunk_sections_for_rag(
                 discipline=discipline,
                 source_page=page,
                 block_type="table",
+                parent_chunk_id=table_parent_chunk_id,
+                anchor_type="table",
+                parent_context=table_md,
             )
             chunks.append(
                 EvidenceUpsertItem(
@@ -201,6 +219,8 @@ def chunk_sections_for_rag(
                     industry_tag=industry_tag,
                     quality_score=quality_score,
                     source_locator=locator,
+                    parent_chunk_id=table_parent_chunk_id,
+                    anchor_type="table",
                 )
             )
     return chunks

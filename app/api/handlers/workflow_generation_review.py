@@ -291,6 +291,7 @@ def enqueue_section_workflow_handler(
     payload: WorkflowSectionRequest,
     *,
     get_outline_status_fn: Callable[[str], str | None],
+    get_resume_from_step_fn: Callable[[str], str],
     detect_pricing_content_fn: Callable[[str], tuple[bool, list[str]]],
     chain_fn,
     section_extract_stage_task_obj,
@@ -312,12 +313,19 @@ def enqueue_section_workflow_handler(
         raise HTTPException(status_code=400, detail={"status": "BLOCKED_PRICING_CONTENT", "reasons": reasons})
 
     try:
+        resume_from_step = get_resume_from_step_fn(payload.outline_id)
+    except ValueError:
+        resume_from_step = "G1"
+
+    try:
         stage_chain = chain_fn(
             section_extract_stage_task_obj.s(
+                payload.outline_id,
                 payload.project_id,
                 payload.section_key,
                 req_text,
                 payload.industry_tag,
+                resume_from_step,
             ),
             section_generate_stage_task_obj.s(),
             section_validate_stage_task_obj.s(),
