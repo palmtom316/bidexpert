@@ -437,6 +437,8 @@ const GlobalBar = {
 const ExpertHub = {
   init() {
     $("#btnExpertIngest").addEventListener("click", guarded(() => this.ingestPdfFiles()));
+    $("#btnStructuredConvert").addEventListener("click", guarded(() => this.convertStructuredDocument()));
+    $("#btnStructuredConfirm").addEventListener("click", guarded(() => this.confirmStructuredConversion()));
     $("#btnStructuredIngest").addEventListener("click", guarded(() => this.ingestStructured()));
     $("#btnLibraryDocs").addEventListener("click", guarded(() => this.loadDocList()));
     $("#btnLibraryChunks").addEventListener("click", guarded(() => this.loadChunks()));
@@ -483,6 +485,68 @@ const ExpertHub = {
     } else {
       Toast.success("资料入库流程完成");
     }
+    this.loadDocList();
+  },
+
+  async convertStructuredDocument() {
+    const file = $("#convertSourceFile").files[0];
+    if (!file) {
+      Toast.error("请选择待转换文件");
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("doc_type", $("#convertDocType").value);
+    formData.append("industry_tag", effectiveIndustryTag());
+    const title = $("#convertTitle").value.trim();
+    if (title) formData.append("title", title);
+    if (state.projectId.trim()) formData.append("project_id", state.projectId.trim());
+
+    setTaskStatus("文档结构化转换中");
+    $("#convertPreviewResult").textContent = "正在转换，请稍候...";
+    const res = await api("/v1/expert-library/convert-upload", {
+      method: "POST",
+      body: formData,
+    });
+
+    $("#convertSessionId").value = res.conversion_id || "";
+    const sectionPreview = (res.preview_sections || []).length
+      ? `\n预览章节：\n- ${res.preview_sections.join("\n- ")}`
+      : "";
+    const warningText = (res.warnings || []).length ? `\n告警：\n- ${res.warnings.join("\n- ")}` : "";
+    $("#convertPreviewResult").textContent =
+      `转换成功\nconversion_id=${res.conversion_id}\n文件=${res.filename}\npage=${res.page_count}\nblocks=${res.block_count}\nsections=${res.section_count}\nchunks=${res.chunk_count}${sectionPreview}${warningText}`;
+    setTaskStatus("文档结构化转换完成，等待确认");
+    Toast.success("结构化转换完成，请确认后生成专家库文档");
+  },
+
+  async confirmStructuredConversion() {
+    const conversionId = $("#convertSessionId").value.trim();
+    if (!conversionId) {
+      Toast.error("请先执行转换，或填写 conversion_id");
+      return;
+    }
+
+    const payload = {
+      conversion_id: conversionId,
+      project_id: state.projectId.trim() || null,
+      industry_tag: effectiveIndustryTag() || null,
+      title: $("#convertTitle").value.trim() || null,
+      created_by: "user",
+      doc_type: $("#convertDocType").value,
+    };
+
+    setTaskStatus("根据结构化结果生成专家库文档中");
+    const res = await api("/v1/expert-library/convert-confirm", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    $("#convertPreviewResult").textContent = `${$("#convertPreviewResult").textContent}\n\n确认入库结果：\n${JSON.stringify(res, null, 2)}`;
+    setTaskStatus("专家库文档生成完成");
+    Toast.success(`已生成专家库文档，chunk=${res.chunk_count}`);
     this.loadDocList();
   },
 

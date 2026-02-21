@@ -212,3 +212,80 @@ def test_expert_library_ingest_uploads_route_partial_success(monkeypatch) -> Non
         assert "docx" in (result.items[1].error or "")
 
     asyncio.run(_run())
+
+
+def test_expert_library_convert_upload_route(monkeypatch) -> None:
+    from app.schemas.contracts import ExpertLibraryConvertResponse
+
+    captured: dict[str, object] = {}
+
+    def _fake_convert(**kwargs) -> ExpertLibraryConvertResponse:  # type: ignore[no-untyped-def]
+        captured.update(kwargs)
+        return ExpertLibraryConvertResponse(
+            status="SUCCEEDED",
+            conversion_id="conv-001",
+            filename="history.docx",
+            page_count=1,
+            block_count=4,
+            section_count=2,
+            chunk_count=2,
+            preview_sections=["第一章 总则", "第二章 资质"],
+            warnings=[],
+        )
+
+    monkeypatch.setattr(routes, "convert_upload_to_structured", _fake_convert)
+
+    async def _run() -> None:
+        file = UploadFile(
+            filename="history.docx",
+            file=BytesIO(
+                b"PK\x03\x04\x14\x00\x00\x00\x08\x00fake-docx"  # docx-like payload for route plumbing
+            ),
+        )
+        result = await routes.expert_library_convert_upload(
+            file=file,
+            project_id="p-1",
+            industry_tag="政企",
+            title="历史项目",
+            created_by="tester",
+            doc_type="EXPERT_HISTORY",
+            model_id=None,
+        )
+        assert result.conversion_id == "conv-001"
+        assert captured["filename"] == "history.docx"
+
+    asyncio.run(_run())
+
+
+def test_expert_library_convert_confirm_route(monkeypatch) -> None:
+    from app.schemas.contracts import ExpertLibraryConvertConfirmRequest
+
+    captured: dict[str, object] = {}
+
+    def _fake_confirm(**kwargs) -> ExpertLibraryIngestResponse:  # type: ignore[no-untyped-def]
+        captured.update(kwargs)
+        return ExpertLibraryIngestResponse(
+            status="SUCCEEDED",
+            expert_doc_id="doc-confirmed",
+            source_document_id="src-confirmed",
+            filename="history.docx",
+            page_count=1,
+            chunk_count=3,
+            qdrant_upserted=3,
+            warnings=[],
+        )
+
+    monkeypatch.setattr(routes, "confirm_structured_conversion_ingest", _fake_confirm)
+
+    payload = ExpertLibraryConvertConfirmRequest(
+        conversion_id="conv-001",
+        project_id="p-1",
+        industry_tag="政企",
+        title="历史项目",
+        created_by="tester",
+        doc_type="EXPERT_HISTORY",
+    )
+    result = routes.expert_library_convert_confirm(payload)
+
+    assert result.expert_doc_id == "doc-confirmed"
+    assert captured["conversion_id"] == "conv-001"

@@ -11,6 +11,8 @@ from app.schemas.contracts import (
     ExpertLibraryBatchIngestItem,
     ExpertLibraryBatchIngestResponse,
     ExpertLibraryChunkListResponse,
+    ExpertLibraryConvertConfirmRequest,
+    ExpertLibraryConvertResponse,
     ExpertLibraryDocListResponse,
     ExpertLibraryIngestResponse,
     ExpertLibraryStructuredIngestRequest,
@@ -92,6 +94,61 @@ async def expert_library_ingest_upload_handler(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except (RuntimeError, OSError) as exc:
+        raise service_unavailable_exc_factory() from exc
+
+
+async def expert_library_convert_upload_handler(
+    *,
+    file: UploadFile,
+    project_id: str | None,
+    industry_tag: str | None,
+    title: str | None,
+    created_by: str,
+    doc_type: str,
+    model_id: str | None,
+    read_upload_with_limit_fn: Callable[[UploadFile], Awaitable[bytes]],
+    convert_upload_to_structured_fn: Callable[..., ExpertLibraryConvertResponse],
+    resolved_created_by_fn: Callable[[str | None], str],
+    service_unavailable_exc_factory: Callable[[], HTTPException],
+) -> ExpertLibraryConvertResponse:
+    try:
+        content = await read_upload_with_limit_fn(file)
+        return convert_upload_to_structured_fn(
+            filename=file.filename or "",
+            content=content,
+            project_id=project_id,
+            industry_tag=industry_tag,
+            title=title,
+            created_by=resolved_created_by_fn(created_by),
+            doc_type=doc_type,
+            model_id=(model_id or "").strip() or None,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except (RuntimeError, OSError) as exc:
+        raise service_unavailable_exc_factory() from exc
+
+
+def expert_library_convert_confirm_handler(
+    payload: ExpertLibraryConvertConfirmRequest,
+    *,
+    confirm_structured_conversion_ingest_fn: Callable[..., ExpertLibraryIngestResponse],
+    resolved_created_by_fn: Callable[[str | None], str],
+    service_unavailable_exc_factory: Callable[[], HTTPException],
+) -> ExpertLibraryIngestResponse:
+    try:
+        return confirm_structured_conversion_ingest_fn(
+            conversion_id=payload.conversion_id,
+            project_id=payload.project_id,
+            industry_tag=payload.industry_tag,
+            title=payload.title,
+            created_by=resolved_created_by_fn(payload.created_by),
+            doc_type=payload.doc_type,
+            model_id=(payload.model_id or "").strip() or None,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
         raise service_unavailable_exc_factory() from exc
 
 

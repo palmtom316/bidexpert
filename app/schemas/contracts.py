@@ -456,6 +456,29 @@ class ExpertLibraryIngestResponse(BaseModel):
     warnings: list[str] = Field(default_factory=list)
 
 
+class ExpertLibraryConvertResponse(BaseModel):
+    status: str
+    conversion_id: str
+    filename: str
+    page_count: int
+    block_count: int
+    section_count: int
+    chunk_count: int
+    preview_sections: list[str] = Field(default_factory=list)
+    artifacts: dict[str, str] = Field(default_factory=dict)
+    warnings: list[str] = Field(default_factory=list)
+
+
+class ExpertLibraryConvertConfirmRequest(BaseModel):
+    conversion_id: str = Field(min_length=1)
+    project_id: str | None = None
+    industry_tag: str | None = None
+    title: str | None = None
+    created_by: str = "system"
+    doc_type: str = "EXPERT_HISTORY"
+    model_id: str | None = None
+
+
 class ExpertLibraryBatchIngestItem(BaseModel):
     filename: str
     status: str

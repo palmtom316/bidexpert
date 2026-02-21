@@ -82,6 +82,6 @@ async def ingest_tender_upload(file: UploadFile = File(...)) -> IngestUploadResp
     return await ingest_tender_upload_handler(
         file=file,
         read_upload_with_limit_fn=ctx._read_upload_with_limit,
-        ingest_pdf_bytes_fn=ctx.ingest_pdf_bytes,
+        ingest_upload_request_fn=ctx.ingest_upload_request,
         enable_ocr_fallback=ctx.settings.enable_ocr_fallback,
     )

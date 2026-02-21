@@ -75,16 +75,17 @@ async def ingest_tender_upload_handler(
     *,
     file: UploadFile,
     read_upload_with_limit_fn: Callable[[UploadFile], Awaitable[bytes]],
-    ingest_pdf_bytes_fn: Callable[..., IngestUploadResponse],
+    ingest_upload_request_fn: Callable[..., IngestUploadResponse],
     enable_ocr_fallback: bool,
 ) -> IngestUploadResponse:
     filename = Path(file.filename or "").name
-    if not filename.lower().endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="only .pdf is supported")
+    suffix = Path(filename).suffix.lower()
+    if suffix not in {".pdf", ".docx"}:
+        raise HTTPException(status_code=400, detail="only .pdf/.docx is supported")
 
-    return ingest_pdf_bytes_fn(
+    return ingest_upload_request_fn(
         filename=filename,
-        pdf_bytes=await read_upload_with_limit_fn(file),
+        file_bytes=await read_upload_with_limit_fn(file),
         enable_ocr_fallback=enable_ocr_fallback,
     )
 
@@ -101,8 +102,9 @@ async def enqueue_ingest_handler(
     from uuid import uuid4
 
     filename = Path(file.filename or "").name
-    if not filename.lower().endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="only .pdf is supported")
+    suffix = Path(filename).suffix.lower()
+    if suffix not in {".pdf", ".docx"}:
+        raise HTTPException(status_code=400, detail="only .pdf/.docx is supported")
 
     upload_dir_path = resolve_within_base_fn(".", Path(upload_dir))
     target = upload_dir_path / f"{uuid4()}_{filename}"
@@ -132,19 +134,19 @@ def enqueue_ingest_directory_handler(
         require_directory=True,
     )
 
-    pdf_files = [item for item in directory.rglob("*") if item.is_file() and item.suffix.lower() == ".pdf"]
-    if not pdf_files:
+    allowed_files = [item for item in directory.rglob("*") if item.is_file() and item.suffix.lower() in {".pdf", ".docx"}]
+    if not allowed_files:
         return BatchIngestDirectoryResponse(status="PENDING", total_files=0, task_ids=[])
 
     task_ids: list[str] = []
     try:
-        for file_path in sorted(pdf_files):
+        for file_path in sorted(allowed_files):
             task = ingest_document_task_obj.delay(str(file_path))
             task_ids.append(task.id)
     except (CeleryError, RuntimeError, ConnectionError, TimeoutError, OSError) as exc:
         raise service_unavailable_exc_factory() from exc
 
-    return BatchIngestDirectoryResponse(status="PENDING", total_files=len(pdf_files), task_ids=task_ids)
+    return BatchIngestDirectoryResponse(status="PENDING", total_files=len(allowed_files), task_ids=task_ids)
 
 
 def task_status_handler(

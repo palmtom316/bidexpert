@@ -14,7 +14,7 @@ from app.schemas.contracts import EvidenceUpsertItem
 from app.services.evidence_validator import run_three_gates
 from app.services.generation_pipeline import generate_draft_with_retrieval
 from app.services.global_facts import extract_global_facts_from_text
-from app.services.pdf_ingest import ingest_pdf_bytes
+from app.services.ingest.file_router import ingest_upload_request
 from app.services.qdrant_store import get_qdrant_store
 from app.services.workflow_artifacts import load_gate_artifact, persist_gate_artifact
 from app.services.workflow_runs import update_run_progress
@@ -159,8 +159,8 @@ def ingest_document_task(self, file_path: str) -> dict:  # type: ignore[no-untyp
     if not path.exists():
         return {"status": "FAILED", "error": f"file not found: {file_path}"}
 
-    self.update_state(state="PROGRESS", meta={"stage": "INGEST_PDF"})
-    result = ingest_pdf_bytes(path.name, path.read_bytes(), enable_ocr_fallback=settings.enable_ocr_fallback)
+    self.update_state(state="PROGRESS", meta={"stage": "INGEST_DOCUMENT"})
+    result = ingest_upload_request(path.name, path.read_bytes(), enable_ocr_fallback=settings.enable_ocr_fallback)
     return result.model_dump()
 
 

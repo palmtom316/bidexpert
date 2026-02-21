@@ -7,6 +7,8 @@ from app.api.handlers.evidence_expert_render import (
     evidence_extract_upsert_handler,
     evidence_search_handler,
     evidence_upsert_handler,
+    expert_library_convert_confirm_handler,
+    expert_library_convert_upload_handler,
     expert_library_doc_chunks_handler,
     expert_library_docs_handler,
     expert_library_ingest_structured_handler,
@@ -18,6 +20,8 @@ from app.schemas.contracts import (
     EnqueueIngestResponse,
     ExpertLibraryBatchIngestResponse,
     ExpertLibraryChunkListResponse,
+    ExpertLibraryConvertConfirmRequest,
+    ExpertLibraryConvertResponse,
     ExpertLibraryDocListResponse,
     ExpertLibraryIngestResponse,
     ExpertLibraryStructuredIngestRequest,
@@ -80,6 +84,43 @@ async def expert_library_ingest_upload(
         model_id=model_id,
         read_upload_with_limit_fn=ctx._read_upload_with_limit,
         ingest_historical_pdf_fn=ctx.ingest_historical_pdf,
+        resolved_created_by_fn=ctx._resolved_created_by,
+        service_unavailable_exc_factory=ctx._service_unavailable,
+    )
+
+
+@router.post("/v1/expert-library/convert-upload", response_model=ExpertLibraryConvertResponse)
+async def expert_library_convert_upload(
+    file: UploadFile = File(...),
+    project_id: str | None = Form(default=None),
+    industry_tag: str | None = Form(default=None),
+    title: str | None = Form(default=None),
+    created_by: str = Form(default="system"),
+    doc_type: str = Form(default="EXPERT_HISTORY"),
+    model_id: str | None = Form(default=None),
+) -> ExpertLibraryConvertResponse:
+    ctx = _ctx()
+    return await expert_library_convert_upload_handler(
+        file=file,
+        project_id=project_id,
+        industry_tag=industry_tag,
+        title=title,
+        created_by=created_by,
+        doc_type=doc_type,
+        model_id=model_id,
+        read_upload_with_limit_fn=ctx._read_upload_with_limit,
+        convert_upload_to_structured_fn=ctx.convert_upload_to_structured,
+        resolved_created_by_fn=ctx._resolved_created_by,
+        service_unavailable_exc_factory=ctx._service_unavailable,
+    )
+
+
+@router.post("/v1/expert-library/convert-confirm", response_model=ExpertLibraryIngestResponse)
+def expert_library_convert_confirm(payload: ExpertLibraryConvertConfirmRequest) -> ExpertLibraryIngestResponse:
+    ctx = _ctx()
+    return expert_library_convert_confirm_handler(
+        payload,
+        confirm_structured_conversion_ingest_fn=ctx.confirm_structured_conversion_ingest,
         resolved_created_by_fn=ctx._resolved_created_by,
         service_unavailable_exc_factory=ctx._service_unavailable,
     )

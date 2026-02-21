@@ -19,6 +19,8 @@ from app.api.endpoints.evidence import (
     evidence_extract_upsert,
     evidence_search,
     evidence_upsert,
+    expert_library_convert_confirm,
+    expert_library_convert_upload,
     expert_library_doc_chunks,
     expert_library_docs,
     expert_library_ingest_structured,
@@ -79,6 +81,8 @@ from app.services.byok import (
 from app.services.completed_bids import create_completed_bid, delete_completed_bid, list_completed_bids
 from app.services.evidence_validator import run_three_gates
 from app.services.expert_library import (
+    confirm_structured_conversion_ingest,
+    convert_upload_to_structured,
     ingest_historical_pdf,
     ingest_structured_expert_knowledge,
     list_expert_chunks,
@@ -86,6 +90,7 @@ from app.services.expert_library import (
 )
 from app.services.generation_pipeline import generate_draft_with_retrieval
 from app.services.knowledge_standardizer import standardize_section_feedback_chunks
+from app.services.ingest.file_router import ingest_upload_request
 from app.services.pdf_ingest import ingest_pdf_bytes
 from app.services.pii_policy import sanitize_outbound_text
 from app.services.pricing_guard import detect_pricing_content
@@ -161,6 +166,8 @@ __all__ = [
     "calculate_score_api",
     "evidence_upsert",
     "evidence_extract_upsert",
+    "expert_library_convert_upload",
+    "expert_library_convert_confirm",
     "expert_library_ingest_upload",
     "expert_library_ingest_uploads",
     "expert_library_ingest_structured",
@@ -185,6 +192,8 @@ __all__ = [
     "delete_completed_bid",
     "list_completed_bids",
     "run_three_gates",
+    "convert_upload_to_structured",
+    "confirm_structured_conversion_ingest",
     "ingest_historical_pdf",
     "ingest_structured_expert_knowledge",
     "list_expert_chunks",
@@ -192,6 +201,7 @@ __all__ = [
     "generate_draft_with_retrieval",
     "standardize_section_feedback_chunks",
     "ingest_pdf_bytes",
+    "ingest_upload_request",
     "sanitize_outbound_text",
     "detect_pricing_content",
     "get_qdrant_store",

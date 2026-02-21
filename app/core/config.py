@@ -48,6 +48,9 @@ class Settings(BaseSettings):
     workflow_artifact_dir: str = "data/workflow-runs"
     enable_ocr_fallback: bool = True
     ocr_provider: str = "tesseract"
+    pdf_ocr_textlen_threshold: int = 200
+    pdf_ocr_min_non_whitespace_ratio: float = 0.01
+    pdf_render_dpi: int = 260
     hunyuan_ocr_api_key: str | None = None
     hunyuan_ocr_base_url: str | None = None
     docai_ocr_api_key: str | None = None
@@ -98,6 +101,7 @@ class Settings(BaseSettings):
     context_compression_max_chars: int = 4000
     context_compression_snippet_chars: int = 800
     expert_chunk_min_tokens: int = 800
+    expert_chunk_max_tokens: int = 1200
     expert_chunk_overlap_tokens: int = 120
 
     model_config = SettingsConfigDict(env_prefix="BIDEXPERT_", extra="ignore")

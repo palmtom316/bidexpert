@@ -39,6 +39,23 @@ class PageExtract:
     page_no: int
     text: str
     ocr_used: bool
+    source: str = "pypdf"
+    image_count: int = 0
+    text_len: int = 0
+    non_whitespace_ratio: float = 0.0
+
+
+def _non_whitespace_ratio(text: str) -> float:
+    if not text:
+        return 0.0
+    return len(re.sub(r"\s+", "", text)) / max(1, len(text))
+
+
+def _extract_image_count(page) -> int:  # noqa: ANN001
+    try:
+        return len(list(page.images))
+    except Exception:  # noqa: BLE001
+        return 0
 
 
 def _extract_with_pypdf(pdf_bytes: bytes) -> list[PageExtract]:
@@ -47,63 +64,123 @@ def _extract_with_pypdf(pdf_bytes: bytes) -> list[PageExtract]:
     reader = PdfReader(io.BytesIO(pdf_bytes))
     pages: list[PageExtract] = []
     for idx, page in enumerate(reader.pages, start=1):
-        txt = (page.extract_text() or "").strip()
-        pages.append(PageExtract(page_no=idx, text=txt, ocr_used=False))
+        txt = page.extract_text() or ""
+        pages.append(
+            PageExtract(
+                page_no=idx,
+                text=txt.strip(),
+                ocr_used=False,
+                source="pypdf",
+                image_count=_extract_image_count(page),
+                text_len=len(txt),
+                non_whitespace_ratio=_non_whitespace_ratio(txt),
+            )
+        )
     return pages
 
 
-def _ocr_page_with_fitz(pdf_bytes: bytes, page_no: int) -> str:
+def _ocr_page_with_fitz(pdf_bytes: bytes, page_no: int, dpi: int | None = None) -> str:
     import fitz
     import pytesseract
     from PIL import Image
 
     doc = fitz.open(stream=pdf_bytes, filetype="pdf")
     page = doc.load_page(page_no - 1)
-    pix = page.get_pixmap(dpi=220)
+    pix = page.get_pixmap(dpi=max(96, int(dpi or settings.pdf_render_dpi)))
     image = Image.open(io.BytesIO(pix.tobytes("png")))
     text = pytesseract.image_to_string(image, lang="chi_sim+eng")
     return text.strip()
 
 
-def _render_page_png(pdf_bytes: bytes, page_no: int) -> bytes:
+def _render_page_png(pdf_bytes: bytes, page_no: int, dpi: int | None = None) -> bytes:
     import fitz
 
     doc = fitz.open(stream=pdf_bytes, filetype="pdf")
     page = doc.load_page(page_no - 1)
-    pix = page.get_pixmap(dpi=220)
+    pix = page.get_pixmap(dpi=max(96, int(dpi or settings.pdf_render_dpi)))
     return pix.tobytes("png")
 
 
-def _ocr_page_with_configured_provider(pdf_bytes: bytes, page_no: int) -> str:
-    image_bytes = _render_page_png(pdf_bytes, page_no)
+def _ocr_page_with_configured_provider(pdf_bytes: bytes, page_no: int, dpi: int | None = None) -> str:
+    image_bytes = _render_page_png(pdf_bytes, page_no, dpi)
     adapter = create_ocr_adapter(settings.ocr_provider)
     text = adapter.extract_image_bytes(image_bytes, page_no=page_no)
     return text.strip()
 
 
-def extract_pages(pdf_bytes: bytes, enable_ocr_fallback: bool = True) -> list[PageExtract]:
+def extract_pages_v2(
+    pdf_bytes: bytes,
+    enable_ocr_fallback: bool = True,
+    dpi: int | None = None,
+) -> list[PageExtract]:
     pages = _extract_with_pypdf(pdf_bytes)
     if not enable_ocr_fallback:
         return pages
 
+    text_len_threshold = max(1, int(settings.pdf_ocr_textlen_threshold))
+    non_ws_threshold = max(0.0, float(settings.pdf_ocr_min_non_whitespace_ratio))
+    render_dpi = max(96, int(dpi or settings.pdf_render_dpi))
+
     extracted: list[PageExtract] = []
     for page in pages:
-        if len(page.text) >= 40:
-            extracted.append(page)
+        text_len = int(page.text_len or len(page.text or ""))
+        non_ws_ratio = float(page.non_whitespace_ratio or _non_whitespace_ratio(page.text or ""))
+        trigger_ocr = text_len < text_len_threshold or non_ws_ratio < non_ws_threshold
+        if not trigger_ocr:
+            extracted.append(
+                PageExtract(
+                    page_no=page.page_no,
+                    text=page.text,
+                    ocr_used=False,
+                    source=page.source or "pypdf",
+                    image_count=page.image_count,
+                    text_len=text_len,
+                    non_whitespace_ratio=non_ws_ratio,
+                )
+            )
             continue
+
         try:
             provider = (settings.ocr_provider or "tesseract").strip().lower()
             if provider in {"tesseract", "local", ""}:
-                ocr_text = _ocr_page_with_fitz(pdf_bytes, page.page_no)
+                ocr_text = _ocr_page_with_fitz(pdf_bytes, page.page_no, render_dpi)
             else:
                 try:
-                    ocr_text = _ocr_page_with_configured_provider(pdf_bytes, page.page_no)
+                    ocr_text = _ocr_page_with_configured_provider(pdf_bytes, page.page_no, render_dpi)
                 except (OCRAdapterUnavailableError, RuntimeError, ValueError):
-                    ocr_text = _ocr_page_with_fitz(pdf_bytes, page.page_no)
-            extracted.append(PageExtract(page_no=page.page_no, text=ocr_text, ocr_used=True))
+                    ocr_text = _ocr_page_with_fitz(pdf_bytes, page.page_no, render_dpi)
+            extracted.append(
+                PageExtract(
+                    page_no=page.page_no,
+                    text=ocr_text,
+                    ocr_used=True,
+                    source="pypdf+ocr",
+                    image_count=page.image_count,
+                    text_len=len(ocr_text),
+                    non_whitespace_ratio=_non_whitespace_ratio(ocr_text),
+                )
+            )
         except Exception:
-            extracted.append(page)
+            extracted.append(
+                PageExtract(
+                    page_no=page.page_no,
+                    text=page.text,
+                    ocr_used=False,
+                    source=page.source or "pypdf",
+                    image_count=page.image_count,
+                    text_len=text_len,
+                    non_whitespace_ratio=non_ws_ratio,
+                )
+            )
     return extracted
+
+
+def extract_pages(pdf_bytes: bytes, enable_ocr_fallback: bool = True) -> list[PageExtract]:
+    return extract_pages_v2(
+        pdf_bytes,
+        enable_ocr_fallback=enable_ocr_fallback,
+        dpi=settings.pdf_render_dpi,
+    )
 
 
 def build_doc_blocks(pages: list[PageExtract]) -> list[DocBlockItem]:
@@ -138,7 +215,7 @@ def build_doc_blocks(pages: list[PageExtract]) -> list[DocBlockItem]:
 
 
 def ingest_pdf_bytes(filename: str, pdf_bytes: bytes, enable_ocr_fallback: bool = True) -> IngestUploadResponse:
-    pages = extract_pages(pdf_bytes, enable_ocr_fallback=enable_ocr_fallback)
+    pages = extract_pages_v2(pdf_bytes, enable_ocr_fallback=enable_ocr_fallback, dpi=settings.pdf_render_dpi)
     full_text = "\f".join(page.text for page in pages)
 
     blocked, reasons = detect_pricing_content(full_text)

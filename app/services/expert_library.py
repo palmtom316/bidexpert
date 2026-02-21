@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import io
 import hashlib
 import json
 import re
@@ -18,6 +17,7 @@ from app.db.session import session_scope
 from app.models.tables import DocKind, Document, EvidenceChunk, ExpertDoc, Project, SensitivityLevel
 from app.schemas.contracts import (
     DocBlockItem,
+    ExpertLibraryConvertResponse,
     ExpertLibraryChunkItem,
     ExpertLibraryDocItem,
     ExpertLibraryIngestResponse,
@@ -25,6 +25,7 @@ from app.schemas.contracts import (
     ExpertLibraryStructuredIngestResponse,
     EvidenceUpsertItem,
 )
+from app.services.ingest.file_router import IngestedUploadPayload, ingest_upload_bytes
 from app.services.expert_enterprise_pipeline import (
     build_exceptions_queue,
     build_structure_v1_from_blocks,
@@ -42,7 +43,6 @@ from app.services.expert_workspace import (
     prepare_doc_workspace,
     sync_enterprise_config_assets,
 )
-from app.services.pdf_ingest import build_doc_blocks, extract_pages
 from app.services.pricing_guard import detect_pricing_content
 from app.services.qdrant_store import get_qdrant_store
 
@@ -52,6 +52,8 @@ _STRUCTURED_CATEGORY_MAP = {
     "COMPANY_QUALIFICATION": ("公司资质", "COMPANY_QUALIFICATION", "QUALIFICATION"),
     "PM_QUALIFICATION_PERFORMANCE": ("项目管理人员资质及业绩", "PM_QUAL_PERFORMANCE", "PM_TEAM"),
 }
+
+_CONVERSION_STAGE_DIR = "08_conversion_sessions"
 
 
 @dataclass
@@ -114,6 +116,112 @@ def _append_jsonl(path: Path, rows: list[dict]) -> None:
         for row in rows:
             f.write(json.dumps(row, ensure_ascii=False))
             f.write("\n")
+
+
+def _conversion_sessions_dir(layout) -> Path:
+    target = layout.root / _CONVERSION_STAGE_DIR
+    target.mkdir(parents=True, exist_ok=True)
+    return target
+
+
+def _conversion_session_dir(layout, conversion_id: str) -> Path:
+    directory = _conversion_sessions_dir(layout) / conversion_id
+    directory.mkdir(parents=True, exist_ok=True)
+    return directory
+
+
+def _load_conversion_meta(layout, conversion_id: str) -> tuple[Path, dict]:
+    session_dir = _conversion_sessions_dir(layout) / conversion_id
+    meta_path = session_dir / "meta.json"
+    if not meta_path.exists():
+        raise ValueError("conversion session not found")
+    payload = json.loads(meta_path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError("invalid conversion meta")
+    return session_dir, payload
+
+
+def _table_rows_to_markdown(rows: list[list[str]]) -> str:
+    if not rows:
+        return "| 空表 |\n| --- |\n|  |"
+    width = max(len(row) for row in rows)
+    normalized = [row + [""] * (width - len(row)) for row in rows]
+    header = normalized[0]
+    body = normalized[1:] if len(normalized) > 1 else [[""] * width]
+    lines = [
+        f"| {' | '.join(header)} |",
+        f"| {' | '.join(['---'] * width)} |",
+    ]
+    lines.extend(f"| {' | '.join(row)} |" for row in body)
+    return "\n".join(lines)
+
+
+def _render_conversion_doc_markdown(
+    *,
+    title: str,
+    structure: dict,
+    page_meta: dict[int, dict[str, object]],
+) -> str:
+    lines = [f"# {title}", ""]
+    for section in structure.get("sections", []):
+        section_title = str(section.get("title") or "未命名章节")
+        lines.append(f"## {section_title}")
+        lines.append("")
+        for block in section.get("blocks", []):
+            block_id = str(block.get("block_id") or "block")
+            page_no = int(block.get("page") or section.get("page_start") or 1)
+            block_type = str(block.get("type") or "text").upper()
+            source = str((page_meta.get(page_no) or {}).get("source") or "unknown")
+            ocr_used = bool((page_meta.get(page_no) or {}).get("ocr_used", False))
+            lines.append(f"<!-- page: {page_no} -->")
+            lines.append(
+                f"<!-- block: {block_id} type={block_type} source={source} ocr_used={'true' if ocr_used else 'false'} -->"
+            )
+            if block_type.lower() == "table":
+                table = block.get("table") or {}
+                rows = table.get("rows") or []
+                lines.append(_table_rows_to_markdown(rows))
+            else:
+                lines.append(str(block.get("text") or ""))
+            lines.append("")
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def _build_conversion_layout_rows(structure: dict, page_meta: dict[int, dict[str, object]]) -> list[dict]:
+    rows: list[dict] = []
+    for section in structure.get("sections", []):
+        section_anchor = str(section.get("title") or "")
+        for block in section.get("blocks", []):
+            page_no = int(block.get("page") or section.get("page_start") or 1)
+            info = page_meta.get(page_no) or {}
+            rows.append(
+                {
+                    "block_id": str(block.get("block_id") or ""),
+                    "page_no": page_no,
+                    "block_type": "TABLE" if str(block.get("type", "")).lower() == "table" else "PARA",
+                    "section_anchor": section_anchor,
+                    "source": str(info.get("source") or "unknown"),
+                    "ocr_used": bool(info.get("ocr_used", False)),
+                }
+            )
+    return rows
+
+
+def _build_conversion_chunk_rows(chunks: list[EvidenceUpsertItem]) -> list[dict]:
+    rows: list[dict] = []
+    for chunk in chunks:
+        locator = chunk.source_locator or {}
+        rows.append(
+            {
+                "chunk_id": chunk.chunk_id,
+                "doc_id": str(locator.get("doc_id") or ""),
+                "section_path": str(locator.get("section_title") or locator.get("section_id") or ""),
+                "page_range": str(locator.get("source_page") or ""),
+                "text": chunk.text,
+                "payload": locator,
+            }
+        )
+    return rows
 
 
 def _structure_doc_type(doc_type: str) -> str:
@@ -310,79 +418,25 @@ def _build_text_blocks(*, text: str, default_anchor: str, markdown_mode: bool = 
     return blocks
 
 
-def _extract_docx_blocks(filename: str, content: bytes) -> list[DocBlockItem]:
-    from docx import Document as WordDocument
-
-    try:
-        doc = WordDocument(io.BytesIO(content))
-    except Exception as exc:  # noqa: BLE001
-        raise ValueError("invalid .docx content") from exc
-
-    blocks: list[DocBlockItem] = []
-    current_anchor = (Path(filename).stem or "未命名章节").strip()[:48] or "未命名章节"
-    cursor = 0
-
-    for paragraph in doc.paragraphs:
-        text = (paragraph.text or "").strip()
-        if not text:
-            continue
-        style_name = str(getattr(paragraph.style, "name", "") or "").lower()
-        if "heading" in style_name:
-            current_anchor = text[:48] or current_anchor
-            continue
-        start = cursor
-        end = cursor + len(text)
-        cursor = end + 1
-        blocks.append(
-            DocBlockItem(
-                page_no=1,
-                block_type="PARA",
-                section_anchor=current_anchor,
-                content_text=text,
-                char_start=start,
-                char_end=end,
-            )
-        )
-
-    for table in doc.tables:
-        rows: list[list[str]] = []
-        for row in table.rows:
-            cells = [re.sub(r"\s+", " ", cell.text or "").strip() for cell in row.cells]
-            if any(cells):
-                rows.append(cells)
-        if not rows:
-            continue
-        table_text = "\n".join(" | ".join(cell or "-" for cell in row) for row in rows)
-        start = cursor
-        end = cursor + len(table_text)
-        cursor = end + 1
-        blocks.append(
-            DocBlockItem(
-                page_no=1,
-                block_type="TABLE",
-                section_anchor=current_anchor,
-                content_text=table_text,
-                char_start=start,
-                char_end=end,
-            )
-        )
-
-    return blocks
-
-
 def _extract_upload_blocks(
     filename: str,
     content: bytes,
 ) -> tuple[list[DocBlockItem], int, str, str, str]:
     ext = Path(filename).suffix.lower()
-    if ext == ".pdf":
-        pages = extract_pages(content, enable_ocr_fallback=settings.enable_ocr_fallback)
+    if ext in {".pdf", ".docx"}:
+        payload = ingest_upload_bytes(
+            filename=filename,
+            file_bytes=content,
+            enable_ocr_fallback=settings.enable_ocr_fallback,
+        )
+        if not payload.blocks:
+            raise ValueError("empty document content")
         return (
-            build_doc_blocks(pages),
-            len(pages),
-            "pdf",
-            "application/pdf",
-            "pdf_ingest.v1",
+            payload.blocks,
+            payload.page_count,
+            payload.source_format,
+            payload.content_type,
+            payload.parser_version,
         )
     if ext in {".md", ".markdown"}:
         text = _decode_text_content(content)
@@ -396,26 +450,20 @@ def _extract_upload_blocks(
             "text/markdown",
             "markdown_ingest.v1",
         )
-    if ext == ".docx":
-        blocks = _extract_docx_blocks(filename, content)
-        if not blocks:
-            raise ValueError("empty word document content")
-        return (
-            blocks,
-            1,
-            "docx",
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            "docx_ingest.v1",
-        )
     if ext == ".doc":
         raise ValueError("暂不支持 .doc，请另存为 .docx 后上传")
-    raise ValueError("unsupported file format, allowed: .pdf/.md/.markdown/.docx")
+    raise ValueError("unsupported file format, allowed: .pdf/.docx/.md/.markdown")
 
 
-def ingest_historical_pdf(
+def _ingest_historical_with_blocks(
     *,
     filename: str,
     content: bytes,
+    blocks: list[DocBlockItem],
+    page_count: int,
+    source_format: str,
+    content_type: str,
+    parser_version: str,
     project_id: str | None,
     industry_tag: str | None,
     title: str | None,
@@ -430,7 +478,6 @@ def ingest_historical_pdf(
     sync_enterprise_config_assets(layout)
     thresholds = _load_thresholds(layout)
 
-    blocks, page_count, source_format, content_type, parser_version = _extract_upload_blocks(filename, content)
     full_text = "\n".join((block.content_text or "") for block in blocks if block.content_text)
 
     pricing_blocked, pricing_reasons = detect_pricing_content(full_text)
@@ -618,6 +665,253 @@ def ingest_historical_pdf(
         qdrant_upserted=upserted,
         warnings=warnings,
     )
+
+
+def ingest_historical_pdf(
+    *,
+    filename: str,
+    content: bytes,
+    project_id: str | None,
+    industry_tag: str | None,
+    title: str | None,
+    created_by: str = "system",
+    doc_type: str = "EXPERT_HISTORY",
+    model_id: str | None = None,
+) -> ExpertLibraryIngestResponse:
+    blocks, page_count, source_format, content_type, parser_version = _extract_upload_blocks(filename, content)
+    return _ingest_historical_with_blocks(
+        filename=filename,
+        content=content,
+        blocks=blocks,
+        page_count=page_count,
+        source_format=source_format,
+        content_type=content_type,
+        parser_version=parser_version,
+        project_id=project_id,
+        industry_tag=industry_tag,
+        title=title,
+        created_by=created_by,
+        doc_type=doc_type,
+        model_id=model_id,
+    )
+
+
+def convert_upload_to_structured(
+    *,
+    filename: str,
+    content: bytes,
+    project_id: str | None,
+    industry_tag: str | None,
+    title: str | None,
+    created_by: str = "system",
+    doc_type: str = "EXPERT_HISTORY",
+    model_id: str | None = None,
+) -> ExpertLibraryConvertResponse:
+    layout = ensure_expert_library_layout()
+    sync_enterprise_config_assets(layout)
+    thresholds = _load_thresholds(layout)
+
+    payload: IngestedUploadPayload = ingest_upload_bytes(
+        filename=filename,
+        file_bytes=content,
+        enable_ocr_fallback=settings.enable_ocr_fallback,
+    )
+    if not payload.blocks:
+        raise ValueError("empty document content")
+
+    full_text = payload.full_text
+    pricing_blocked, pricing_reasons = detect_pricing_content(full_text)
+    warnings: list[str] = []
+    if (model_id or "").strip():
+        warnings.append("model_id_ignored_in_section_chunking_pipeline")
+    if pricing_blocked:
+        warnings.extend([f"pricing_detected:{reason}" for reason in pricing_reasons])
+        warnings.append("section_enhancement_chunking_with_pricing_redaction_flags")
+
+    conversion_id = uuid.uuid4().hex
+    session_dir = _conversion_session_dir(layout, conversion_id)
+    raw_name = _safe_filename(filename)
+    raw_path = session_dir / raw_name
+    raw_path.write_bytes(content)
+
+    doc_id = f"conv-{conversion_id[:12]}"
+    structure = build_structure_v1_from_blocks(
+        doc_id=doc_id,
+        title=title,
+        source_file=filename,
+        source_format=payload.source_format,
+        blocks=payload.blocks,
+        parser_version=payload.parser_version,
+        doc_type=_structure_doc_type(doc_type),
+    )
+    table_summaries = summarize_tables_in_structure(structure)
+    section_meta = enrich_sections_v1(structure, table_summaries)
+    risk_reviews = risk_review_sections(
+        structure,
+        section_meta,
+        strong_review_confidence=float(thresholds["strong_review_confidence"]),
+    )
+    merged = merge_structure_meta_risk(structure, section_meta, risk_reviews)
+    exception_queue = build_exceptions_queue(
+        doc_id=doc_id,
+        merged=merged,
+        low_confidence=float(thresholds["low_confidence"]),
+        max_section_pages=int(thresholds["max_section_pages"]),
+    )
+    chunks = chunks_for_enterprise_rag(
+        merged,
+        industry_tag=industry_tag,
+        doc_type=doc_type,
+        min_tokens=settings.expert_chunk_min_tokens,
+        max_tokens=int(thresholds["max_chunk_tokens"]),
+        overlap_tokens=int(thresholds["chunk_overlap_tokens"]),
+    )
+    if not chunks:
+        chunks = _fallback_chunks_from_blocks(
+            blocks=payload.blocks,
+            industry_tag=industry_tag,
+            doc_type=doc_type,
+            pricing_related=pricing_blocked,
+            doc_id=doc_id,
+        )
+        warnings.append("no_section_chunks_fallback_to_block_chunks")
+    if pricing_blocked:
+        for chunk in chunks:
+            tags = list(chunk.forbidden_tags or [])
+            if "PRICING_RELATED" not in tags:
+                tags.append("PRICING_RELATED")
+            chunk.forbidden_tags = tags
+
+    doc_md_text = _render_conversion_doc_markdown(
+        title=title or Path(filename).stem,
+        structure=structure,
+        page_meta=payload.page_meta,
+    )
+    layout_rows = _build_conversion_layout_rows(structure, payload.page_meta)
+    chunk_rows = _build_conversion_chunk_rows(chunks)
+
+    doc_md_path = session_dir / "doc.md"
+    layout_json_path = session_dir / "layout.json"
+    chunks_jsonl_path = session_dir / "chunks.jsonl"
+    blocks_path = session_dir / "blocks.json"
+    structure_path = session_dir / "structure.v1.json"
+    merged_path = session_dir / "merged.v1.json"
+    meta_path = session_dir / "meta.json"
+
+    doc_md_path.write_text(doc_md_text, encoding="utf-8")
+    _save_json(layout_json_path, layout_rows)
+    _save_jsonl(chunks_jsonl_path, chunk_rows)
+    _save_json(blocks_path, [block.model_dump() for block in payload.blocks])
+    _save_json(structure_path, structure)
+    _save_json(merged_path, merged)
+    _save_json(
+        meta_path,
+        {
+            "conversion_id": conversion_id,
+            "created_at": datetime.now().isoformat(timespec="seconds"),
+            "filename": filename,
+            "raw_file": raw_name,
+            "page_count": payload.page_count,
+            "source_format": payload.source_format,
+            "content_type": payload.content_type,
+            "parser_version": payload.parser_version,
+            "project_id": project_id,
+            "industry_tag": industry_tag,
+            "title": title,
+            "created_by": created_by,
+            "doc_type": doc_type,
+            "model_id": model_id,
+            "warnings": warnings,
+            "artifacts": {
+                "doc_md": str(doc_md_path),
+                "layout_json": str(layout_json_path),
+                "chunks_jsonl": str(chunks_jsonl_path),
+                "structure_json": str(structure_path),
+                "merged_json": str(merged_path),
+                "blocks_json": str(blocks_path),
+            },
+            "exception_count": len(exception_queue),
+            "block_count": len(payload.blocks),
+            "section_count": len(structure.get("sections", [])),
+            "chunk_count": len(chunks),
+            "pricing_blocked": pricing_blocked,
+        },
+    )
+
+    preview_sections = [str(section.get("title") or "") for section in structure.get("sections", [])][:8]
+    return ExpertLibraryConvertResponse(
+        status="SUCCEEDED",
+        conversion_id=conversion_id,
+        filename=filename,
+        page_count=payload.page_count,
+        block_count=len(payload.blocks),
+        section_count=len(structure.get("sections", [])),
+        chunk_count=len(chunks),
+        preview_sections=preview_sections,
+        artifacts={
+            "doc_md": str(doc_md_path),
+            "layout_json": str(layout_json_path),
+            "chunks_jsonl": str(chunks_jsonl_path),
+        },
+        warnings=warnings,
+    )
+
+
+def confirm_structured_conversion_ingest(
+    *,
+    conversion_id: str,
+    project_id: str | None,
+    industry_tag: str | None,
+    title: str | None,
+    created_by: str = "system",
+    doc_type: str = "EXPERT_HISTORY",
+    model_id: str | None = None,
+) -> ExpertLibraryIngestResponse:
+    layout = ensure_expert_library_layout()
+    session_dir, meta = _load_conversion_meta(layout, conversion_id)
+
+    filename = str(meta.get("filename") or "")
+    raw_file = str(meta.get("raw_file") or "")
+    raw_path = session_dir / raw_file
+    if not filename or not raw_file or not raw_path.exists():
+        raise ValueError("invalid conversion session payload")
+
+    blocks_path = session_dir / "blocks.json"
+    if not blocks_path.exists():
+        raise ValueError("conversion blocks not found")
+    rows = json.loads(blocks_path.read_text(encoding="utf-8"))
+    if not isinstance(rows, list):
+        raise ValueError("invalid conversion blocks")
+    blocks = [DocBlockItem(**item) for item in rows]
+    if not blocks:
+        raise ValueError("conversion blocks are empty")
+
+    resolved_project_id = project_id if project_id is not None else str(meta.get("project_id") or "") or None
+    resolved_industry_tag = industry_tag if industry_tag is not None else str(meta.get("industry_tag") or "") or None
+    resolved_title = title if title is not None else str(meta.get("title") or "") or None
+    resolved_doc_type = (doc_type or "").strip() or str(meta.get("doc_type") or "EXPERT_HISTORY")
+    resolved_model_id = model_id if model_id is not None else str(meta.get("model_id") or "") or None
+
+    result = _ingest_historical_with_blocks(
+        filename=filename,
+        content=raw_path.read_bytes(),
+        blocks=blocks,
+        page_count=int(meta.get("page_count") or 1),
+        source_format=str(meta.get("source_format") or "pdf"),
+        content_type=str(meta.get("content_type") or "application/pdf"),
+        parser_version=str(meta.get("parser_version") or "conversion.v1"),
+        project_id=resolved_project_id,
+        industry_tag=resolved_industry_tag,
+        title=resolved_title,
+        created_by=created_by,
+        doc_type=resolved_doc_type,
+        model_id=resolved_model_id,
+    )
+
+    meta["confirmed_at"] = datetime.now().isoformat(timespec="seconds")
+    meta["confirmed_expert_doc_id"] = result.expert_doc_id
+    _save_json(session_dir / "meta.json", meta)
+    return result
 
 
 def list_expert_docs(project_id: str | None, industry_tag: str | None, limit: int = 50) -> list[ExpertLibraryDocItem]:
