@@ -38,6 +38,7 @@ from app.schemas.contracts import (
     WorkflowSectionRequest,
     WorkflowSectionResponse,
 )
+from app.services.path_safety import validate_path_identifier
 
 
 def create_outline_handler(
@@ -303,6 +304,12 @@ def enqueue_section_workflow_handler(
     mark_section_pending_fn: Callable[[str, str], None],
     service_unavailable_exc_factory: Callable[[], HTTPException],
 ) -> WorkflowSectionResponse:
+    try:
+        validate_path_identifier("outline_id", payload.outline_id)
+        validate_path_identifier("section_key", payload.section_key)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     outline_status = get_outline_status_fn(payload.outline_id)
     if outline_status is None:
         raise HTTPException(status_code=404, detail="outline not found")
@@ -350,6 +357,12 @@ def confirm_section_handler(
     *,
     confirm_section_run_fn: Callable[[str, str, bool], str],
 ) -> SectionConfirmResponse:
+    try:
+        validate_path_identifier("outline_id", payload.outline_id)
+        validate_path_identifier("section_key", payload.section_key)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     try:
         status = confirm_section_run_fn(payload.outline_id, payload.section_key, payload.approved)
         return SectionConfirmResponse(

@@ -8,14 +8,17 @@ from app.services.api_rate_limiter import reset_local_rate_limit_state
 
 def test_api_rate_limit_blocks_excess_requests_on_api_routes(monkeypatch) -> None:
     from app.main import settings
+    from app.api import routes
 
     monkeypatch.setattr(settings, "api_rate_limit_enabled", True, raising=False)
     monkeypatch.setattr(settings, "api_rate_limit_requests", 2, raising=False)
     monkeypatch.setattr(settings, "api_rate_limit_window_seconds", 60, raising=False)
+    monkeypatch.setattr(routes.settings, "auth_mode", "api_key", raising=False)
+    monkeypatch.setattr(routes.settings, "api_key", "test-key", raising=False)
 
     reset_local_rate_limit_state()
     client = TestClient(app)
-    headers = {"X-Forwarded-For": "198.51.100.10"}
+    headers = {"X-Forwarded-For": "198.51.100.10", "X-API-Key": "test-key"}
 
     assert client.post("/v1/policy/pricing-fuse", json={"text": "仅技术说明"}, headers=headers).status_code == 200
     assert client.post("/v1/policy/pricing-fuse", json={"text": "仅技术说明"}, headers=headers).status_code == 200
@@ -27,18 +30,43 @@ def test_api_rate_limit_blocks_excess_requests_on_api_routes(monkeypatch) -> Non
 
 def test_api_rate_limit_skips_health_and_isolated_by_client_ip(monkeypatch) -> None:
     from app.main import settings
+    from app.api import routes
 
     monkeypatch.setattr(settings, "api_rate_limit_enabled", True, raising=False)
     monkeypatch.setattr(settings, "api_rate_limit_requests", 1, raising=False)
     monkeypatch.setattr(settings, "api_rate_limit_window_seconds", 60, raising=False)
+    monkeypatch.setattr(routes.settings, "auth_mode", "api_key", raising=False)
+    monkeypatch.setattr(routes.settings, "api_key", "test-key", raising=False)
 
     reset_local_rate_limit_state()
     client = TestClient(app)
 
-    assert client.get("/health", headers={"X-Forwarded-For": "203.0.113.1"}).status_code == 200
-    assert client.get("/health", headers={"X-Forwarded-For": "203.0.113.1"}).status_code == 200
-    assert client.get("/health", headers={"X-Forwarded-For": "203.0.113.1"}).status_code == 200
+    health_headers = {"X-Forwarded-For": "203.0.113.1", "X-API-Key": "test-key"}
+    assert client.get("/health", headers=health_headers).status_code == 200
+    assert client.get("/health", headers=health_headers).status_code == 200
+    assert client.get("/health", headers=health_headers).status_code == 200
 
-    assert client.post("/v1/policy/pricing-fuse", json={"text": "技术能力"}, headers={"X-Forwarded-For": "203.0.113.1"}).status_code == 200
-    assert client.post("/v1/policy/pricing-fuse", json={"text": "技术能力"}, headers={"X-Forwarded-For": "203.0.113.2"}).status_code == 200
-    assert client.post("/v1/policy/pricing-fuse", json={"text": "技术能力"}, headers={"X-Forwarded-For": "203.0.113.1"}).status_code == 429
+    assert (
+        client.post(
+            "/v1/policy/pricing-fuse",
+            json={"text": "技术能力"},
+            headers={"X-Forwarded-For": "203.0.113.1", "X-API-Key": "test-key"},
+        ).status_code
+        == 200
+    )
+    assert (
+        client.post(
+            "/v1/policy/pricing-fuse",
+            json={"text": "技术能力"},
+            headers={"X-Forwarded-For": "203.0.113.2", "X-API-Key": "test-key"},
+        ).status_code
+        == 200
+    )
+    assert (
+        client.post(
+            "/v1/policy/pricing-fuse",
+            json={"text": "技术能力"},
+            headers={"X-Forwarded-For": "203.0.113.1", "X-API-Key": "test-key"},
+        ).status_code
+        == 429
+    )

@@ -2,11 +2,10 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from app.services.adapters.base import LLMAdapter
+from app.services.adapters.base import AdapterUnavailableError, LLMAdapter
 from app.services.adapters.providers import (
     DeepSeekAdapter,
     GeminiAdapter,
-    MockAdapter,
     OpenAIAdapter,
     OpenAICompatibleAdapter,
     QwenAdapter,
@@ -33,7 +32,7 @@ def create_adapter(provider: str) -> LLMAdapter:
         return factory()
     if normalized in _OPENAI_COMPATIBLE_FALLBACK:
         return OpenAICompatibleAdapter(provider=normalized)
-    return MockAdapter()
+    raise AdapterUnavailableError(f"unsupported provider: {provider}")
 
 
 def list_registered_providers() -> list[str]:

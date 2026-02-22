@@ -1,8 +1,8 @@
-# 投标专家系统 V1.1 全量落地 Implementation Plan
+# 投标专家系统 release/V1.0 全量落地 Implementation Plan
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** 将 `docs/投标专家系统_企业级完整落地与Prompt套件_V1.1_合并版.md` 的 V1.1 要求全部落地到当前代码库，覆盖异步断点续跑、二阶段检索、父子块、Global Facts、一致性约束、Prompt 套件、证据可视化和 JSONB+GIN 优化。
+**Goal:** 将 `docs/投标专家系统_企业级完整落地与Prompt套件_V1.1_合并版.md` 的 release/V1.0 要求全部落地到当前代码库，覆盖异步断点续跑、二阶段检索、父子块、Global Facts、一致性约束、Prompt 套件、证据可视化和 JSONB+GIN 优化。
 
 **Architecture:** 以现有 `workflow_run + celery stage tasks + generation_pipeline + qdrant_store + word_renderer` 为主干，增量加入状态机字段、闸门工件落盘、可恢复执行、检索后处理、事实表约束和结构化输出统一校验。数据库侧通过 SQLAlchemy 类型 + Alembic 迁移完成 JSONB 化与 GIN 索引。
 

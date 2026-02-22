@@ -7,6 +7,7 @@ import json
 import time
 from io import BytesIO
 
+import pytest
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 from fastapi.testclient import TestClient
@@ -156,3 +157,26 @@ def test_jwt_subject_overrides_created_by(monkeypatch) -> None:
 
     assert response.status_code == 200
     assert captured["created_by"] == "owner-user"
+
+
+def test_health_rejects_request_when_api_key_mode_has_no_server_key(monkeypatch) -> None:
+    from app.api import routes
+
+    monkeypatch.setattr(routes.settings, "auth_mode", "api_key", raising=False)
+    monkeypatch.setattr(routes.settings, "api_key", None, raising=False)
+
+    client = TestClient(app)
+    response = client.get("/health")
+
+    assert response.status_code == 401
+
+
+def test_startup_fails_when_api_key_mode_missing_api_key(monkeypatch) -> None:
+    from app.api import routes
+
+    monkeypatch.setattr(routes.settings, "auth_mode", "api_key", raising=False)
+    monkeypatch.setattr(routes.settings, "api_key", None, raising=False)
+
+    with pytest.raises(RuntimeError, match="BIDEXPERT_API_KEY"):
+        with TestClient(app):
+            pass

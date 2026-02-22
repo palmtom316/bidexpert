@@ -8,6 +8,7 @@ from app.api.handlers.provider_completed_tender import (
     delete_completed_bid_handler,
     delete_provider_profile_handler,
     get_model_policy_handler,
+    list_audit_logs_handler,
     list_completed_bids_handler,
     list_provider_profiles_handler,
     put_model_policy_handler,
@@ -15,6 +16,7 @@ from app.api.handlers.provider_completed_tender import (
     test_provider_profile_handler,
 )
 from app.schemas.contracts import (
+    AuditLogListResponse,
     CompletedBidCreateRequest,
     CompletedBidDeleteResponse,
     CompletedBidItem,
@@ -45,6 +47,7 @@ def create_provider_profile_api(payload: ProviderProfileCreateRequest) -> Provid
         payload,
         create_provider_profile_fn=ctx.create_provider_profile,
         resolved_created_by_fn=ctx._resolved_created_by,
+        audit_log_fn=ctx.record_audit_event,
     )
 
 
@@ -85,6 +88,8 @@ def delete_provider_profile_api(profile_id: str) -> ProviderProfileDeleteRespons
     return delete_provider_profile_handler(
         profile_id,
         delete_provider_profile_fn=ctx.delete_provider_profile,
+        resolved_created_by_fn=ctx._resolved_created_by,
+        audit_log_fn=ctx.record_audit_event,
     )
 
 
@@ -95,6 +100,8 @@ def put_model_policy_api(project_id: str, payload: ProjectModelPolicyUpsertReque
         project_id,
         payload,
         upsert_project_model_policy_fn=ctx.upsert_project_model_policy,
+        resolved_created_by_fn=ctx._resolved_created_by,
+        audit_log_fn=ctx.record_audit_event,
     )
 
 
@@ -115,6 +122,7 @@ def create_completed_bid_api(payload: CompletedBidCreateRequest) -> CompletedBid
         create_completed_bid_fn=ctx.create_completed_bid,
         resolved_created_by_fn=ctx._resolved_created_by,
         service_unavailable_exc_factory=ctx._service_unavailable,
+        audit_log_fn=ctx.record_audit_event,
     )
 
 
@@ -135,5 +143,23 @@ def delete_completed_bid_api(record_id: str) -> CompletedBidDeleteResponse:
     return delete_completed_bid_handler(
         record_id,
         delete_completed_bid_fn=ctx.delete_completed_bid,
+        service_unavailable_exc_factory=ctx._service_unavailable,
+        resolved_created_by_fn=ctx._resolved_created_by,
+        audit_log_fn=ctx.record_audit_event,
+    )
+
+
+@router.get("/api/audit-logs", response_model=AuditLogListResponse)
+def list_audit_logs_api(
+    project_id: str | None = None,
+    action: str | None = None,
+    limit: int = 100,
+) -> AuditLogListResponse:
+    ctx = _ctx()
+    return list_audit_logs_handler(
+        project_id=project_id,
+        action=action,
+        limit=limit,
+        list_audit_logs_fn=ctx.list_audit_logs,
         service_unavailable_exc_factory=ctx._service_unavailable,
     )

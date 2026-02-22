@@ -18,7 +18,7 @@ def test_extract_pages_v2_triggers_ocr_when_text_too_short(monkeypatch) -> None:
 
     assert len(pages) == 1
     assert pages[0].ocr_used is True
-    assert pages[0].source == "pypdf+ocr"
+    assert pages[0].source == "pypdf+ocr:tesseract"
     assert pages[0].text == "OCR识别文本"
 
 
@@ -62,5 +62,5 @@ def test_extract_pages_v2_triggers_ocr_when_non_whitespace_ratio_too_low(monkeyp
 
     assert len(pages) == 1
     assert pages[0].ocr_used is True
-    assert pages[0].source == "pypdf+ocr"
+    assert pages[0].source == "pypdf+ocr:tesseract"
     assert pages[0].text == "OCR结果"

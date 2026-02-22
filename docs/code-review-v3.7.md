@@ -1,4 +1,4 @@
-# BidExpert v3.7 代码审核报告
+# BidExpert release/V1.0 代码审核报告
 
 > 审核基准：`AI_Programming_Prompt_v3.7_Quality_Maximized.md` 及 `AI_Tender_System_Technical_Whitepaper_v3.7_Quality_Maximized.md`
 >
@@ -130,7 +130,7 @@ Model Registry 注册了 `voyage:voyage-law-2`，但无 VoyageAdapter。Voyage A
 
 **文件**：`app/schemas/contracts.py:176-177`
 
-默认 `llm_provider="Qwen"`、`llm_model="Qwen3-Max"`，而 v3.7 首选应为 Gemini 3 Pro。
+默认 `llm_provider="Qwen"`、`llm_model="Qwen3-Max"`，而 release/V1.0 首选应为 Gemini 3 Pro。
 
 ---
 
@@ -152,7 +152,7 @@ Model Registry 注册了 `voyage:voyage-law-2`，但无 VoyageAdapter。Voyage A
 | **P2-2** | 迁移 FastAPI lifespan | `main.py` | `on_event("startup")` → `lifespan` context manager |
 | **P2-3** | 修复 datetime 弃用 | `tables.py`, `profiles.py` 等 | `utcnow()` → `datetime.now(UTC)` |
 | **P2-4** | 整理目录结构 | `worker/`, `extract/`, `rag/` | 将分散的逻辑归并到白皮书要求的模块中，删除空包 |
-| **P2-5** | 修正默认值 | `contracts.py` | DraftGenerationResponse 默认 provider/model 对齐 v3.7 首选 |
+| **P2-5** | 修正默认值 | `contracts.py` | DraftGenerationResponse 默认 provider/model 对齐 release/V1.0 首选 |
 
 ---
 

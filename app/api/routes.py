@@ -41,6 +41,7 @@ from app.api.endpoints.provider import (
     delete_completed_bid_api,
     delete_provider_profile_api,
     get_model_policy_api,
+    list_audit_logs_api,
     list_completed_bids_api,
     list_provider_profiles_api,
     put_model_policy_api,
@@ -78,6 +79,7 @@ from app.services.byok import (
     test_provider_profile,
     upsert_project_model_policy,
 )
+from app.services.audit_log import list_audit_logs, record_audit_event
 from app.services.completed_bids import create_completed_bid, delete_completed_bid, list_completed_bids
 from app.services.evidence_validator import run_three_gates
 from app.services.expert_library import (
@@ -143,6 +145,7 @@ __all__ = [
     "create_completed_bid_api",
     "list_completed_bids_api",
     "delete_completed_bid_api",
+    "list_audit_logs_api",
     "parse_tender",
     "analyze_tender_upload",
     "list_tender_analysis_runs_api",
@@ -188,6 +191,8 @@ __all__ = [
     "qualify_provider_profile",
     "test_provider_profile",
     "upsert_project_model_policy",
+    "record_audit_event",
+    "list_audit_logs",
     "create_completed_bid",
     "delete_completed_bid",
     "list_completed_bids",
@@ -243,6 +248,17 @@ def _auth_mode() -> str:
     return normalized if normalized in {"api_key", "jwt", "hybrid"} else "api_key"
 
 
+def _configured_api_key() -> str | None:
+    value = (settings.api_key or "").strip()
+    return value or None
+
+
+def validate_auth_configuration() -> None:
+    mode = _auth_mode()
+    if mode == "api_key" and _configured_api_key() is None:
+        raise RuntimeError("BIDEXPERT_API_KEY is required when BIDEXPERT_AUTH_MODE=api_key")
+
+
 def _resolved_created_by(provided: str | None) -> str:
     auth = get_auth_context()
     if auth.method == "jwt":
@@ -287,13 +303,12 @@ async def _require_auth(
             raise HTTPException(status_code=401, detail="missing bearer token")
 
     if mode in {"api_key", "hybrid"}:
-        expected = settings.api_key
-        if expected:
-            if not key or not hmac.compare_digest(key, expected):
-                raise HTTPException(status_code=401, detail="Invalid or missing API key")
-            set_auth_context(AuthContext(user_id="api-key-user", method="api_key"))
-            return
-        set_auth_context(AuthContext(user_id="system", method="anonymous"))
+        expected = _configured_api_key()
+        if not expected:
+            raise HTTPException(status_code=401, detail="api key authentication is not configured")
+        if not key or not hmac.compare_digest(key, expected):
+            raise HTTPException(status_code=401, detail="Invalid or missing API key")
+        set_auth_context(AuthContext(user_id="api-key-user", method="api_key"))
         return
 
     raise HTTPException(status_code=401, detail="authentication required")

@@ -24,11 +24,15 @@ class Settings(BaseSettings):
     qdrant_prompt_topn_max: int = 20
     qdrant_cross_encoder_enabled: bool = False
     qdrant_cross_encoder_model: str = "BAAI/bge-reranker-base"
+    qdrant_llm_rerank_enabled: bool = False
+    qdrant_llm_rerank_candidate_limit: int = 30
+    qdrant_llm_rerank_top_k: int = 12
 
     llm_http_timeout_seconds: int = 120
     log_level: str = "INFO"
     log_format: str = "json"
     metrics_enabled: bool = True
+    metrics_public_enabled: bool = False
     auth_mode: str = "api_key"
     jwt_secret: str | None = None
     jwt_public_key_pem: str | None = None
@@ -47,10 +51,13 @@ class Settings(BaseSettings):
     render_template_dir: str = "templates"
     workflow_artifact_dir: str = "data/workflow-runs"
     enable_ocr_fallback: bool = True
-    ocr_provider: str = "tesseract"
+    ocr_provider: str = "glm-ocr"
     pdf_ocr_textlen_threshold: int = 200
     pdf_ocr_min_non_whitespace_ratio: float = 0.01
     pdf_render_dpi: int = 260
+    glm_ocr_api_key: str | None = None
+    glm_ocr_base_url: str | None = None
+    glm_ocr_model: str = "glm-ocr"
     hunyuan_ocr_api_key: str | None = None
     hunyuan_ocr_base_url: str | None = None
     docai_ocr_api_key: str | None = None
@@ -75,6 +82,7 @@ class Settings(BaseSettings):
     vault_mount: str = "secret"
     vault_namespace: str | None = None
     vault_redis_fallback_enabled: bool = True
+    secret_temp_key_ttl_seconds: int = 3600
     api_key: str | None = None
     openai_api_key: str | None = None
     openai_base_url: str | None = "https://api.openai.com/v1"
@@ -108,3 +116,23 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+
+def normalized_app_env() -> str:
+    return (settings.app_env or "").strip().lower()
+
+
+def validate_runtime_baseline() -> None:
+    normalized = normalized_app_env()
+    if normalized in {"production", "prd"}:
+        raise RuntimeError("Production baseline requires BIDEXPERT_APP_ENV=prod")
+    if normalized not in {"dev", "test", "prod"}:
+        raise RuntimeError(
+            f"Unsupported BIDEXPERT_APP_ENV={settings.app_env!r}; allowed values: dev, test, prod"
+        )
+    if normalized == "prod" and settings.vault_redis_fallback_enabled:
+        raise RuntimeError(
+            "BIDEXPERT_VAULT_REDIS_FALLBACK_ENABLED must be false when BIDEXPERT_APP_ENV=prod"
+        )
+    if int(settings.secret_temp_key_ttl_seconds) <= 0:
+        raise RuntimeError("BIDEXPERT_SECRET_TEMP_KEY_TTL_SECONDS must be greater than 0")

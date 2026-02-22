@@ -361,6 +361,9 @@ class ProjectModelPolicy(Base):
     embed_profile_id: Mapped[uuid.UUID | None] = mapped_column(
         GUID(), ForeignKey("provider_profile.id", ondelete="SET NULL")
     )
+    rerank_profile_id: Mapped[uuid.UUID | None] = mapped_column(
+        GUID(), ForeignKey("provider_profile.id", ondelete="SET NULL")
+    )
     query_rewrite_profile_id: Mapped[uuid.UUID | None] = mapped_column(
         GUID(), ForeignKey("provider_profile.id", ondelete="SET NULL")
     )
@@ -377,6 +380,7 @@ class ProjectModelPolicy(Base):
             "generate": 3,
             "review": 2,
             "embed": 2,
+            "rerank": 2,
             "query_rewrite": 2,
             "program_support": 1,
         },

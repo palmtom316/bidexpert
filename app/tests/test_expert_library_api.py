@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from io import BytesIO
 
+import pytest
 from fastapi import UploadFile
 
 from app.api import routes
@@ -129,9 +130,17 @@ def test_expert_library_ingest_upload_route_with_model_id(monkeypatch) -> None:
             created_by="tester",
             doc_type="EXPERT_HISTORY",
             model_id="gemini-2.5-pro",
+            ocr_provider="docai",
+            ocr_api_key="ocr-key-1",
+            ocr_base_url="https://ocr.example/v1",
+            ocr_model="glm-ocr",
         )
         assert result.expert_doc_id == "doc-x"
         assert captured["model_id"] == "gemini-2.5-pro"
+        assert captured["ocr_provider"] == "docai"
+        assert captured["ocr_api_key"] == "ocr-key-1"
+        assert captured["ocr_base_url"] == "https://ocr.example/v1"
+        assert captured["ocr_model"] == "glm-ocr"
 
     asyncio.run(_run())
 
@@ -172,8 +181,13 @@ def test_expert_library_ingest_upload_route_accepts_markdown(monkeypatch) -> Non
 
 
 def test_expert_library_ingest_uploads_route_partial_success(monkeypatch) -> None:
+    seen_providers: list[str | None] = []
+    seen_ocr_api_keys: list[str | None] = []
+
     def _fake_ingest(**kwargs) -> ExpertLibraryIngestResponse:  # type: ignore[no-untyped-def]
         filename = str(kwargs.get("filename") or "")
+        seen_providers.append(kwargs.get("ocr_provider"))
+        seen_ocr_api_keys.append(kwargs.get("ocr_api_key"))
         if filename.lower().endswith(".doc"):
             raise ValueError("暂不支持 .doc，请另存为 .docx 后上传")
         return ExpertLibraryIngestResponse(
@@ -202,6 +216,10 @@ def test_expert_library_ingest_uploads_route_partial_success(monkeypatch) -> Non
             created_by="tester",
             doc_type="EXPERT_HISTORY",
             model_id=None,
+            ocr_provider="tesseract",
+            ocr_api_key="ocr-key-batch",
+            ocr_base_url="https://ocr-batch.example/v1",
+            ocr_model="glm-ocr",
         )
         assert result.total_files == 2
         assert result.success_count == 1
@@ -210,6 +228,8 @@ def test_expert_library_ingest_uploads_route_partial_success(monkeypatch) -> Non
         assert result.items[0].status == "SUCCEEDED"
         assert result.items[1].status == "FAILED"
         assert "docx" in (result.items[1].error or "")
+        assert seen_providers == ["tesseract", "tesseract"]
+        assert seen_ocr_api_keys == ["ocr-key-batch", "ocr-key-batch"]
 
     asyncio.run(_run())
 
@@ -250,9 +270,17 @@ def test_expert_library_convert_upload_route(monkeypatch) -> None:
             created_by="tester",
             doc_type="EXPERT_HISTORY",
             model_id=None,
+            ocr_provider="hunyuan",
+            ocr_api_key="ocr-key-2",
+            ocr_base_url="https://ocr2.example/v1",
+            ocr_model="glm-ocr",
         )
         assert result.conversion_id == "conv-001"
         assert captured["filename"] == "history.docx"
+        assert captured["ocr_provider"] == "hunyuan"
+        assert captured["ocr_api_key"] == "ocr-key-2"
+        assert captured["ocr_base_url"] == "https://ocr2.example/v1"
+        assert captured["ocr_model"] == "glm-ocr"
 
     asyncio.run(_run())
 
@@ -289,3 +317,20 @@ def test_expert_library_convert_confirm_route(monkeypatch) -> None:
 
     assert result.expert_doc_id == "doc-confirmed"
     assert captured["conversion_id"] == "conv-001"
+
+
+def test_confirm_conversion_rejects_path_traversal_conversion_id(monkeypatch) -> None:
+    from app.services import expert_library
+
+    monkeypatch.setattr(expert_library.settings, "expert_library_root", "data/tender-expert-lib")
+
+    with pytest.raises(ValueError, match="invalid conversion_id"):
+        expert_library.confirm_structured_conversion_ingest(
+            conversion_id="../escape",
+            project_id=None,
+            industry_tag=None,
+            title=None,
+            created_by="tester",
+            doc_type="EXPERT_HISTORY",
+            model_id=None,
+        )

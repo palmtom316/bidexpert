@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from app.api import routes
 from app.db.session import SessionLocal
 from app.models.tables import WorkflowRun
@@ -30,3 +32,9 @@ def test_outline_confirm_updates_persisted_status() -> None:
 
     assert row is not None
     assert row.status == "OUTLINE_CONFIRMED"
+
+
+def test_workflow_runs_module_has_no_runtime_ddl() -> None:
+    text = Path("app/services/workflow_runs.py").read_text(encoding="utf-8")
+    assert "ALTER TABLE workflow_run" not in text
+    assert "def _ensure_table" not in text

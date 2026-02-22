@@ -1,6 +1,6 @@
-# CLAUDE_IMPLEMENTATION_GUIDE v3.6（BYOK：用户自带 Key + 多供应商）
+# CLAUDE_IMPLEMENTATION_GUIDE release/V1.0（BYOK：用户自带 Key + 多供应商）
 
-> 目标：在 v3.5 基础上实现 BYOK。用户可选择供应商并输入 API Key，系统在不削弱安全门禁的前提下，动态调用不同商业模型服务商。
+> 目标：在 release/V1.0 基础上实现 BYOK。用户可选择供应商并输入 API Key，系统在不削弱安全门禁的前提下，动态调用不同商业模型服务商。
 
 ---
 
@@ -16,7 +16,7 @@
 ### 1.1 provider_profile
 实现 PostgreSQL DDL（可用 Alembic）：
 - id uuid pk
-- scope text check in ('PROJECT','USER','TENANT')  # v3.6 先实现 PROJECT
+- scope text check in ('PROJECT','USER','TENANT')  # release/V1.0 先实现 PROJECT
 - scope_id uuid not null
 - provider text not null
 - base_url text null

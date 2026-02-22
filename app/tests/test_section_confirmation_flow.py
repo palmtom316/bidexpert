@@ -67,3 +67,31 @@ def test_section_confirm_marks_user_approved() -> None:
 
     assert result.status == "SECTION_CONFIRMED"
     assert result.section_key == "S-001"
+
+
+def test_section_generation_rejects_path_traversal_tokens() -> None:
+    payload = WorkflowSectionRequest(
+        outline_id="../escape",
+        project_id="p-sec-invalid",
+        section_key="S-001",
+        section_title="第一章",
+        requirement_texts=["必须满足合规要求"],
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        routes.enqueue_section_workflow(payload)
+
+    assert exc_info.value.status_code == 400
+
+
+def test_section_confirm_rejects_path_traversal_tokens() -> None:
+    with pytest.raises(HTTPException) as exc_info:
+        routes.confirm_section(
+            SectionConfirmRequest(
+                outline_id="../escape",
+                section_key="S-001",
+                approved=True,
+            )
+        )
+
+    assert exc_info.value.status_code == 400

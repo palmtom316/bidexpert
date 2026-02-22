@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from docx import Document
 from docx.enum.style import WD_STYLE_TYPE
 from fastapi.testclient import TestClient
@@ -97,7 +98,11 @@ def test_structured_render_applies_styles_and_table_data(monkeypatch, tmp_path: 
 
 
 def test_structured_render_api_rejects_forbidden_content(monkeypatch, tmp_path: Path) -> None:
+    from app.api import routes
+
     template_name = _prepare_template(monkeypatch, tmp_path)
+    monkeypatch.setattr(routes.settings, "auth_mode", "api_key", raising=False)
+    monkeypatch.setattr(routes.settings, "api_key", "test-key", raising=False)
     client = TestClient(app)
 
     response = client.post(
@@ -113,12 +118,17 @@ def test_structured_render_api_rejects_forbidden_content(monkeypatch, tmp_path: 
             "style_config": {},
             "export_pdf": False,
         },
+        headers={"X-API-Key": "test-key"},
     )
     assert response.status_code == 400
 
 
 def test_render_api_rejects_path_traversal(monkeypatch, tmp_path: Path) -> None:
+    from app.api import routes
+
     template_name = _prepare_template(monkeypatch, tmp_path, template_name="safe-template.docx")
+    monkeypatch.setattr(routes.settings, "auth_mode", "api_key", raising=False)
+    monkeypatch.setattr(routes.settings, "api_key", "test-key", raising=False)
     client = TestClient(app)
 
     response = client.post(
@@ -126,9 +136,10 @@ def test_render_api_rejects_path_traversal(monkeypatch, tmp_path: Path) -> None:
         json={
             "output_path": "../escape.docx",
             "template_path": template_name,
-            "placeholders": {"project_name": "示例项目"},
-            "style_config": {},
-        },
+                "placeholders": {"project_name": "示例项目"},
+                "style_config": {},
+            },
+        headers={"X-API-Key": "test-key"},
     )
     assert response.status_code == 400
     assert "path traversal" in str(response.json().get("detail", "")).lower()
@@ -173,3 +184,25 @@ def test_structured_render_runs_soffice_for_pdf_export(monkeypatch, tmp_path: Pa
     assert called["cmd"][0] == "soffice"
     assert "--headless" in called["cmd"]
     assert "--convert-to" in called["cmd"]
+
+
+def test_workflow_artifact_rejects_path_traversal_tokens(monkeypatch, tmp_path: Path) -> None:
+    from app.services import workflow_artifacts
+
+    monkeypatch.setattr(workflow_artifacts.settings, "workflow_artifact_dir", str(tmp_path))
+
+    with pytest.raises(ValueError, match="invalid outline_id"):
+        workflow_artifacts.persist_gate_artifact(
+            outline_id="../escape",
+            section_key="S-001",
+            gate="G1",
+            payload={"ok": True},
+        )
+
+    with pytest.raises(ValueError, match="invalid section_key"):
+        workflow_artifacts.persist_gate_artifact(
+            outline_id="outline-1",
+            section_key="../../escape",
+            gate="G1",
+            payload={"ok": True},
+        )

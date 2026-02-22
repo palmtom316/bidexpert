@@ -5,17 +5,25 @@ from pathlib import Path
 from typing import Any
 
 from app.core.config import settings
+from app.services.path_safety import validate_path_identifier
+
+
+def _validated_token(name: str, raw: str) -> str:
+    return validate_path_identifier(name, raw)
 
 
 def _artifact_dir(outline_id: str, section_key: str) -> Path:
     root = Path(settings.workflow_artifact_dir)
-    path = root / str(outline_id) / str(section_key)
+    safe_outline_id = _validated_token("outline_id", outline_id)
+    safe_section_key = _validated_token("section_key", section_key)
+    path = root / safe_outline_id / safe_section_key
     path.mkdir(parents=True, exist_ok=True)
     return path
 
 
 def _artifact_file(outline_id: str, section_key: str, gate: str) -> Path:
-    return _artifact_dir(outline_id=outline_id, section_key=section_key) / f"{gate}.json"
+    safe_gate = _validated_token("gate", gate)
+    return _artifact_dir(outline_id=outline_id, section_key=section_key) / f"{safe_gate}.json"
 
 
 def persist_gate_artifact(*, outline_id: str, section_key: str, gate: str, payload: dict[str, Any]) -> str:

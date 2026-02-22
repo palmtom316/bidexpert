@@ -3,35 +3,12 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from uuid import uuid4
 
-from sqlalchemy import inspect, text
-
-from app.db.session import session_scope, engine
+from app.db.session import session_scope
 from app.extract.tender_parser import parse_tender_requirements
 from app.models.tables import WorkflowRun
 from app.schemas.contracts import OutlineSection
 
 _DEFAULT_STEP = "G1"
-
-
-def _ensure_table() -> None:
-    WorkflowRun.__table__.create(bind=engine, checkfirst=True)
-    inspector = inspect(engine)
-    columns = {item["name"] for item in inspector.get_columns("workflow_run")}
-    statements: list[str] = []
-    if "current_step" not in columns:
-        statements.append("ALTER TABLE workflow_run ADD COLUMN current_step TEXT DEFAULT 'G0'")
-    if "step_status" not in columns:
-        statements.append("ALTER TABLE workflow_run ADD COLUMN step_status TEXT DEFAULT 'paused'")
-    if "resume_from_step" not in columns:
-        statements.append("ALTER TABLE workflow_run ADD COLUMN resume_from_step TEXT DEFAULT 'G1'")
-    if "retry_count" not in columns:
-        statements.append("ALTER TABLE workflow_run ADD COLUMN retry_count INTEGER DEFAULT 0")
-    if "last_error" not in columns:
-        statements.append("ALTER TABLE workflow_run ADD COLUMN last_error TEXT")
-    if statements:
-        with engine.begin() as conn:
-            for sql in statements:
-                conn.execute(text(sql))
 
 
 def _build_outline_sections(tender_text: str) -> list[OutlineSection]:
@@ -57,7 +34,6 @@ def _build_outline_sections(tender_text: str) -> list[OutlineSection]:
 
 
 def create_outline_run(project_id: str, tender_text: str) -> tuple[str, list[OutlineSection], str]:
-    _ensure_table()
     outline_id = str(uuid4())
     sections = _build_outline_sections(tender_text)
     now = datetime.now(UTC)
@@ -83,7 +59,6 @@ def create_outline_run(project_id: str, tender_text: str) -> tuple[str, list[Out
 
 
 def confirm_outline_run(outline_id: str, approved: bool) -> str:
-    _ensure_table()
     with session_scope() as db:
         run = db.query(WorkflowRun).filter(WorkflowRun.id == outline_id).with_for_update().first()
         if not run:
@@ -96,7 +71,6 @@ def confirm_outline_run(outline_id: str, approved: bool) -> str:
 
 
 def get_outline_status(outline_id: str) -> str | None:
-    _ensure_table()
     with session_scope() as db:
         run = db.query(WorkflowRun).filter(WorkflowRun.id == outline_id).first()
         if not run:
@@ -105,7 +79,6 @@ def get_outline_status(outline_id: str) -> str | None:
 
 
 def mark_section_pending(outline_id: str, section_key: str) -> None:
-    _ensure_table()
     with session_scope() as db:
         run = db.query(WorkflowRun).filter(WorkflowRun.id == outline_id).with_for_update().first()
         if not run:
@@ -123,7 +96,6 @@ def mark_section_pending(outline_id: str, section_key: str) -> None:
 
 
 def confirm_section_run(outline_id: str, section_key: str, approved: bool) -> str:
-    _ensure_table()
     with session_scope() as db:
         run = db.query(WorkflowRun).filter(WorkflowRun.id == outline_id).with_for_update().first()
         if not run:
@@ -142,7 +114,6 @@ def confirm_section_run(outline_id: str, section_key: str, approved: bool) -> st
 
 
 def get_section_status(outline_id: str, section_key: str) -> str | None:
-    _ensure_table()
     with session_scope() as db:
         run = db.query(WorkflowRun).filter(WorkflowRun.id == outline_id).first()
         if not run:
@@ -161,7 +132,6 @@ def update_run_progress(
     last_error: str | None = None,
     retry_increment: int = 0,
 ) -> None:
-    _ensure_table()
     with session_scope() as db:
         run = db.query(WorkflowRun).filter(WorkflowRun.id == outline_id).with_for_update().first()
         if not run:
@@ -180,7 +150,6 @@ def update_run_progress(
 
 
 def get_resume_from_step(outline_id: str) -> str:
-    _ensure_table()
     with session_scope() as db:
         run = db.query(WorkflowRun).filter(WorkflowRun.id == outline_id).first()
         if not run:

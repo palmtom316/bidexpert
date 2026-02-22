@@ -1,11 +1,19 @@
 from __future__ import annotations
 
+import base64
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from typing import Any
 
 import httpx
 
 from app.core.config import settings
+
+OCR_PROVIDER_ALLOWLIST = frozenset({"glm-ocr", "tesseract", "local", "hunyuan", "docai", ""})
+_OCR_PROVIDER_ALIASES = {
+    "glmocr": "glm-ocr",
+    "glm_ocr": "glm-ocr",
+}
 
 
 class OCRAdapterUnavailableError(RuntimeError):
@@ -20,6 +28,22 @@ class OCRAdapter(ABC):
     @abstractmethod
     def extract_image_bytes(self, image_bytes: bytes, page_no: int | None = None) -> str:
         raise NotImplementedError
+
+
+@dataclass(frozen=True)
+class OCRRuntimeCredential:
+    api_key: str | None = None
+    base_url: str | None = None
+    model: str | None = None
+
+
+def normalize_ocr_provider(provider: str | None, *, default: str | None = None) -> str:
+    raw = provider if provider is not None else default
+    normalized = str(raw or "").strip().lower().replace("_", "-")
+    normalized = _OCR_PROVIDER_ALIASES.get(normalized, normalized)
+    if normalized not in OCR_PROVIDER_ALLOWLIST:
+        raise ValueError(f"unsupported ocr provider: {normalized}")
+    return normalized
 
 
 class _RemoteOCRAdapter(OCRAdapter):
@@ -87,8 +111,110 @@ class DocAIOCRAdapter(_RemoteOCRAdapter):
         )
 
 
-def create_ocr_adapter(provider: str | None = None) -> OCRAdapter:
-    normalized = (provider or settings.ocr_provider or "tesseract").strip().lower()
+def _extract_chat_content_text(content: object) -> str:
+    if isinstance(content, str):
+        return content.strip()
+    if isinstance(content, list):
+        lines: list[str] = []
+        for item in content:
+            if isinstance(item, str):
+                text = item.strip()
+                if text:
+                    lines.append(text)
+                continue
+            if not isinstance(item, dict):
+                continue
+            text = item.get("text")
+            if isinstance(text, str) and text.strip():
+                lines.append(text.strip())
+                continue
+            fallback = item.get("content")
+            if isinstance(fallback, str) and fallback.strip():
+                lines.append(fallback.strip())
+        return "\n".join(lines).strip()
+    return ""
+
+
+class GLMOCRAdapter(OCRAdapter):
+    provider = "glm-ocr"
+
+    def __init__(
+        self,
+        *,
+        api_key: str | None = None,
+        base_url: str | None = None,
+        model: str | None = None,
+    ) -> None:
+        self.api_key = (api_key if api_key is not None else settings.glm_ocr_api_key or "").strip()
+        self.base_url = (base_url if base_url is not None else settings.glm_ocr_base_url or "").strip()
+        self.model = (model if model is not None else settings.glm_ocr_model or "glm-ocr").strip() or "glm-ocr"
+
+    def _require_credential(self) -> None:
+        if not self.api_key or not self.base_url:
+            raise OCRAdapterUnavailableError(f"{self.provider} ocr credential is not configured")
+
+    def extract(self, file_path: str) -> dict[str, Any]:
+        with open(file_path, "rb") as handle:
+            text = self.extract_image_bytes(handle.read())
+        return {"text": text}
+
+    def extract_image_bytes(self, image_bytes: bytes, page_no: int | None = None) -> str:  # noqa: ARG002
+        self._require_credential()
+        timeout = httpx.Timeout(float(settings.llm_http_timeout_seconds))
+        encoded = base64.b64encode(image_bytes).decode("ascii")
+        endpoint = f"{self.base_url.rstrip('/')}/chat/completions"
+        body = {
+            "model": self.model,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": "请识别图片中的文字并尽量保持段落/列表结构，只输出文本。",
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": f"data:image/png;base64,{encoded}"},
+                        },
+                    ],
+                }
+            ],
+            "temperature": 0,
+        }
+        try:
+            with httpx.Client(timeout=timeout) as client:
+                response = client.post(
+                    endpoint,
+                    headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"},
+                    json=body,
+                )
+                response.raise_for_status()
+                payload = response.json()
+        except Exception as exc:  # noqa: BLE001
+            raise OCRAdapterUnavailableError(f"{self.provider} ocr request failed") from exc
+
+        if isinstance(payload, dict):
+            choices = payload.get("choices")
+            if isinstance(choices, list) and choices:
+                first = choices[0]
+                if isinstance(first, dict):
+                    message = first.get("message")
+                    if isinstance(message, dict):
+                        text = _extract_chat_content_text(message.get("content"))
+                        if text:
+                            return text
+        raise OCRAdapterUnavailableError(f"{self.provider} ocr response is invalid")
+
+
+def create_ocr_adapter(provider: str | None = None, *, runtime_credential: OCRRuntimeCredential | None = None) -> OCRAdapter:
+    normalized = normalize_ocr_provider(provider, default=settings.ocr_provider or "tesseract")
+    if normalized == "glm-ocr":
+        return GLMOCRAdapter(
+            api_key=runtime_credential.api_key if runtime_credential else None,
+            base_url=runtime_credential.base_url if runtime_credential else None,
+            model=runtime_credential.model if runtime_credential else None,
+        )
     if normalized == "hunyuan":
         return HunyuanOCRAdapter()
     if normalized == "docai":

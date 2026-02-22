@@ -26,6 +26,7 @@ from app.schemas.contracts import (
     EvidenceUpsertItem,
 )
 from app.services.ingest.file_router import IngestedUploadPayload, ingest_upload_bytes
+from app.services.path_safety import validate_path_identifier
 from app.services.expert_enterprise_pipeline import (
     build_exceptions_queue,
     build_structure_v1_from_blocks,
@@ -124,14 +125,20 @@ def _conversion_sessions_dir(layout) -> Path:
     return target
 
 
+def _validated_conversion_id(raw: str) -> str:
+    return validate_path_identifier("conversion_id", raw)
+
+
 def _conversion_session_dir(layout, conversion_id: str) -> Path:
-    directory = _conversion_sessions_dir(layout) / conversion_id
+    safe_conversion_id = _validated_conversion_id(conversion_id)
+    directory = _conversion_sessions_dir(layout) / safe_conversion_id
     directory.mkdir(parents=True, exist_ok=True)
     return directory
 
 
 def _load_conversion_meta(layout, conversion_id: str) -> tuple[Path, dict]:
-    session_dir = _conversion_sessions_dir(layout) / conversion_id
+    safe_conversion_id = _validated_conversion_id(conversion_id)
+    session_dir = _conversion_sessions_dir(layout) / safe_conversion_id
     meta_path = session_dir / "meta.json"
     if not meta_path.exists():
         raise ValueError("conversion session not found")
@@ -421,6 +428,10 @@ def _build_text_blocks(*, text: str, default_anchor: str, markdown_mode: bool = 
 def _extract_upload_blocks(
     filename: str,
     content: bytes,
+    ocr_provider: str | None = None,
+    ocr_api_key: str | None = None,
+    ocr_base_url: str | None = None,
+    ocr_model: str | None = None,
 ) -> tuple[list[DocBlockItem], int, str, str, str]:
     ext = Path(filename).suffix.lower()
     if ext in {".pdf", ".docx"}:
@@ -428,6 +439,10 @@ def _extract_upload_blocks(
             filename=filename,
             file_bytes=content,
             enable_ocr_fallback=settings.enable_ocr_fallback,
+            ocr_provider=ocr_provider,
+            ocr_api_key=ocr_api_key,
+            ocr_base_url=ocr_base_url,
+            ocr_model=ocr_model,
         )
         if not payload.blocks:
             raise ValueError("empty document content")
@@ -677,8 +692,19 @@ def ingest_historical_pdf(
     created_by: str = "system",
     doc_type: str = "EXPERT_HISTORY",
     model_id: str | None = None,
+    ocr_provider: str | None = None,
+    ocr_api_key: str | None = None,
+    ocr_base_url: str | None = None,
+    ocr_model: str | None = None,
 ) -> ExpertLibraryIngestResponse:
-    blocks, page_count, source_format, content_type, parser_version = _extract_upload_blocks(filename, content)
+    blocks, page_count, source_format, content_type, parser_version = _extract_upload_blocks(
+        filename,
+        content,
+        ocr_provider=ocr_provider,
+        ocr_api_key=ocr_api_key,
+        ocr_base_url=ocr_base_url,
+        ocr_model=ocr_model,
+    )
     return _ingest_historical_with_blocks(
         filename=filename,
         content=content,
@@ -706,6 +732,10 @@ def convert_upload_to_structured(
     created_by: str = "system",
     doc_type: str = "EXPERT_HISTORY",
     model_id: str | None = None,
+    ocr_provider: str | None = None,
+    ocr_api_key: str | None = None,
+    ocr_base_url: str | None = None,
+    ocr_model: str | None = None,
 ) -> ExpertLibraryConvertResponse:
     layout = ensure_expert_library_layout()
     sync_enterprise_config_assets(layout)
@@ -715,6 +745,10 @@ def convert_upload_to_structured(
         filename=filename,
         file_bytes=content,
         enable_ocr_fallback=settings.enable_ocr_fallback,
+        ocr_provider=ocr_provider,
+        ocr_api_key=ocr_api_key,
+        ocr_base_url=ocr_base_url,
+        ocr_model=ocr_model,
     )
     if not payload.blocks:
         raise ValueError("empty document content")

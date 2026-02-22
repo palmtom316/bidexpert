@@ -158,3 +158,51 @@ def test_qualify_provider_profile_requires_credential(monkeypatch) -> None:
     assert report["ready_for_online"] is False
     assert report["quality_score"] < 60.0
     assert any(case["case_id"] == "credential_resolved" and not case["passed"] for case in report["cases"])
+
+
+def test_write_vault_key_rejects_redis_fallback_in_prod(monkeypatch) -> None:
+    class _RedisStub:
+        def __init__(self) -> None:
+            self.calls: list[tuple] = []
+
+        def set(self, secret_ref: str, api_key: str, ex: int | None = None) -> None:
+            self.calls.append((secret_ref, api_key, ex))
+
+    redis_stub = _RedisStub()
+    monkeypatch.setattr(profiles, "_vault_enabled", lambda: False)
+    monkeypatch.setattr(profiles, "_redis_client", lambda: redis_stub)
+    monkeypatch.setattr(profiles.settings, "app_env", "prod", raising=False)
+    monkeypatch.setattr(profiles.settings, "vault_redis_fallback_enabled", True, raising=False)
+
+    try:
+        profiles._write_vault_key("vault:path/prod", "sk-prod")  # noqa: SLF001
+        assert False, "expected ValueError when redis fallback is enabled in prod"
+    except ValueError as exc:
+        assert "prod" in str(exc).lower()
+
+    assert redis_stub.calls == []
+
+
+def test_temp_and_vault_fallback_writes_share_same_ttl(monkeypatch) -> None:
+    class _RedisStub:
+        def __init__(self) -> None:
+            self.calls: list[tuple] = []
+
+        def set(self, secret_ref: str, api_key: str, ex: int | None = None) -> None:
+            self.calls.append((secret_ref, api_key, ex))
+
+    redis_stub = _RedisStub()
+    monkeypatch.setattr(profiles, "_redis_client", lambda: redis_stub)
+    monkeypatch.setattr(profiles, "_vault_enabled", lambda: False)
+    monkeypatch.setattr(profiles.settings, "app_env", "dev", raising=False)
+    monkeypatch.setattr(profiles.settings, "vault_redis_fallback_enabled", True, raising=False)
+
+    profiles._write_temp_key("tmp:path/1", "sk-temp")  # noqa: SLF001
+    profiles._write_vault_key("vault:path/dev", "sk-vault-fallback")  # noqa: SLF001
+
+    assert len(redis_stub.calls) == 2
+    first = redis_stub.calls[0]
+    second = redis_stub.calls[1]
+    assert first[2] is not None
+    assert second[2] is not None
+    assert first[2] == second[2]

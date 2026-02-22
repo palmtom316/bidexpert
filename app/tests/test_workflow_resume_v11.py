@@ -77,3 +77,57 @@ def test_generate_stage_skips_execution_when_resuming_from_g3(monkeypatch, tmp_p
 
     assert called["generate"] == 0
     assert result["stages"]["generate"]["generated_text"] == "from-artifact"
+
+
+def test_extract_stage_uses_cached_gate_artifact_for_duplicate_delivery(monkeypatch, tmp_path) -> None:
+    from app.services import workflow_artifacts
+
+    monkeypatch.setattr(workflow_artifacts.settings, "workflow_artifact_dir", str(tmp_path))
+    monkeypatch.setattr(tasks.section_extract_stage_task, "update_state", lambda *args, **kwargs: None)
+
+    called = {"extract": 0}
+
+    def _fake_extract_stage(_text: str) -> dict:  # noqa: ANN001
+        called["extract"] += 1
+        return {"status": "OK", "requirements": [{"code": "R-1"}]}
+
+    monkeypatch.setattr(tasks, "_extract_stage", _fake_extract_stage, raising=False)
+
+    workflow_artifacts.persist_gate_artifact(
+        outline_id="outline-3",
+        section_key="S-003",
+        gate="G1",
+        payload={"extract": {"status": "CACHED", "requirements": []}, "global_facts": {"project_name": "cached"}},
+    )
+
+    result = tasks.section_extract_stage_task.run(
+        "outline-3",
+        "p-v11",
+        "S-003",
+        "必须满足资质要求",
+        None,
+        "G1",
+    )
+
+    assert called["extract"] == 0
+    assert result["stages"]["extract"]["status"] == "CACHED"
+    assert result["global_facts"]["project_name"] == "cached"
+
+
+def test_section_stage_tasks_enable_autoretry_backoff() -> None:
+    registry = tasks.celery_app.tasks
+    stage_names = [
+        "tasks.section_extract_stage",
+        "tasks.section_generate_stage",
+        "tasks.section_validate_stage",
+        "tasks.section_render_stage",
+    ]
+
+    for name in stage_names:
+        task_obj = registry[name]
+        autoretry_for = tuple(getattr(task_obj, "autoretry_for", ()) or ())
+        assert RuntimeError in autoretry_for
+        assert OSError in autoretry_for
+        assert bool(getattr(task_obj, "retry_backoff", False)) is True
+        assert int(getattr(task_obj, "retry_backoff_max", 0)) > 0
+        assert bool(getattr(task_obj, "retry_jitter", False)) is True

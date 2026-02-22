@@ -29,6 +29,7 @@ DEFAULT_PRICING_MAP: dict[str, ModelPricing] = {
     "qwen-plus": ModelPricing(0.56, 1.68),
     "qwen-max": ModelPricing(2.80, 8.40),
     "qwen3": ModelPricing(0.56, 1.68),
+    "qwen3.5": ModelPricing(0.56, 1.68),
     "claude-3-5-sonnet-20241022": ModelPricing(3.00, 15.00),
     "claude-3-5-haiku-20241022": ModelPricing(1.00, 5.00),
 }

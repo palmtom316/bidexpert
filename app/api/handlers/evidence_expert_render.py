@@ -28,6 +28,7 @@ from app.schemas.contracts import (
     RenderWordStructuredResponse,
     SectionFeedbackUpsertRequest,
 )
+from app.services.path_safety import validate_path_identifier
 
 
 def evidence_upsert_handler(
@@ -78,8 +79,16 @@ async def expert_library_ingest_upload_handler(
     ingest_historical_pdf_fn: Callable[..., ExpertLibraryIngestResponse],
     resolved_created_by_fn: Callable[[str | None], str],
     service_unavailable_exc_factory: Callable[[], HTTPException],
+    ocr_provider: str | None = None,
+    ocr_api_key: str | None = None,
+    ocr_base_url: str | None = None,
+    ocr_model: str | None = None,
 ) -> ExpertLibraryIngestResponse:
     try:
+        resolved_ocr_provider = ocr_provider if isinstance(ocr_provider, str) else None
+        resolved_ocr_api_key = ocr_api_key if isinstance(ocr_api_key, str) else None
+        resolved_ocr_base_url = ocr_base_url if isinstance(ocr_base_url, str) else None
+        resolved_ocr_model = ocr_model if isinstance(ocr_model, str) else None
         content = await read_upload_with_limit_fn(file)
         return ingest_historical_pdf_fn(
             filename=file.filename or "",
@@ -90,6 +99,10 @@ async def expert_library_ingest_upload_handler(
             created_by=resolved_created_by_fn(created_by),
             doc_type=doc_type,
             model_id=(model_id or "").strip() or None,
+            ocr_provider=(resolved_ocr_provider or "").strip() or None,
+            ocr_api_key=(resolved_ocr_api_key or "").strip() or None,
+            ocr_base_url=(resolved_ocr_base_url or "").strip() or None,
+            ocr_model=(resolved_ocr_model or "").strip() or None,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -110,8 +123,16 @@ async def expert_library_convert_upload_handler(
     convert_upload_to_structured_fn: Callable[..., ExpertLibraryConvertResponse],
     resolved_created_by_fn: Callable[[str | None], str],
     service_unavailable_exc_factory: Callable[[], HTTPException],
+    ocr_provider: str | None = None,
+    ocr_api_key: str | None = None,
+    ocr_base_url: str | None = None,
+    ocr_model: str | None = None,
 ) -> ExpertLibraryConvertResponse:
     try:
+        resolved_ocr_provider = ocr_provider if isinstance(ocr_provider, str) else None
+        resolved_ocr_api_key = ocr_api_key if isinstance(ocr_api_key, str) else None
+        resolved_ocr_base_url = ocr_base_url if isinstance(ocr_base_url, str) else None
+        resolved_ocr_model = ocr_model if isinstance(ocr_model, str) else None
         content = await read_upload_with_limit_fn(file)
         return convert_upload_to_structured_fn(
             filename=file.filename or "",
@@ -122,6 +143,10 @@ async def expert_library_convert_upload_handler(
             created_by=resolved_created_by_fn(created_by),
             doc_type=doc_type,
             model_id=(model_id or "").strip() or None,
+            ocr_provider=(resolved_ocr_provider or "").strip() or None,
+            ocr_api_key=(resolved_ocr_api_key or "").strip() or None,
+            ocr_base_url=(resolved_ocr_base_url or "").strip() or None,
+            ocr_model=(resolved_ocr_model or "").strip() or None,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -164,10 +189,18 @@ async def expert_library_ingest_uploads_handler(
     read_upload_with_limit_fn: Callable[[UploadFile], Awaitable[bytes]],
     ingest_historical_pdf_fn: Callable[..., ExpertLibraryIngestResponse],
     resolved_created_by_fn: Callable[[str | None], str],
+    ocr_provider: str | None = None,
+    ocr_api_key: str | None = None,
+    ocr_base_url: str | None = None,
+    ocr_model: str | None = None,
 ) -> ExpertLibraryBatchIngestResponse:
     if not files:
         raise HTTPException(status_code=400, detail="no files uploaded")
 
+    resolved_ocr_provider = ocr_provider if isinstance(ocr_provider, str) else None
+    resolved_ocr_api_key = ocr_api_key if isinstance(ocr_api_key, str) else None
+    resolved_ocr_base_url = ocr_base_url if isinstance(ocr_base_url, str) else None
+    resolved_ocr_model = ocr_model if isinstance(ocr_model, str) else None
     items: list[ExpertLibraryBatchIngestItem] = []
     success_count = 0
     failure_count = 0
@@ -184,6 +217,10 @@ async def expert_library_ingest_uploads_handler(
                 created_by=resolved_created_by_fn(created_by),
                 doc_type=doc_type,
                 model_id=(model_id or "").strip() or None,
+                ocr_provider=(resolved_ocr_provider or "").strip() or None,
+                ocr_api_key=(resolved_ocr_api_key or "").strip() or None,
+                ocr_base_url=(resolved_ocr_base_url or "").strip() or None,
+                ocr_model=(resolved_ocr_model or "").strip() or None,
             )
             success_count += 1
             items.append(
@@ -296,6 +333,12 @@ def feedback_upsert_section_handler(
     standardize_section_feedback_chunks_fn: Callable[..., list[object]],
     upsert_evidence_task_obj,
 ) -> EnqueueIngestResponse:
+    try:
+        validate_path_identifier("outline_id", payload.outline_id)
+        validate_path_identifier("section_key", payload.section_key)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     section_status = get_section_status_fn(payload.outline_id, payload.section_key)
     if section_status != "SECTION_CONFIRMED":
         raise HTTPException(status_code=400, detail="section not confirmed")

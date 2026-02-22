@@ -7,6 +7,7 @@ from app.schemas.contracts import DraftGenerationResponse
 
 def test_generation_review_scoring_flow(monkeypatch):
     from app.main import app
+    from app.api import routes
 
     class DummyReport:
         def __init__(self):
@@ -44,12 +45,16 @@ def test_generation_review_scoring_flow(monkeypatch):
     monkeypatch.setattr("app.api.routes.generate_draft_with_retrieval", fake_generate)
     monkeypatch.setattr("app.api.routes.run_compliance_review", fake_review)
     monkeypatch.setattr("app.api.routes.run_scoring_service", fake_score)
+    monkeypatch.setattr(routes.settings, "auth_mode", "api_key", raising=False)
+    monkeypatch.setattr(routes.settings, "api_key", "test-key", raising=False)
 
     client = TestClient(app)
+    headers = {"X-API-Key": "test-key"}
 
     g_res = client.post(
         "/v1/generation/draft",
         json={"requirement_id": "r1", "requirement_text": "foo", "project_id": str(uuid4())},
+        headers=headers,
     )
     assert g_res.status_code == 200
     g_body = g_res.json()
@@ -58,6 +63,7 @@ def test_generation_review_scoring_flow(monkeypatch):
     r_res = client.post(
         "/v1/workflow/section/review",
         json={"project_id": str(uuid4()), "section_key": "S-001"},
+        headers=headers,
     )
     assert r_res.status_code == 200
     assert r_res.json()["status"] == "PASS"
@@ -65,6 +71,7 @@ def test_generation_review_scoring_flow(monkeypatch):
     s_res = client.post(
         "/v1/workflow/scoring/calculate",
         json={"project_id": str(uuid4())},
+        headers=headers,
     )
     assert s_res.status_code == 200
     assert s_res.json()["score_total"] == 95.0

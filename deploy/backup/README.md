@@ -1,6 +1,6 @@
 # Backup and Restore
 
-This project now includes reproducible backup scripts for PostgreSQL and Qdrant.
+This project now includes reproducible backup scripts for PostgreSQL, Qdrant, and file artifacts in `data/`.
 
 ## 1. PostgreSQL backup
 
@@ -46,9 +46,32 @@ docker run --rm -v bidexpert_qdrant_data:/qdrant/storage -v "$PWD/backups:/backu
 docker compose start qdrant
 ```
 
-## 3. Suggested schedule
+## 3. File artifact backup (`data/`)
 
-- Daily incremental-like backups: run both scripts once every day.
+Run:
+
+```bash
+docker compose --profile ops run --rm data-backup
+```
+
+Output file:
+
+```text
+./backups/data-artifacts-YYYYMMDD-HHMMSS.tar.gz
+```
+
+Restore example (service stopped):
+
+```bash
+docker compose stop api worker
+docker run --rm -v "$PWD/data:/data" -v "$PWD/backups:/backups" alpine:3.20 \
+  sh -ec 'rm -rf /data/* && tar -xzf /backups/data-artifacts-YYYYMMDD-HHMMSS.tar.gz -C /data'
+docker compose start api worker
+```
+
+## 4. Suggested schedule
+
+- Daily incremental-like backups: run all three scripts once every day.
 - Weekly retention: keep at least 4 weekly snapshots.
-- Monthly drill: execute a restore in a non-production environment.
-
+- Monthly drill: execute a restore in a non-production environment and record evidence using:
+  `docs/runbooks/monthly-restore-drill-template.md`.

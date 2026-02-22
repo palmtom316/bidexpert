@@ -8,6 +8,7 @@ class ModelRole(StrEnum):
     EMBED = "EMBED"
     GENERATE = "GENERATE"
     REVIEW = "REVIEW"
+    RERANK = "RERANK"
     QUERY_REWRITE = "QUERY_REWRITE"
     PROGRAM_SUPPORT = "PROGRAM_SUPPORT"
 
@@ -34,4 +35,3 @@ def normalize_role(task_type: str) -> ModelRole:
 
 
 ALL_MODEL_ROLES = tuple(item.value for item in ModelRole)
-

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import re
 import uuid
@@ -9,6 +10,8 @@ from dataclasses import dataclass
 from datetime import date
 from functools import lru_cache
 from typing import cast
+
+import httpx
 
 from app.core.config import settings
 from app.schemas.contracts import EvidenceSearchHit, EvidenceUpsertItem
@@ -170,6 +173,178 @@ def _cross_encoder_rerank_hits(query: str, items: list[RetrievedEvidence], top_k
     return result
 
 
+def _extract_chat_completion_text(content: object) -> str:
+    if isinstance(content, str):
+        return content.strip()
+    if isinstance(content, list):
+        parts: list[str] = []
+        for entry in content:
+            if isinstance(entry, str):
+                text = entry.strip()
+                if text:
+                    parts.append(text)
+                continue
+            if not isinstance(entry, dict):
+                continue
+            text = entry.get("text")
+            if isinstance(text, str) and text.strip():
+                parts.append(text.strip())
+                continue
+            nested = entry.get("content")
+            if isinstance(nested, str) and nested.strip():
+                parts.append(nested.strip())
+        return "\n".join(parts).strip()
+    return ""
+
+
+def _extract_ranked_chunk_ids(response_text: str) -> list[str]:
+    raw = (response_text or "").strip()
+    if not raw:
+        return []
+
+    candidate_objects: list[dict] = []
+    try:
+        parsed = json.loads(raw)
+        if isinstance(parsed, dict):
+            candidate_objects.append(parsed)
+    except json.JSONDecodeError:
+        pass
+
+    if not candidate_objects:
+        for match in re.findall(r"\{[\s\S]*?\}", raw):
+            try:
+                parsed = json.loads(match)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(parsed, dict):
+                candidate_objects.append(parsed)
+                break
+
+    for obj in candidate_objects:
+        ranked = obj.get("ranked_chunk_ids")
+        if not isinstance(ranked, list):
+            continue
+        normalized = [str(item).strip() for item in ranked if str(item).strip()]
+        if normalized:
+            return normalized
+    return []
+
+
+def _llm_rerank_hits(
+    *,
+    query: str,
+    items: list[RetrievedEvidence],
+    top_k: int,
+    project_id: str | None = None,
+) -> list[RetrievedEvidence]:
+    if not items:
+        return []
+
+    rerank_profile = resolve_profile_for_task(project_id=project_id, task_type="RERANK")
+    if not rerank_profile.api_key or not rerank_profile.base_url:
+        raise RuntimeError("RERANK profile credential/base_url is missing")
+
+    candidate_limit = max(top_k, int(getattr(settings, "qdrant_llm_rerank_candidate_limit", 30)))
+    candidates = items[:candidate_limit]
+    serialized_candidates = [
+        {
+            "chunk_id": item.chunk_id,
+            "text": (item.text or "")[:800],
+        }
+        for item in candidates
+    ]
+    prompt = (
+        "你是检索重排器。根据查询语句，从候选片段中挑选最相关的 chunk_id，并按相关度降序返回。"
+        "只输出 JSON 对象，格式为 {\"ranked_chunk_ids\": [\"id1\", \"id2\", ...]}。"
+    )
+    body = {
+        "model": rerank_profile.model,
+        "temperature": 0,
+        "response_format": {"type": "json_object"},
+        "messages": [
+            {"role": "system", "content": "You are a strict reranking engine that returns JSON only."},
+            {
+                "role": "user",
+                "content": json.dumps(
+                    {
+                        "instruction": prompt,
+                        "query": query,
+                        "top_k": int(top_k),
+                        "candidates": serialized_candidates,
+                    },
+                    ensure_ascii=False,
+                ),
+            },
+        ],
+    }
+    timeout = float(getattr(settings, "llm_http_timeout_seconds", 120))
+    response = httpx.post(
+        f"{rerank_profile.base_url.rstrip('/')}/chat/completions",
+        headers={
+            "Authorization": f"Bearer {rerank_profile.api_key}",
+            "Content-Type": "application/json",
+        },
+        json=body,
+        timeout=timeout,
+    )
+    response.raise_for_status()
+    payload = response.json()
+    if not isinstance(payload, dict):
+        raise RuntimeError("llm rerank response is invalid")
+    choices = payload.get("choices")
+    if not isinstance(choices, list) or not choices:
+        raise RuntimeError("llm rerank choices missing")
+    message = choices[0].get("message") if isinstance(choices[0], dict) else None
+    if not isinstance(message, dict):
+        raise RuntimeError("llm rerank message missing")
+
+    ranked_chunk_ids = _extract_ranked_chunk_ids(_extract_chat_completion_text(message.get("content")))
+    if not ranked_chunk_ids:
+        raise RuntimeError("llm rerank ranked_chunk_ids missing")
+
+    by_id = {item.chunk_id: item for item in candidates}
+    used: set[str] = set()
+    ordered: list[RetrievedEvidence] = []
+    for chunk_id in ranked_chunk_ids:
+        candidate = by_id.get(chunk_id)
+        if not candidate or chunk_id in used:
+            continue
+        ordered.append(candidate)
+        used.add(chunk_id)
+        if len(ordered) >= top_k:
+            return ordered
+
+    for candidate in candidates:
+        if candidate.chunk_id in used:
+            continue
+        ordered.append(candidate)
+        used.add(candidate.chunk_id)
+        if len(ordered) >= top_k:
+            break
+    return ordered
+
+
+def _rerank_hits_with_optional_llm(
+    *,
+    query: str,
+    items: list[RetrievedEvidence],
+    top_k: int,
+    project_id: str | None = None,
+) -> list[RetrievedEvidence]:
+    if not items:
+        return []
+
+    llm_enabled = bool(getattr(settings, "qdrant_llm_rerank_enabled", False))
+    if llm_enabled:
+        llm_top_k = max(1, min(int(top_k), int(getattr(settings, "qdrant_llm_rerank_top_k", top_k))))
+        try:
+            return _llm_rerank_hits(query=query, items=items, top_k=llm_top_k, project_id=project_id)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("LLM rerank unavailable; fallback to local rerank: %s", exc)
+
+    return _cross_encoder_rerank_hits(query=query, items=items, top_k=top_k)
+
+
 def _is_payload_allowed(payload: dict) -> bool:
     sensitivity = payload.get("sensitivity_level", "PUBLIC_OK")
     if sensitivity != "PUBLIC_OK":
@@ -226,11 +401,13 @@ class QdrantStore:
     def upsert_chunks(self, expert_doc_id: str, chunks: list[EvidenceUpsertItem], project_id: str | None = None) -> int:
         from qdrant_client.http.models import PointStruct, SparseVector
 
+        normalized_project_id = (project_id or "").strip() or None
         embed_profile = resolve_profile_for_task(project_id=project_id, task_type="EMBED")
         points: list[PointStruct] = []
         for chunk in chunks:
             source_locator = chunk.source_locator or {}
             payload = {
+                "project_id": normalized_project_id,
                 "expert_doc_id": expert_doc_id,
                 "chunk_id": chunk.chunk_id,
                 "doc_type": chunk.doc_type,
@@ -286,10 +463,13 @@ class QdrantStore:
             self.client.upsert(collection_name=self.collection, points=points, wait=True)
         return len(points)
 
-    def _build_query_filter(self, industry_tag: str | None = None):
+    def _build_query_filter(self, industry_tag: str | None = None, project_id: str | None = None):
         from qdrant_client.http.models import Condition, FieldCondition, Filter, MatchValue
 
         must_conditions: list[Condition] = [FieldCondition(key="sensitivity_level", match=MatchValue(value="PUBLIC_OK"))]
+        normalized_project_id = (project_id or "").strip()
+        if normalized_project_id:
+            must_conditions.append(FieldCondition(key="project_id", match=MatchValue(value=normalized_project_id)))
         if industry_tag:
             must_conditions.append(FieldCondition(key="industry_tag", match=MatchValue(value=industry_tag)))
         must_not_conditions: list[Condition] = [FieldCondition(key="forbidden_tags", match=MatchValue(value="PRICING_RELATED"))]
@@ -425,7 +605,7 @@ class QdrantStore:
         project_id: str | None = None,
     ) -> list[RetrievedEvidence]:
         embed_profile = resolve_profile_for_task(project_id=project_id, task_type="EMBED")
-        query_filter = self._build_query_filter(industry_tag=industry_tag)
+        query_filter = self._build_query_filter(industry_tag=industry_tag, project_id=project_id)
         prompt_top_n = max(
             int(settings.qdrant_prompt_topn_min),
             min(int(top_k), int(settings.qdrant_prompt_topn_max)),
@@ -466,12 +646,22 @@ class QdrantStore:
             rerank_enabled = bool(getattr(settings, "qdrant_enable_rerank", False))
             if rerank_enabled:
                 rerank_candidate_limit = max(candidate_limit, int(settings.qdrant_rerank_candidate_limit))
+                if bool(getattr(settings, "qdrant_llm_rerank_enabled", False)):
+                    rerank_candidate_limit = max(
+                        rerank_candidate_limit,
+                        int(getattr(settings, "qdrant_llm_rerank_candidate_limit", 30)),
+                    )
                 fused = self._fuse_hybrid(
                     vector_hits=vector_hits,
                     sparse_hits=sparse_hits,
                     top_k=rerank_candidate_limit,
                 )
-                reranked = _cross_encoder_rerank_hits(query=query, items=fused, top_k=prompt_top_n)
+                reranked = _rerank_hits_with_optional_llm(
+                    query=query,
+                    items=fused,
+                    top_k=prompt_top_n,
+                    project_id=project_id,
+                )
                 return _apply_key_fact_filter(query=query, items=reranked)[:prompt_top_n]
             fused = self._fuse_hybrid(vector_hits=vector_hits, sparse_hits=sparse_hits, top_k=prompt_top_n)
             return _apply_key_fact_filter(query=query, items=fused)[:prompt_top_n]

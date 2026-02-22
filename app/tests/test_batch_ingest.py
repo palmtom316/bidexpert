@@ -52,3 +52,14 @@ def test_enqueue_ingest_directory_rejects_path_outside_upload_dir(monkeypatch, t
     with pytest.raises(HTTPException) as exc_info:
         routes.enqueue_ingest_directory(BatchIngestDirectoryRequest(directory=str(outside)))
     assert exc_info.value.status_code == 400
+
+
+def test_ingest_document_task_enables_autoretry_backoff() -> None:
+    task_obj = routes.ingest_document_task
+    autoretry_for = tuple(getattr(task_obj, "autoretry_for", ()) or ())
+
+    assert RuntimeError in autoretry_for
+    assert OSError in autoretry_for
+    assert bool(getattr(task_obj, "retry_backoff", False)) is True
+    assert int(getattr(task_obj, "retry_backoff_max", 0)) > 0
+    assert bool(getattr(task_obj, "retry_jitter", False)) is True

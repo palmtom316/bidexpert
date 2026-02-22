@@ -389,6 +389,7 @@ class ProjectModelPolicyUpsertRequest(BaseModel):
     generate_profile_id: str | None = None
     review_profile_id: str | None = None
     embed_profile_id: str | None = None
+    rerank_profile_id: str | None = None
     query_rewrite_profile_id: str | None = None
     program_support_profile_id: str | None = None
     enable_review: bool = True
@@ -402,6 +403,7 @@ class ProjectModelPolicyResponse(BaseModel):
     generate_profile_id: str | None = None
     review_profile_id: str | None = None
     embed_profile_id: str | None = None
+    rerank_profile_id: str | None = None
     query_rewrite_profile_id: str | None = None
     program_support_profile_id: str | None = None
     enable_review: bool
@@ -443,6 +445,20 @@ class CompletedBidListResponse(BaseModel):
 class CompletedBidDeleteResponse(BaseModel):
     record_id: str
     deleted: bool
+
+
+class AuditLogItem(BaseModel):
+    id: str
+    project_id: str | None = None
+    actor_user_id: str
+    action: str
+    target_id: str | None = None
+    metadata: dict = Field(default_factory=dict)
+    created_at: str
+
+
+class AuditLogListResponse(BaseModel):
+    items: list[AuditLogItem]
 
 
 class ExpertLibraryIngestResponse(BaseModel):

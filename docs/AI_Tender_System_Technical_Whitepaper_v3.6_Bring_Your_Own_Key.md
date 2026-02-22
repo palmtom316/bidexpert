@@ -1,7 +1,7 @@
 # AI 辅助投标系统
-# 企业级技术白皮书 v3.6（BYOK：用户自带 API Key + 多供应商模型选择）
+# 企业级技术白皮书 release/V1.0（BYOK：用户自带 API Key + 多供应商模型选择）
 
-> v3.6 在 v3.5（LangExtract + RAG-Strategy 集成）基础上，新增 **BYOK（Bring Your Own Key）** 能力：
+> release/V1.0 在 release/V1.0（LangExtract + RAG-Strategy 集成）基础上，新增 **BYOK（Bring Your Own Key）** 能力：
 > 允许用户像翻译软件一样，自行配置并选择商业模型供应商（Qwen/DeepSeek/Doubao/OpenAI/Gemini…），系统只负责：
 > **安全门禁（脱敏/报价熔断） + 证据绑定 + 检索增强 + 章节生成/审查编排 + WPS Web 输出 + 审计与预算治理**。
 
@@ -37,7 +37,7 @@
 - 由管理员统一配置企业 Key；普通用户不可见。
 - 优点：运维简单；缺点：不满足“用户自带 Key”主诉。
 
-> v3.6 优先落地：**A + B**（项目级 + 临时 Key）。
+> release/V1.0 优先落地：**A + B**（项目级 + 临时 Key）。
 
 ---
 
@@ -60,7 +60,7 @@ Gateway 增加：
 ### 4.1 provider_profile（新增表）
 字段建议：
 - id (uuid)
-- scope (PROJECT | USER | TENANT)  # v3.6 先实现 PROJECT
+- scope (PROJECT | USER | TENANT)  # release/V1.0 先实现 PROJECT
 - scope_id (uuid)                  # project_id 或 user_id
 - provider (qwen | deepseek | doubao | openai | gemini | glm ...)
 - base_url (text, nullable)        # 支持自建代理/网关
@@ -130,7 +130,7 @@ Gateway 增加：
 
 ---
 
-## 7. 多模型工作流（v3.6 推荐默认）
+## 7. 多模型工作流（release/V1.0 推荐默认）
 
 - 生成：Qwen3-Max（或用户选的生成 profile）
 - 审查：GPT-5.3（或用户选）
@@ -143,9 +143,9 @@ Gateway 增加：
 
 ---
 
-## 8. 兼容 v3.5：LangExtract + RAG-Strategy 不变
+## 8. 兼容 release/V1.0：LangExtract + RAG-Strategy 不变
 - LangExtract 抽取调用使用“生成 profile”或单独的“extract profile”
-- RAG 检索管线与审计（retrieval_log）保持 v3.5 设计
+- RAG 检索管线与审计（retrieval_log）保持 release/V1.0 设计
 
 ---
 

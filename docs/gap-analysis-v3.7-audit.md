@@ -1,4 +1,4 @@
-# BidExpert v3.7 全面代码审计报告
+# BidExpert release/V1.0 全面代码审计报告
 
 > 审核基准：`AI_Tender_System_Technical_Whitepaper_v3.7_Quality_Maximized.md`、`AI_Programming_Prompt_v3.7_Quality_Maximized.md`、`user_manuals_v1.0.md`、`CLAUDE_IMPLEMENTATION_GUIDE_v3.6_BYOK.md`
 >
@@ -53,7 +53,7 @@
 
 #### F6. Re-ranking 未实现
 
-- **文档要求**：用户手册 IT 部分 §2.3 — "Re-ranking: (可选) 对融合结果进行重排序 (v3.7 Spec)"。
+- **文档要求**：用户手册 IT 部分 §2.3 — "Re-ranking: (可选) 对融合结果进行重排序 (release/V1.0 Spec)"。
 - **代码现状**：`app/services/qdrant_store.py` RRF 融合后直接按分数排序返回 top_k，无额外的 re-ranking 模型或逻辑。
 - **影响**：检索精度在复杂查询场景下有提升空间，尤其长查询、多义查询效果不理想。
 - **涉及文件**：`app/services/qdrant_store.py`
@@ -253,7 +253,7 @@
 | P2-2 | FastAPI lifespan | ✅ `main.py` 使用 `@asynccontextmanager` |
 | P2-3 | datetime.now(UTC) | ✅ `tables.py` 全局 `utcnow()` 使用 `datetime.now(UTC)` |
 | P2-4 | SSE 返回类型 | ✅ `routes.py:503` 标注 `AsyncGenerator[str, None]` |
-| P2-5 | 默认模型对齐 v3.7 | ✅ `model_registry.json` role_defaults 首选 Gemini 3 Pro |
+| P2-5 | 默认模型对齐 release/V1.0 | ✅ `model_registry.json` role_defaults 首选 Gemini 3 Pro |
 | P2-6 | 目录结构重构 | ⚠️ 部分完成 — `worker/`、`extract/`、`rag/` 已有代码，但 `workers/` 仍并存（见 D3） |
 
 ---

@@ -23,6 +23,8 @@ from app.worker.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
 
+_TRANSIENT_TASK_ERRORS = (RuntimeError, OSError, ConnectionError, TimeoutError)
+
 
 def _extract_stage(requirement_text: str) -> dict:
     parsed = parse_tender_requirements(requirement_text)
@@ -152,7 +154,15 @@ def _render_stage(*, context: dict, generated: dict) -> dict:
     }
 
 
-@celery_app.task(bind=True, name="tasks.ingest_document", max_retries=settings.task_max_retries)
+@celery_app.task(
+    bind=True,
+    name="tasks.ingest_document",
+    max_retries=settings.task_max_retries,
+    autoretry_for=_TRANSIENT_TASK_ERRORS,
+    retry_backoff=True,
+    retry_backoff_max=60,
+    retry_jitter=True,
+)
 def ingest_document_task(self, file_path: str) -> dict:  # type: ignore[no-untyped-def]
     self.update_state(state="PROGRESS", meta={"stage": "LOAD_FILE"})
     path = Path(file_path)
@@ -272,7 +282,15 @@ def generate_draft_task(
     return result.model_dump()
 
 
-@celery_app.task(bind=True, name="tasks.section_extract_stage", max_retries=settings.task_max_retries)
+@celery_app.task(
+    bind=True,
+    name="tasks.section_extract_stage",
+    max_retries=settings.task_max_retries,
+    autoretry_for=_TRANSIENT_TASK_ERRORS,
+    retry_backoff=True,
+    retry_backoff_max=60,
+    retry_jitter=True,
+)
 def section_extract_stage_task(
     self,
     outline_id: str,
@@ -284,16 +302,10 @@ def section_extract_stage_task(
 ) -> dict:  # type: ignore[no-untyped-def]
     self.update_state(state="PROGRESS", meta={"stage": "REQUIREMENT_EXTRACT"})
     try:
-        extract_payload: dict
-        global_facts: dict
-        if resume_from_step in {"G2", "G3", "G4", "G5"}:
-            cached = load_gate_artifact(outline_id=outline_id, section_key=section_key, gate="G1")
-            if cached:
-                extract_payload = dict(cached.get("extract") or {})
-                global_facts = dict(cached.get("global_facts") or {})
-            else:
-                extract_payload = _extract_stage(requirement_text)
-                global_facts = extract_global_facts_from_text(requirement_text)
+        cached = load_gate_artifact(outline_id=outline_id, section_key=section_key, gate="G1")
+        if cached:
+            extract_payload = dict(cached.get("extract") or {})
+            global_facts = dict(cached.get("global_facts") or {})
         else:
             extract_payload = _extract_stage(requirement_text)
             global_facts = extract_global_facts_from_text(requirement_text)
@@ -339,16 +351,22 @@ def section_extract_stage_task(
         raise
 
 
-@celery_app.task(bind=True, name="tasks.section_generate_stage", max_retries=settings.task_max_retries)
+@celery_app.task(
+    bind=True,
+    name="tasks.section_generate_stage",
+    max_retries=settings.task_max_retries,
+    autoretry_for=_TRANSIENT_TASK_ERRORS,
+    retry_backoff=True,
+    retry_backoff_max=60,
+    retry_jitter=True,
+)
 def section_generate_stage_task(self, context: dict) -> dict:  # type: ignore[no-untyped-def]
     self.update_state(state="PROGRESS", meta={"stage": "SECTION_GENERATE"})
-    outline_id = str(context.get("outline_id", "") or "")
-    section_key = str(context.get("section_key", "") or "")
+    outline_id = _safe_token(str(context.get("outline_id", "")), "outline")
+    section_key = _safe_token(str(context.get("section_key", "")), "section")
     resume_from_step = str(context.get("resume_from_step", "G1") or "G1")
     try:
-        cached = None
-        if resume_from_step in {"G3", "G4", "G5"}:
-            cached = load_gate_artifact(outline_id=outline_id, section_key=section_key, gate="G2")
+        cached = load_gate_artifact(outline_id=outline_id, section_key=section_key, gate="G2")
 
         if cached:
             generated = cached
@@ -390,16 +408,22 @@ def section_generate_stage_task(self, context: dict) -> dict:  # type: ignore[no
         raise
 
 
-@celery_app.task(bind=True, name="tasks.section_validate_stage", max_retries=settings.task_max_retries)
+@celery_app.task(
+    bind=True,
+    name="tasks.section_validate_stage",
+    max_retries=settings.task_max_retries,
+    autoretry_for=_TRANSIENT_TASK_ERRORS,
+    retry_backoff=True,
+    retry_backoff_max=60,
+    retry_jitter=True,
+)
 def section_validate_stage_task(self, context: dict) -> dict:  # type: ignore[no-untyped-def]
     self.update_state(state="PROGRESS", meta={"stage": "SECTION_VALIDATE"})
-    outline_id = str(context.get("outline_id", "") or "")
-    section_key = str(context.get("section_key", "") or "")
+    outline_id = _safe_token(str(context.get("outline_id", "")), "outline")
+    section_key = _safe_token(str(context.get("section_key", "")), "section")
     resume_from_step = str(context.get("resume_from_step", "G1") or "G1")
     try:
-        cached = None
-        if resume_from_step in {"G4", "G5"}:
-            cached = load_gate_artifact(outline_id=outline_id, section_key=section_key, gate="G3")
+        cached = load_gate_artifact(outline_id=outline_id, section_key=section_key, gate="G3")
 
         if cached:
             validated = cached
@@ -436,16 +460,22 @@ def section_validate_stage_task(self, context: dict) -> dict:  # type: ignore[no
         raise
 
 
-@celery_app.task(bind=True, name="tasks.section_render_stage", max_retries=settings.task_max_retries)
+@celery_app.task(
+    bind=True,
+    name="tasks.section_render_stage",
+    max_retries=settings.task_max_retries,
+    autoretry_for=_TRANSIENT_TASK_ERRORS,
+    retry_backoff=True,
+    retry_backoff_max=60,
+    retry_jitter=True,
+)
 def section_render_stage_task(self, context: dict) -> dict:  # type: ignore[no-untyped-def]
     self.update_state(state="PROGRESS", meta={"stage": "RENDER_EXPORT"})
-    outline_id = str(context.get("outline_id", "") or "")
-    section_key = str(context.get("section_key", "") or "")
+    outline_id = _safe_token(str(context.get("outline_id", "")), "outline")
+    section_key = _safe_token(str(context.get("section_key", "")), "section")
     resume_from_step = str(context.get("resume_from_step", "G1") or "G1")
     try:
-        cached = None
-        if resume_from_step in {"G5"}:
-            cached = load_gate_artifact(outline_id=outline_id, section_key=section_key, gate="G4")
+        cached = load_gate_artifact(outline_id=outline_id, section_key=section_key, gate="G4")
         if cached:
             render_result = cached
             generated = context.get("stages", {}).get("generate", {})

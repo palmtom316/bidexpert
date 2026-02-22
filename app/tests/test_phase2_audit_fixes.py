@@ -3,13 +3,15 @@ from __future__ import annotations
 import uuid
 from types import SimpleNamespace
 
+import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from app.core.config import Settings
 from app.db.base import Base
 from app.models import tables  # noqa: F401
-from app.models.tables import ExpertDoc, LLMCallLog
+from app.models.tables import AuditLog, ExpertDoc, LLMCallLog
+from app.services.embedding import embed_text
 from app.services.adapters import GenerationResult
 from app.services.generation_pipeline import generate_draft_with_retrieval
 from app.services.qdrant_store import RetrievedEvidence
@@ -117,3 +119,43 @@ def test_generation_rejects_nonexistent_evidence_ids_in_payload(monkeypatch) -> 
 
 def test_default_cors_is_allowlist_not_wildcard() -> None:
     assert Settings().cors_origins != "*"
+
+
+def test_embedding_mock_fallback_is_blocked_in_prod_without_credentials(monkeypatch) -> None:
+    from app.services import embedding
+
+    monkeypatch.setattr(embedding.settings, "app_env", "prod", raising=False)
+
+    with pytest.raises(RuntimeError, match="No embedding API credentials configured"):
+        embed_text("missing credential", vector_size=8)
+
+
+def test_runtime_baseline_rejects_production_alias(monkeypatch) -> None:
+    from app.core import config
+
+    monkeypatch.setattr(config.settings, "app_env", "production", raising=False)
+
+    with pytest.raises(RuntimeError, match="BIDEXPERT_APP_ENV=prod"):
+        config.validate_runtime_baseline()
+
+
+def test_audit_log_schema_roundtrip() -> None:
+    engine = create_engine("sqlite+pysqlite:///:memory:", future=True)
+    Base.metadata.create_all(bind=engine)
+
+    Session = sessionmaker(bind=engine)
+    with Session() as db:
+        row = AuditLog(
+            actor_user_id="auditor",
+            action="model_policy.upsert",
+            target_id="project-1",
+            metadata_json={"changed_fields": ["generate_profile_id"]},
+        )
+        db.add(row)
+        db.commit()
+        saved = db.get(AuditLog, row.id)
+
+    assert saved is not None
+    assert saved.actor_user_id == "auditor"
+    assert saved.action == "model_policy.upsert"
+    assert saved.metadata_json["changed_fields"] == ["generate_profile_id"]

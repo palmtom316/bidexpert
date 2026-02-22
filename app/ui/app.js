@@ -1,5 +1,9 @@
 const API_BASE = "";
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const CONVERSION_HISTORY_STORAGE_KEY = "be_conversion_history";
+const GLM_OCR_API_KEY_STORAGE_KEY = "be_glm_ocr_api_key";
+const GLM_OCR_BASE_URL_STORAGE_KEY = "be_glm_ocr_base_url";
+const GLM_OCR_MODEL_STORAGE_KEY = "be_glm_ocr_model";
 
 function isValidUuid(value) {
   return UUID_PATTERN.test(String(value || "").trim());
@@ -37,6 +41,10 @@ const state = {
   finalLocked: false,
   coverTemplate: "none",
   byokProfiles: [],
+  conversionHistory: parseStoredArray(localStorage.getItem(CONVERSION_HISTORY_STORAGE_KEY)),
+  glmOcrApiKey: String(localStorage.getItem(GLM_OCR_API_KEY_STORAGE_KEY) || "").trim(),
+  glmOcrBaseUrl: String(localStorage.getItem(GLM_OCR_BASE_URL_STORAGE_KEY) || "").trim(),
+  glmOcrModel: String(localStorage.getItem(GLM_OCR_MODEL_STORAGE_KEY) || "glm-ocr").trim() || "glm-ocr",
   sidebarWidth: parseInt(localStorage.getItem("be_sidebar_width") || "260", 10),
   sidebarCollapsed: localStorage.getItem("be_sidebar_collapsed") === "true",
 };
@@ -119,6 +127,20 @@ function splitLines(text) {
     .split(/\n+/)
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function normalizeOcrProviderValue(value) {
+  const normalized = String(value || "").trim().toLowerCase().replace(/_/g, "-");
+  if (normalized === "glmocr") return "glm-ocr";
+  return normalized;
+}
+
+function appendGlmOcrRuntimeConfig(formData, provider) {
+  const normalizedProvider = normalizeOcrProviderValue(provider);
+  if (normalizedProvider !== "glm-ocr") return;
+  if (state.glmOcrApiKey) formData.append("ocr_api_key", state.glmOcrApiKey);
+  if (state.glmOcrBaseUrl) formData.append("ocr_base_url", state.glmOcrBaseUrl);
+  if (state.glmOcrModel) formData.append("ocr_model", state.glmOcrModel);
 }
 
 function escapeHtml(text) {
@@ -438,13 +460,101 @@ const ExpertHub = {
   init() {
     $("#btnExpertIngest").addEventListener("click", guarded(() => this.ingestPdfFiles()));
     $("#btnStructuredConvert").addEventListener("click", guarded(() => this.convertStructuredDocument()));
+    $("#btnStructuredConvertAndIngest").addEventListener("click", guarded(() => this.convertAndIngestStructuredDocument()));
     $("#btnStructuredConfirm").addEventListener("click", guarded(() => this.confirmStructuredConversion()));
+    $("#convertSessionHistory").addEventListener("change", () => this.applyConversionHistorySelection());
     $("#btnStructuredIngest").addEventListener("click", guarded(() => this.ingestStructured()));
     $("#btnLibraryDocs").addEventListener("click", guarded(() => this.loadDocList()));
     $("#btnLibraryChunks").addEventListener("click", guarded(() => this.loadChunks()));
     $("#btnFeedbackPdfIngest").addEventListener("click", guarded(() => this.feedbackPdfIngest()));
     $("#btnFeedbackSectionUpsert").addEventListener("click", guarded(() => this.feedbackSectionUpsert()));
+    this.renderConversionHistoryOptions();
     this.loadDocList();
+  },
+
+  normalizedConversionHistory() {
+    const source = Array.isArray(state.conversionHistory) ? state.conversionHistory : [];
+    return source
+      .map((item) => {
+        if (!item || typeof item !== "object") return null;
+        const conversionId = String(item.conversion_id || item.id || "").trim();
+        if (!conversionId) return null;
+        return {
+          conversion_id: conversionId,
+          filename: String(item.filename || "").trim(),
+          title: String(item.title || "").trim(),
+          doc_type: String(item.doc_type || "").trim(),
+          created_at: String(item.created_at || "").trim(),
+        };
+      })
+      .filter(Boolean)
+      .slice(0, 20);
+  },
+
+  saveConversionHistory(history) {
+    state.conversionHistory = Array.isArray(history) ? history : [];
+    localStorage.setItem(CONVERSION_HISTORY_STORAGE_KEY, JSON.stringify(state.conversionHistory));
+  },
+
+  rememberConversionSession({ conversionId, filename = "", title = "", docType = "" }) {
+    const normalizedId = String(conversionId || "").trim();
+    if (!normalizedId) return;
+    const normalizedHistory = this.normalizedConversionHistory();
+    const next = [
+      {
+        conversion_id: normalizedId,
+        filename: String(filename || "").trim(),
+        title: String(title || "").trim(),
+        doc_type: String(docType || "").trim(),
+        created_at: new Date().toISOString(),
+      },
+      ...normalizedHistory.filter((item) => item.conversion_id !== normalizedId),
+    ].slice(0, 20);
+    this.saveConversionHistory(next);
+    this.renderConversionHistoryOptions(normalizedId);
+  },
+
+  renderConversionHistoryOptions(selectedId = "") {
+    const select = $("#convertSessionHistory");
+    if (!select) return;
+    const history = this.normalizedConversionHistory();
+    this.saveConversionHistory(history);
+    select.innerHTML = "";
+
+    const defaultOption = document.createElement("option");
+    defaultOption.value = "";
+    defaultOption.textContent = history.length ? "选择历史会话（可直接确认入库）" : "无历史会话";
+    select.appendChild(defaultOption);
+
+    history.forEach((item) => {
+      const option = document.createElement("option");
+      option.value = item.conversion_id;
+      const timestamp = item.created_at
+        ? new Date(item.created_at).toLocaleString("zh-CN", { hour12: false })
+        : "--";
+      const fileName = item.filename || item.title || item.conversion_id.slice(0, 12);
+      option.textContent = `${timestamp} | ${fileName} | ${item.doc_type || "EXPERT_HISTORY"}`;
+      select.appendChild(option);
+    });
+
+    const preferred = String(selectedId || $("#convertSessionId")?.value || "").trim();
+    if (preferred) {
+      select.value = preferred;
+    }
+  },
+
+  applyConversionHistorySelection() {
+    const conversionId = ($("#convertSessionHistory")?.value || "").trim();
+    if (!conversionId) return;
+    $("#convertSessionId").value = conversionId;
+    const selected = this.normalizedConversionHistory().find((item) => item.conversion_id === conversionId);
+    if (selected?.title && !$("#convertTitle").value.trim()) {
+      $("#convertTitle").value = selected.title;
+    }
+    if (selected?.doc_type) {
+      $("#convertDocType").value = selected.doc_type;
+    }
+    Toast.info("已回填 conversion_id，可直接点击“确认入库”");
   },
 
   async ingestPdfFiles() {
@@ -456,12 +566,15 @@ const ExpertHub = {
 
     const industryTag = effectiveIndustryTag();
     const docType = $("#expertDocType").value;
+    const ocrProvider = ($("#ingestOcrProvider")?.value || "").trim();
     const projectId = state.projectId.trim();
     const resultView = $("#expertIngestResult");
     const formData = new FormData();
     files.forEach((file) => formData.append("files", file));
     formData.append("doc_type", docType);
     formData.append("industry_tag", industryTag);
+    if (ocrProvider) formData.append("ocr_provider", ocrProvider);
+    appendGlmOcrRuntimeConfig(formData, ocrProvider);
     if (projectId) formData.append("project_id", projectId);
 
     setTaskStatus(`资料入库提交中（${files.length} 个文件）`);
@@ -488,7 +601,7 @@ const ExpertHub = {
     this.loadDocList();
   },
 
-  async convertStructuredDocument() {
+  async convertStructuredDocument({ suppressSuccessToast = false } = {}) {
     const file = $("#convertSourceFile").files[0];
     if (!file) {
       Toast.error("请选择待转换文件");
@@ -499,7 +612,11 @@ const ExpertHub = {
     formData.append("file", file);
     formData.append("doc_type", $("#convertDocType").value);
     formData.append("industry_tag", effectiveIndustryTag());
+    const ocrProvider = ($("#convertOcrProvider")?.value || "").trim();
+    if (ocrProvider) formData.append("ocr_provider", ocrProvider);
+    appendGlmOcrRuntimeConfig(formData, ocrProvider);
     const title = $("#convertTitle").value.trim();
+    const docType = $("#convertDocType").value;
     if (title) formData.append("title", title);
     if (state.projectId.trim()) formData.append("project_id", state.projectId.trim());
 
@@ -510,34 +627,67 @@ const ExpertHub = {
       body: formData,
     });
 
-    $("#convertSessionId").value = res.conversion_id || "";
+    const conversionId = String(res.conversion_id || "").trim();
+    $("#convertSessionId").value = conversionId;
+    this.rememberConversionSession({
+      conversionId,
+      filename: res.filename,
+      title,
+      docType,
+    });
     const sectionPreview = (res.preview_sections || []).length
       ? `\n预览章节：\n- ${res.preview_sections.join("\n- ")}`
       : "";
     const warningText = (res.warnings || []).length ? `\n告警：\n- ${res.warnings.join("\n- ")}` : "";
     $("#convertPreviewResult").textContent =
-      `转换成功\nconversion_id=${res.conversion_id}\n文件=${res.filename}\npage=${res.page_count}\nblocks=${res.block_count}\nsections=${res.section_count}\nchunks=${res.chunk_count}${sectionPreview}${warningText}`;
-    setTaskStatus("文档结构化转换完成，等待确认");
-    Toast.success("结构化转换完成，请确认后生成专家库文档");
+      `转换成功\nconversion_id=${conversionId}\n文件=${res.filename}\npage=${res.page_count}\nblocks=${res.block_count}\nsections=${res.section_count}\nchunks=${res.chunk_count}${sectionPreview}${warningText}\n\n下一步：点击“确认入库”执行分块、向量化与 embedding。`;
+    setTaskStatus("文档结构化转换完成，等待确认入库");
+    if (!suppressSuccessToast) {
+      Toast.success("结构化转换完成，请确认后入库");
+    }
+    return res;
   },
 
-  async confirmStructuredConversion() {
-    const conversionId = $("#convertSessionId").value.trim();
+  async convertAndIngestStructuredDocument() {
+    setTaskStatus("一键流程执行中：结构化转换 -> 入库");
+    const converted = await this.convertStructuredDocument({ suppressSuccessToast: true });
+    const conversionId = String(converted?.conversion_id || "").trim();
     if (!conversionId) {
-      Toast.error("请先执行转换，或填写 conversion_id");
+      throw new Error("结构化转换成功但未返回 conversion_id");
+    }
+    const confirmed = await this.confirmStructuredConversion({ conversionId, suppressSuccessToast: true });
+    setTaskStatus("一键流程完成：结构化转换 + 入库");
+    Toast.success(`一键流程完成，已入库 chunk=${confirmed.chunk_count}`);
+  },
+
+  async confirmStructuredConversion({ conversionId = "", suppressSuccessToast = false } = {}) {
+    const resolvedConversionId = String(conversionId || $("#convertSessionId").value || "").trim();
+    $("#convertSessionId").value = resolvedConversionId;
+    this.renderConversionHistoryOptions(resolvedConversionId);
+    if (!resolvedConversionId) {
+      Toast.error("请先执行转换或选择历史会话");
       return;
     }
 
+    const docType = $("#convertDocType").value;
+    const title = $("#convertTitle").value.trim() || null;
+    const projectId = state.projectId.trim() || null;
+    const industryTag = effectiveIndustryTag() || null;
     const payload = {
-      conversion_id: conversionId,
-      project_id: state.projectId.trim() || null,
-      industry_tag: effectiveIndustryTag() || null,
-      title: $("#convertTitle").value.trim() || null,
+      conversion_id: resolvedConversionId,
+      project_id: projectId,
+      industry_tag: industryTag,
+      title,
       created_by: "user",
-      doc_type: $("#convertDocType").value,
+      doc_type: docType,
     };
 
-    setTaskStatus("根据结构化结果生成专家库文档中");
+    this.rememberConversionSession({
+      conversionId: resolvedConversionId,
+      title: title || "",
+      docType,
+    });
+    setTaskStatus("根据结构化结果入库中（分块/向量化/embedding）");
     const res = await api("/v1/expert-library/convert-confirm", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -545,9 +695,12 @@ const ExpertHub = {
     });
 
     $("#convertPreviewResult").textContent = `${$("#convertPreviewResult").textContent}\n\n确认入库结果：\n${JSON.stringify(res, null, 2)}`;
-    setTaskStatus("专家库文档生成完成");
-    Toast.success(`已生成专家库文档，chunk=${res.chunk_count}`);
+    setTaskStatus("专家库文档生成完成（已完成向量化与 embedding）");
+    if (!suppressSuccessToast) {
+      Toast.success(`已确认入库，chunk=${res.chunk_count}`);
+    }
     this.loadDocList();
+    return res;
   },
 
   async ingestStructured() {
@@ -668,6 +821,10 @@ const ExpertHub = {
     formData.append("file", file);
     formData.append("doc_type", $("#feedbackDocType").value);
     formData.append("industry_tag", effectiveIndustryTag());
+    if (state.glmOcrApiKey || state.glmOcrBaseUrl) {
+      formData.append("ocr_provider", "glm-ocr");
+      appendGlmOcrRuntimeConfig(formData, "glm-ocr");
+    }
     const title = $("#feedbackTitle").value.trim();
     if (title) formData.append("title", title);
     if (state.projectId.trim()) formData.append("project_id", state.projectId.trim());
@@ -2176,11 +2333,13 @@ const ByokSettings = {
     $("#btnByokPresetQwen3").addEventListener("click", () => this.applyQwen3Preset());
     $("#byokProvider").addEventListener("change", () => this.onProviderChange());
     $("#byokProfileList").addEventListener("click", guarded((event) => this.onProfileAction(event)));
+    $("#btnByokSaveOcrSettings").addEventListener("click", () => this.saveOcrSettings());
     document.addEventListener("keydown", (event) => {
       if (event.key === "Escape" && !$("#drawerByok").classList.contains("hidden")) this.close();
     });
 
     this.applyQwen3Preset();
+    this.syncOcrSettingsInputs();
     this.renderProfileOptions();
     $("#btnRefreshUsage").addEventListener("click", guarded(() => this.loadUsageStats()));
   },
@@ -2188,6 +2347,7 @@ const ByokSettings = {
   async open() {
     const projectId = ensureProjectId({ autoCreate: true });
     $("#byokProjectId").value = projectId;
+    this.syncOcrSettingsInputs();
     $("#drawerByok").classList.remove("hidden");
     await this.loadProfiles();
     await this.loadPolicy();
@@ -2219,6 +2379,26 @@ const ByokSettings = {
       $("#byokBaseUrl").value = "https://dashscope.aliyuncs.com/compatible-mode/v1";
     }
     $("#byokResult").textContent = "已预置默认模型：百炼 qwen3";
+  },
+
+  syncOcrSettingsInputs() {
+    if ($("#ocrGlmApiKey")) $("#ocrGlmApiKey").value = state.glmOcrApiKey;
+    if ($("#ocrGlmBaseUrl")) $("#ocrGlmBaseUrl").value = state.glmOcrBaseUrl;
+    if ($("#ocrGlmModel")) $("#ocrGlmModel").value = state.glmOcrModel || "glm-ocr";
+  },
+
+  saveOcrSettings() {
+    const apiKey = ($("#ocrGlmApiKey")?.value || "").trim();
+    const baseUrl = ($("#ocrGlmBaseUrl")?.value || "").trim();
+    const model = ($("#ocrGlmModel")?.value || "glm-ocr").trim() || "glm-ocr";
+    state.glmOcrApiKey = apiKey;
+    state.glmOcrBaseUrl = baseUrl;
+    state.glmOcrModel = model;
+    localStorage.setItem(GLM_OCR_API_KEY_STORAGE_KEY, apiKey);
+    localStorage.setItem(GLM_OCR_BASE_URL_STORAGE_KEY, baseUrl);
+    localStorage.setItem(GLM_OCR_MODEL_STORAGE_KEY, model);
+    $("#byokResult").textContent = `OCR 设置已保存\nprovider=glm-ocr\nbase_url=${baseUrl || "(未填写)"}\nmodel=${model}\napi_key=${apiKey ? "已填写" : "未填写"}`;
+    Toast.success("已保存 GLM-OCR 配置");
   },
 
   onProviderChange() {

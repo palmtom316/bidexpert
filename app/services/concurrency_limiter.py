@@ -17,6 +17,7 @@ DEFAULT_LIMITS = {
     "generate": 3,
     "review": 2,
     "embed": 2,
+    "rerank": 2,
     "query_rewrite": 2,
     "program_support": 1,
 }
@@ -132,4 +133,3 @@ def acquire_concurrency_slot(
 
     with _local_slot(slot_key, limit):
         yield
-

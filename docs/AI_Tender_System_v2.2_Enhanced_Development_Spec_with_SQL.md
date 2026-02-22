@@ -1,6 +1,6 @@
 # AI 辅助投标系统
 
-# 开发规范与实施指令 (v2.2 - Enhanced Engineering Edition)
+# 开发规范与实施指令 (release/V1.0 - Enhanced Engineering Edition)
 
 ------------------------------------------------------------------------
 

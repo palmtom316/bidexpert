@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from app.core.config import settings
 from app.extract.tender_parser import parse_tender_requirements
 from app.schemas.contracts import DocBlockItem, IngestUploadResponse
-from app.services.adapters.ocr import OCRAdapterUnavailableError, create_ocr_adapter
+from app.services.adapters.ocr import OCRRuntimeCredential, create_ocr_adapter, normalize_ocr_provider
 from app.services.pricing_guard import detect_pricing_content
 
 SECTION_PATTERN = re.compile(r"^\s*(第[一二三四五六七八九十0-9]+[章节条款]|\d+(?:\.\d+)+)")
@@ -101,9 +101,34 @@ def _render_page_png(pdf_bytes: bytes, page_no: int, dpi: int | None = None) -> 
     return pix.tobytes("png")
 
 
-def _ocr_page_with_configured_provider(pdf_bytes: bytes, page_no: int, dpi: int | None = None) -> str:
+def _resolve_effective_ocr_provider(ocr_provider: str | None) -> str:
+    normalized = normalize_ocr_provider(ocr_provider, default=settings.ocr_provider or "tesseract")
+    if normalized in {"", "local"}:
+        return "tesseract"
+    return normalized
+
+
+def _ocr_page_with_configured_provider(
+    pdf_bytes: bytes,
+    page_no: int,
+    dpi: int | None = None,
+    ocr_provider: str | None = None,
+    ocr_api_key: str | None = None,
+    ocr_base_url: str | None = None,
+    ocr_model: str | None = None,
+) -> str:
     image_bytes = _render_page_png(pdf_bytes, page_no, dpi)
-    adapter = create_ocr_adapter(settings.ocr_provider)
+    runtime_credential = None
+    if any(value is not None and str(value).strip() for value in (ocr_api_key, ocr_base_url, ocr_model)):
+        runtime_credential = OCRRuntimeCredential(
+            api_key=(ocr_api_key or "").strip() or None,
+            base_url=(ocr_base_url or "").strip() or None,
+            model=(ocr_model or "").strip() or None,
+        )
+    adapter = create_ocr_adapter(
+        _resolve_effective_ocr_provider(ocr_provider),
+        runtime_credential=runtime_credential,
+    )
     text = adapter.extract_image_bytes(image_bytes, page_no=page_no)
     return text.strip()
 
@@ -112,6 +137,10 @@ def extract_pages_v2(
     pdf_bytes: bytes,
     enable_ocr_fallback: bool = True,
     dpi: int | None = None,
+    ocr_provider: str | None = None,
+    ocr_api_key: str | None = None,
+    ocr_base_url: str | None = None,
+    ocr_model: str | None = None,
 ) -> list[PageExtract]:
     pages = _extract_with_pypdf(pdf_bytes)
     if not enable_ocr_fallback:
@@ -120,6 +149,7 @@ def extract_pages_v2(
     text_len_threshold = max(1, int(settings.pdf_ocr_textlen_threshold))
     non_ws_threshold = max(0.0, float(settings.pdf_ocr_min_non_whitespace_ratio))
     render_dpi = max(96, int(dpi or settings.pdf_render_dpi))
+    provider = _resolve_effective_ocr_provider(ocr_provider)
 
     extracted: list[PageExtract] = []
     for page in pages:
@@ -141,20 +171,34 @@ def extract_pages_v2(
             continue
 
         try:
-            provider = (settings.ocr_provider or "tesseract").strip().lower()
+            page_source = f"pypdf+ocr:{provider}"
             if provider in {"tesseract", "local", ""}:
                 ocr_text = _ocr_page_with_fitz(pdf_bytes, page.page_no, render_dpi)
             else:
                 try:
-                    ocr_text = _ocr_page_with_configured_provider(pdf_bytes, page.page_no, render_dpi)
-                except (OCRAdapterUnavailableError, RuntimeError, ValueError):
+                    remote_kwargs: dict[str, str] = {}
+                    if (ocr_api_key or "").strip():
+                        remote_kwargs["ocr_api_key"] = (ocr_api_key or "").strip()
+                    if (ocr_base_url or "").strip():
+                        remote_kwargs["ocr_base_url"] = (ocr_base_url or "").strip()
+                    if (ocr_model or "").strip():
+                        remote_kwargs["ocr_model"] = (ocr_model or "").strip()
+                    ocr_text = _ocr_page_with_configured_provider(
+                        pdf_bytes,
+                        page.page_no,
+                        render_dpi,
+                        ocr_provider=provider,
+                        **remote_kwargs,
+                    )
+                except Exception:  # noqa: BLE001
                     ocr_text = _ocr_page_with_fitz(pdf_bytes, page.page_no, render_dpi)
+                    page_source = "pypdf+ocr:tesseract"
             extracted.append(
                 PageExtract(
                     page_no=page.page_no,
                     text=ocr_text,
                     ocr_used=True,
-                    source="pypdf+ocr",
+                    source=page_source,
                     image_count=page.image_count,
                     text_len=len(ocr_text),
                     non_whitespace_ratio=_non_whitespace_ratio(ocr_text),

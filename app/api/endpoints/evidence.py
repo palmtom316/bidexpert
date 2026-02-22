@@ -72,6 +72,10 @@ async def expert_library_ingest_upload(
     created_by: str = Form(default="system"),
     doc_type: str = Form(default="EXPERT_HISTORY"),
     model_id: str | None = Form(default=None),
+    ocr_provider: str | None = Form(default=None),
+    ocr_api_key: str | None = Form(default=None),
+    ocr_base_url: str | None = Form(default=None),
+    ocr_model: str | None = Form(default=None),
 ) -> ExpertLibraryIngestResponse:
     ctx = _ctx()
     return await expert_library_ingest_upload_handler(
@@ -82,6 +86,10 @@ async def expert_library_ingest_upload(
         created_by=created_by,
         doc_type=doc_type,
         model_id=model_id,
+        ocr_provider=ocr_provider,
+        ocr_api_key=ocr_api_key,
+        ocr_base_url=ocr_base_url,
+        ocr_model=ocr_model,
         read_upload_with_limit_fn=ctx._read_upload_with_limit,
         ingest_historical_pdf_fn=ctx.ingest_historical_pdf,
         resolved_created_by_fn=ctx._resolved_created_by,
@@ -98,6 +106,10 @@ async def expert_library_convert_upload(
     created_by: str = Form(default="system"),
     doc_type: str = Form(default="EXPERT_HISTORY"),
     model_id: str | None = Form(default=None),
+    ocr_provider: str | None = Form(default=None),
+    ocr_api_key: str | None = Form(default=None),
+    ocr_base_url: str | None = Form(default=None),
+    ocr_model: str | None = Form(default=None),
 ) -> ExpertLibraryConvertResponse:
     ctx = _ctx()
     return await expert_library_convert_upload_handler(
@@ -108,6 +120,10 @@ async def expert_library_convert_upload(
         created_by=created_by,
         doc_type=doc_type,
         model_id=model_id,
+        ocr_provider=ocr_provider,
+        ocr_api_key=ocr_api_key,
+        ocr_base_url=ocr_base_url,
+        ocr_model=ocr_model,
         read_upload_with_limit_fn=ctx._read_upload_with_limit,
         convert_upload_to_structured_fn=ctx.convert_upload_to_structured,
         resolved_created_by_fn=ctx._resolved_created_by,
@@ -135,6 +151,10 @@ async def expert_library_ingest_uploads(
     created_by: str = Form(default="system"),
     doc_type: str = Form(default="EXPERT_HISTORY"),
     model_id: str | None = Form(default=None),
+    ocr_provider: str | None = Form(default=None),
+    ocr_api_key: str | None = Form(default=None),
+    ocr_base_url: str | None = Form(default=None),
+    ocr_model: str | None = Form(default=None),
 ) -> ExpertLibraryBatchIngestResponse:
     ctx = _ctx()
     return await expert_library_ingest_uploads_handler(
@@ -145,6 +165,10 @@ async def expert_library_ingest_uploads(
         created_by=created_by,
         doc_type=doc_type,
         model_id=model_id,
+        ocr_provider=ocr_provider,
+        ocr_api_key=ocr_api_key,
+        ocr_base_url=ocr_base_url,
+        ocr_model=ocr_model,
         read_upload_with_limit_fn=ctx._read_upload_with_limit,
         ingest_historical_pdf_fn=ctx.ingest_historical_pdf,
         resolved_created_by_fn=ctx._resolved_created_by,

@@ -12,12 +12,13 @@ import redis
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 
-from app.core.config import settings
+from app.core.config import normalized_app_env, settings
 from app.db.session import session_scope
 from app.llm import default_model_for_role, get_fallback_chain, normalize_role
 from app.models.tables import KeyStorage, ProjectModelPolicy, ProviderProfile, ProviderScope
 from app.secrets.crypto import decrypt, encrypt, load_master_key
 from app.services.adapters import (
+    AdapterUnavailableError,
     ComplianceReviewRequest,
     GenerationRequest,
     ReviewRequest,
@@ -45,8 +46,18 @@ def _redis_client() -> redis.Redis:
     return redis.Redis.from_url(settings.redis_url, decode_responses=True)
 
 
+def _secret_ttl_seconds() -> int:
+    return max(1, int(settings.secret_temp_key_ttl_seconds))
+
+
+def _vault_redis_fallback_allowed() -> bool:
+    if not settings.vault_redis_fallback_enabled:
+        return False
+    return normalized_app_env() != "prod"
+
+
 def _write_temp_key(secret_ref: str, api_key: str) -> None:
-    _redis_client().set(secret_ref, api_key, ex=3600)
+    _redis_client().set(secret_ref, api_key, ex=_secret_ttl_seconds())
 
 
 def _delete_temp_key(secret_ref: str) -> None:
@@ -93,7 +104,9 @@ def _write_vault_key(secret_ref: str, api_key: str) -> None:
         return
     if not settings.vault_redis_fallback_enabled:
         raise ValueError("vault is not configured")
-    _redis_client().set(secret_ref, api_key)
+    if normalized_app_env() == "prod":
+        raise ValueError("vault redis fallback is disabled in prod")
+    _redis_client().set(secret_ref, api_key, ex=_secret_ttl_seconds())
 
 
 def _read_vault_key(secret_ref: str) -> str | None:
@@ -111,7 +124,7 @@ def _read_vault_key(secret_ref: str) -> str | None:
         nested = data.get("data") if isinstance(data, dict) else {}
         value = nested.get("api_key") if isinstance(nested, dict) else None
         return value if isinstance(value, str) else None
-    if not settings.vault_redis_fallback_enabled:
+    if not _vault_redis_fallback_allowed():
         return None
     value = _redis_client().get(secret_ref)
     return value if isinstance(value, str) else None
@@ -127,7 +140,7 @@ def _delete_vault_key(secret_ref: str) -> None:
         if resp.status_code not in {200, 204, 404}:
             resp.raise_for_status()
         return
-    if settings.vault_redis_fallback_enabled:
+    if _vault_redis_fallback_allowed():
         _redis_client().delete(secret_ref)
 
 
@@ -290,6 +303,7 @@ def upsert_project_model_policy(
     generate_profile_id: str | None,
     review_profile_id: str | None,
     embed_profile_id: str | None,
+    rerank_profile_id: str | None,
     query_rewrite_profile_id: str | None,
     program_support_profile_id: str | None,
     enable_review: bool,
@@ -311,6 +325,7 @@ def upsert_project_model_policy(
         policy.generate_profile_id = _opt_uuid(generate_profile_id)
         policy.review_profile_id = _opt_uuid(review_profile_id)
         policy.embed_profile_id = _opt_uuid(embed_profile_id)
+        policy.rerank_profile_id = _opt_uuid(rerank_profile_id)
         policy.query_rewrite_profile_id = _opt_uuid(query_rewrite_profile_id)
         policy.program_support_profile_id = _opt_uuid(program_support_profile_id)
         policy.enable_review = enable_review
@@ -357,6 +372,8 @@ def resolve_profile_for_task(project_id: str | None, task_type: str) -> Resolved
             profile_id = policy.review_profile_id
         elif role.value == "EMBED":
             profile_id = policy.embed_profile_id
+        elif role.value == "RERANK":
+            profile_id = policy.rerank_profile_id
         elif role.value == "QUERY_REWRITE":
             profile_id = policy.query_rewrite_profile_id
         elif role.value == "PROGRAM_SUPPORT":
@@ -475,7 +492,10 @@ def qualify_provider_profile(
     global_api_key, global_base_url = _global_credentials(profile.provider)
     effective_api_key = profile_api_key or global_api_key
     effective_base_url = profile.base_url or global_base_url
-    adapter = create_adapter(profile.provider)
+    try:
+        adapter = create_adapter(profile.provider)
+    except AdapterUnavailableError as exc:
+        raise ValueError(str(exc)) from exc
 
     cases: list[dict[str, Any]] = []
     credential_passed = bool(effective_api_key)

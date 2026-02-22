@@ -1,4 +1,4 @@
-# BidExpert v3.7 Update Todos
+# BidExpert release/V1.0 Update Todos
 
 > 来源：`docs/code-review-v3.7.md`  
 > 生成日期：2026-02-15
@@ -39,7 +39,7 @@
   文件：`app/models/tables.py`、`app/services/byok/profiles.py`、`app/services/tender_analysis.py`
 - [x] `P2-4` SSE 返回类型标注修正  
   文件：`app/api/routes.py`
-- [x] `P2-5` 草稿响应默认模型改为 v3.7 首选  
+- [x] `P2-5` 草稿响应默认模型改为 release/V1.0 首选  
   文件：`app/schemas/contracts.py`
 - [x] `P2-6` 目录结构重构完成（`worker/extract/rag` 承载主实现，旧路径兼容转发）  
   文件：`app/worker/*.py`、`app/extract/*.py`、`app/rag/*.py`、`app/workers/*.py`、`app/services/{historical_extractor,tender_parser,rag_flow}.py`

@@ -1,0 +1,44 @@
+groups:
+  - name: bidexpert-core-alerts
+    rules:
+      - alert: BidExpertHigh429Rate
+        expr: |
+          (
+            sum(rate(bidexpert_http_rate_limit_total[5m]))
+            /
+            clamp_min(sum(rate(bidexpert_http_requests_total[5m])), 1)
+          ) > 0.05
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "BidExpert 429 rate is high"
+          description: "More than 5% of requests are being rate-limited during the last 10 minutes."
+
+      - alert: BidExpertHigh5xxRate
+        expr: |
+          (
+            sum(rate(bidexpert_http_server_errors_total[5m]))
+            /
+            clamp_min(sum(rate(bidexpert_http_requests_total[5m])), 1)
+          ) > 0.02
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "BidExpert 5xx error rate is high"
+          description: "More than 2% of requests are returning server errors during the last 5 minutes."
+
+      - alert: BidExpertTaskFailureRateHigh
+        expr: |
+          (
+            sum(rate(bidexpert_celery_task_events_total{status="failed"}[10m]))
+            /
+            clamp_min(sum(rate(bidexpert_celery_task_events_total{status=~"succeeded|failed"}[10m])), 1)
+          ) > 0.10
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "BidExpert celery task failure rate is high"
+          description: "More than 10% of celery task completions are failing during the last 10 minutes."

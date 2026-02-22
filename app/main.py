@@ -6,11 +6,12 @@ from time import perf_counter
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse, Response
+from fastapi.security import HTTPAuthorizationCredentials
 from fastapi.staticfiles import StaticFiles
 
-from app.api.routes import _require_auth, router
+from app.api.routes import _api_key_header, _bearer_header, _require_auth, router, validate_auth_configuration
 from app.api.endpoints.stats import router as stats_router
-from app.core.config import settings
+from app.core.config import settings, validate_runtime_baseline
 from app.core.logging import configure_logging
 from app.db.init_db import init_db
 from app.observability import CONTENT_TYPE_LATEST, record_http_request, render_metrics
@@ -23,6 +24,8 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    validate_runtime_baseline()
+    validate_auth_configuration()
     try:
         init_db()
     except Exception as exc:  # noqa: BLE001
@@ -105,8 +108,17 @@ def root() -> RedirectResponse:
     return RedirectResponse(url="/ui")
 
 
+async def _require_metrics_access(
+    key: str | None = Depends(_api_key_header),
+    bearer: HTTPAuthorizationCredentials | None = Depends(_bearer_header),
+) -> None:
+    if not settings.metrics_enabled or settings.metrics_public_enabled:
+        return
+    await _require_auth(key=key, bearer=bearer)
+
+
 @app.get("/metrics", include_in_schema=False)
-def metrics() -> Response:
+async def metrics(_: None = Depends(_require_metrics_access)) -> Response:
     if not settings.metrics_enabled:
         raise HTTPException(status_code=404, detail="metrics disabled")
     return Response(content=render_metrics(), media_type=CONTENT_TYPE_LATEST)
