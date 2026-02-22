@@ -13,8 +13,8 @@ x-common-env: &common-env
   BIDEXPERT_LOG_FORMAT: ${BIDEXPERT_LOG_FORMAT:-json}
   BIDEXPERT_METRICS_ENABLED: ${BIDEXPERT_METRICS_ENABLED:-true}
   BIDEXPERT_METRICS_PUBLIC_ENABLED: ${BIDEXPERT_METRICS_PUBLIC_ENABLED:-false}
-  BIDEXPERT_CELERY_BROKER_URL: redis://redis:6379/0
-  BIDEXPERT_CELERY_RESULT_BACKEND: redis://redis:6379/1
+  BIDEXPERT_CELERY_BROKER_URL: redis://:${REDIS_PASSWORD:-changeme}@redis:6379/0
+  BIDEXPERT_CELERY_RESULT_BACKEND: redis://:${REDIS_PASSWORD:-changeme}@redis:6379/1
   BIDEXPERT_QDRANT_URL: http://qdrant:6333
   BIDEXPERT_QDRANT_ENABLE_RERANK: ${BIDEXPERT_QDRANT_ENABLE_RERANK:-true}
   BIDEXPERT_QDRANT_RERANK_CANDIDATE_LIMIT: ${BIDEXPERT_QDRANT_RERANK_CANDIDATE_LIMIT:-24}
@@ -45,6 +45,7 @@ services:
     build: .
     expose:
       - "8000"
+    stop_grace_period: 30s
     environment:
       <<: *common-env
       BIDEXPERT_SERVE_UI_STATIC: "false"
@@ -69,7 +70,8 @@ services:
       start_period: 20s
     volumes:
       - ./data:/app/data
-      - ./app:/app/app
+      # Dev mode: uncomment to mount source for hot-reload
+      # - ./app:/app/app
 
   nginx:
     image: nginx:1.27
@@ -117,7 +119,8 @@ services:
 
   worker:
     build: .
-    command: celery -A app.worker.celery_app.celery_app worker --loglevel=INFO
+    command: celery -A app.worker.celery_app.celery_app worker --loglevel=INFO --pool=prefork --concurrency=2
+    stop_grace_period: 60s
     environment:
       <<: *common-env
     depends_on:
@@ -128,7 +131,7 @@ services:
       qdrant:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "ps -ef | grep '[c]elery' >/dev/null"]
+      test: ["CMD-SHELL", "celery -A app.worker.celery_app.celery_app inspect ping --timeout 5 2>/dev/null | grep -q 'pong'"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -210,10 +213,11 @@ services:
 
   redis:
     image: redis:7-alpine
+    command: redis-server --requirepass ${REDIS_PASSWORD:-changeme}
     expose:
       - "6379"
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-changeme}", "ping"]
       interval: 10s
       timeout: 3s
       retries: 5

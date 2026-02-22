@@ -53,6 +53,22 @@ def test_compose_nginx_supports_non_prod_tls_fallback() -> None:
     assert "Provide deploy/nginx/certs/tls.crt and tls.key in prod" in compose
 
 
+def test_compose_redis_requires_password() -> None:
+    compose = _read("docker-compose.yml")
+    assert "requirepass" in compose
+    assert "REDIS_PASSWORD" in compose
+
+
+def test_compose_worker_uses_celery_inspect_healthcheck() -> None:
+    compose = _read("docker-compose.yml")
+    assert "celery -A app.worker.celery_app.celery_app inspect ping" in compose
+
+
+def test_compose_services_have_graceful_shutdown() -> None:
+    compose = _read("docker-compose.yml")
+    assert "stop_grace_period:" in compose
+
+
 def test_base_migration_supports_bootstrapped_schema_guard() -> None:
     migration = _read("migrations/versions/47ace6ac701b_add_reviewreport_and_scoringreport.py")
     assert "_is_bootstrapped_schema" in migration

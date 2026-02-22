@@ -30,14 +30,17 @@ dependencies = [
   "pillow>=11.0.0",
   "pytesseract>=0.3.13",
   "langextract>=1.1.1",
-  "alembic>=1.13.0"
+  "alembic>=1.13.0",
+  "gunicorn>=22.0.0"
 ]
 
 [project.optional-dependencies]
 dev = [
   "pytest>=8.3.3",
   "pytest-cov>=6.0.0",
-  "ruff>=0.8.3"
+  "ruff>=0.8.3",
+  "pip-tools>=7.4.0",
+  "pip-audit>=2.7.0"
 ]
 
 [tool.pytest.ini_options]
@@ -50,6 +53,12 @@ source = ["app"]
 [tool.coverage.report]
 show_missing = true
 skip_empty = true
+fail_under = 60
+exclude_lines = [
+  "pragma: no cover",
+  "if __name__ == .__main__.",
+  "if TYPE_CHECKING:",
+]
 
 [tool.ruff]
 line-length = 100

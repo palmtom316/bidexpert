@@ -7,6 +7,11 @@ class Settings(BaseSettings):
     database_url: str = "sqlite+pysqlite:///./bidexpert.db"
     min_matrix_coverage: float = 0.95
 
+    db_pool_size: int = 10
+    db_max_overflow: int = 20
+    db_pool_pre_ping: bool = True
+    db_pool_recycle: int = 1800
+
     redis_url: str = "redis://localhost:6379/0"
     celery_broker_url: str = "redis://localhost:6379/0"
     celery_result_backend: str = "redis://localhost:6379/1"
@@ -87,6 +92,7 @@ class Settings(BaseSettings):
     vault_redis_fallback_enabled: bool = True
     secret_temp_key_ttl_seconds: int = 3600
     api_key: str | None = None
+    api_key_secondary: str | None = None
     openai_api_key: str | None = None
     openai_base_url: str | None = "https://api.openai.com/v1"
     gemini_api_key: str | None = None
@@ -137,5 +143,11 @@ def validate_runtime_baseline() -> None:
         raise RuntimeError(
             "BIDEXPERT_VAULT_REDIS_FALLBACK_ENABLED must be false when BIDEXPERT_APP_ENV=prod"
         )
+    if normalized == "prod" and "localhost" in settings.cors_origins:
+        raise RuntimeError("CORS_ORIGINS must not contain localhost in prod")
+    if normalized == "prod" and "bidexpert:bidexpert@" in settings.database_url:
+        raise RuntimeError("Default database password must not be used in prod")
+    if normalized == "prod" and "://:@" not in settings.redis_url and "@" not in settings.redis_url:
+        raise RuntimeError("REDIS_URL must include a password in prod")
     if int(settings.secret_temp_key_ttl_seconds) <= 0:
         raise RuntimeError("BIDEXPERT_SECRET_TEMP_KEY_TTL_SECONDS must be greater than 0")

@@ -44,6 +44,9 @@ def _local_allow_request(identifier: str, *, limit: int, window_seconds: int) ->
         current_bucket, current_count = _LOCAL_WINDOW_COUNTS.get(identifier, (bucket, 0))
         if current_bucket != bucket:
             current_bucket, current_count = bucket, 0
+            stale = [k for k, (b, _) in _LOCAL_WINDOW_COUNTS.items() if b < bucket - 1]
+            for k in stale:
+                del _LOCAL_WINDOW_COUNTS[k]
 
         if current_count >= limit:
             retry_after = ((bucket + 1) * window_seconds) - now

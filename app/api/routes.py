@@ -314,10 +314,11 @@ async def _require_auth(
         expected = _configured_api_key()
         if not expected:
             raise HTTPException(status_code=401, detail="api key authentication is not configured")
-        if not key or not hmac.compare_digest(key, expected):
-            raise HTTPException(status_code=401, detail="Invalid or missing API key")
-        set_auth_context(AuthContext(user_id="api-key-user", method="api_key"))
-        return
+        secondary = (settings.api_key_secondary or "").strip() or None
+        if key and (hmac.compare_digest(key, expected) or (secondary and hmac.compare_digest(key, secondary))):
+            set_auth_context(AuthContext(user_id="api-key-user", method="api_key"))
+            return
+        raise HTTPException(status_code=401, detail="Invalid or missing API key")
 
     raise HTTPException(status_code=401, detail="authentication required")
 
