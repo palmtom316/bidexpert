@@ -59,7 +59,7 @@ const state = {
     localStorage.getItem(OCR_PROVIDER_STORAGE_KEY) || "glm-ocr",
     localStorage.getItem(OCR_MODEL_STORAGE_KEY) || localStorage.getItem(LEGACY_GLM_OCR_MODEL_STORAGE_KEY) || "",
   ),
-  sidebarWidth: parseInt(localStorage.getItem("be_sidebar_width") || "260", 10),
+  sidebarWidth: parseInt(localStorage.getItem("be_sidebar_width") || "280", 10),
   sidebarCollapsed: localStorage.getItem("be_sidebar_collapsed") === "true",
 };
 
@@ -359,16 +359,15 @@ const Sidebar = {
   applyState() {
     if (state.sidebarCollapsed) {
       this.nav.classList.add("collapsed");
-      this.nav.style.width = `${this.collapsedWidth}px`;
+      this.nav.style.width = ""; // Let CSS handle width when collapsed
       if (this.toggleIcon) {
         this.toggleIcon.className = "ri-menu-unfold-line";
         this.toggleBtn.title = "展开菜单";
       }
     } else {
       this.nav.classList.remove("collapsed");
-      // Use CSS variable for width to sync with styles
-      this.nav.style.setProperty("--sidebar-width", `${state.sidebarWidth}px`);
-      this.nav.style.width = `${state.sidebarWidth}px`;
+      this.nav.style.width = ""; // Let CSS handle width via variable
+      document.documentElement.style.setProperty("--sidebar-width", `${state.sidebarWidth}px`);
       if (this.toggleIcon) {
         this.toggleIcon.className = "ri-menu-fold-line";
         this.toggleBtn.title = "收起菜单";
@@ -397,9 +396,8 @@ const Sidebar = {
       if (newWidth > this.maxWidth) newWidth = this.maxWidth;
 
       state.sidebarWidth = newWidth;
-      // Update DOM immediately
-      this.nav.style.width = `${newWidth}px`;
-      this.nav.style.setProperty("--sidebar-width", `${newWidth}px`);
+      // Update DOM immediately at root level to sync sidebar and brand
+      document.documentElement.style.setProperty("--sidebar-width", `${newWidth}px`);
     };
 
     const onMouseUp = () => {

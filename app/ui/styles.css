@@ -112,7 +112,7 @@ p {
 
 .ribbon {
   height: var(--header-height);
-  padding: 0 1.5rem;
+  padding: 0 1.5rem 0 0;
   border-bottom: 1px solid var(--line-soft);
   background: rgba(255, 255, 255, 0.85);
   /* Slightly translucent for modern feel */
@@ -137,7 +137,7 @@ p {
   color: var(--text-nav);
   /* Extend to verify left edge and full height */
   height: var(--header-height);
-  margin-left: -1.5rem;
+  margin-left: 0;
   /* Counteract ribbon padding */
   padding-left: 1.5rem;
   /* Restore internal padding */
@@ -145,6 +145,7 @@ p {
   width: var(--sidebar-width);
   /* Exactly match sidebar width */
   min-width: var(--sidebar-width);
+  flex-shrink: 0;
   transition: width 0.1s ease;
 }
 
@@ -1533,8 +1534,8 @@ select {
 }
 
 @media (max-width: 1420px) {
-  .flow-nav {
-    width: 260px;
+  :root {
+    --sidebar-width: 260px;
   }
 
   .office-grid.cols-2 {
