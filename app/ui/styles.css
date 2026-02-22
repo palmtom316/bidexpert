@@ -67,6 +67,7 @@
   --font-ui: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-title: "Inter", "Microsoft YaHei", sans-serif;
   --font-brand: "Inter", "Microsoft YaHei", sans-serif;
+  --font-kai: "LXGW WenKai", "LXGW WenKai Screen", "STKaiti", "KaiTi", sans-serif;
   --font-mono: "JetBrains Mono", Consolas, monospace;
 
   /* Sizing */
@@ -181,11 +182,11 @@ p {
 }
 
 .brand-text h1 {
-  font-family: var(--font-brand);
+  font-family: var(--font-kai);
   /* Specificity fix */
-  font-size: 1.1rem;
+  font-size: 1.15rem;
   /* Smaller font */
-  font-weight: 700;
+  font-weight: bold;
   letter-spacing: 1px;
   color: var(--text-nav);
   margin-bottom: 2px;
@@ -399,8 +400,9 @@ body:has(.flow-nav.collapsed) .brand-mark {
 }
 
 .flow-item h4 {
-  font-size: 0.95rem;
-  font-weight: 500;
+  font-family: var(--font-kai);
+  font-size: 1.05rem;
+  font-weight: bold;
   color: var(--text-nav);
   margin-bottom: 2px;
 }
