@@ -1,59 +1,78 @@
 :root {
-  /* Simplified & Softer Palette for Non-IT Users */
-  --bg-page: #f0f2f5;
-  /* Warmer gray */
+  /* Modern Tech & Minimalist Palette */
+  --bg-page: #f8fafc;
+  /* Cooler, clearer gray for page background */
   --bg-surface: #ffffff;
-  /* Clean white */
+  /* Pure white for panels */
   --bg-panel: #ffffff;
-  --bg-accent: #f5f7fa;
-  /* Very subtle accent */
-  --bg-nav: #2c3e50;
-  /* Professional dark sidebar */
-  --bg-nav-active: #34495e;
-  /* Slightly lighter active state */
+  --bg-accent: #f1f5f9;
+  /* Light subtle accent */
+  --bg-nav: #0f172a;
+  /* Deep dark blue/gray for tech sidebar */
+  --bg-nav-active: #1e293b;
+  /* Slightly lighter active nav state */
 
-  --text-main: #333333;
-  /* Softer black */
-  --text-sub: #666666;
-  --text-dim: #999999;
-  --text-nav: #ecf0f1;
-  /* Light text for dark sidebar */
-  --text-nav-dim: #bdc3c7;
+  /* Typography Colors */
+  --text-main: #0f172a;
+  /* Strong dark slate */
+  --text-sub: #475569;
+  /* Medium slate for secondary text */
+  --text-dim: #94a3b8;
+  /* Light slate for hints/placeholders */
+  --text-nav: #f8fafc;
+  /* High brightness text on dark background */
+  --text-nav-dim: #94a3b8;
+  /* Dimmed nav text */
 
-  --line-soft: #e0e0e0;
-  --line-strong: #d0d0d0;
+  /* Borders & Lines */
+  --line-soft: rgba(15, 23, 42, 0.08);
+  /* Very soft lines */
+  --line-strong: rgba(15, 23, 42, 0.15);
+  /* Slightly stronger lines */
 
-  /* Friendly Colors (Less "Technical" Blue) */
-  --primary: #4a90e2;
-  /* Soft friendly blue */
-  --primary-hover: #357abd;
-  --secondary: #2ecc71;
-  /* Green for positive actions */
-  --secondary-hover: #27ae60;
-  --warning: #f1c40f;
-  --danger: #e74c3c;
-  --success: #2ecc71;
+  /* Brand & Status Colors (Tech Theme) */
+  --primary: #2563eb;
+  /* Core Tech Blue */
+  --primary-hover: #1d4ed8;
+  /* Slightly darker blue on hover */
+  --ai-accent: #8b5cf6;
+  /* AI Purple Accent */
+  --ai-accent-hover: #7c3aed;
+  /* Darker AI Purple on hover */
+  --secondary: #10b981;
+  /* Emerald Green for success actions */
+  --secondary-hover: #059669;
+  --warning: #f59e0b;
+  /* Amber for warnings */
+  --danger: #ef4444;
+  /* Red for errors/destructive actions */
+  --success: #10b981;
 
-  --shadow-soft: 0 2px 8px rgba(0, 0, 0, 0.05);
-  /* Softer, more diffused shadow */
-  --shadow-float: 0 10px 20px rgba(0, 0, 0, 0.1);
+  /* Elevated Shadows */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-soft: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.02);
+  --shadow-float: 0 20px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.01);
+  --shadow-glow: 0 0 15px rgba(37, 99, 235, 0.3);
+  /* Primary glow for focus */
+  --shadow-glow-ai: 0 0 15px rgba(139, 92, 246, 0.4);
+  /* Purple glow for AI */
 
-  --radius-sm: 6px;
-  /* Increased radius for friendly feel */
+  /* Border Radii - More rounded and friendly but clean */
+  --radius-sm: 8px;
   --radius-md: 12px;
-  /* Rounder containers */
   --radius-lg: 16px;
+  --radius-xl: 24px;
 
-  /* Larger, clearer base font */
-  --font-ui: "Inter", "Microsoft YaHei", "Segoe UI", sans-serif;
+  /* Modern Fonts */
+  --font-ui: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-title: "Inter", "Microsoft YaHei", sans-serif;
-  --font-brand: "LXGW WenKai", "Kaiti SC", serif;
-  --font-mono: "Consolas", "Monaco", monospace;
+  --font-brand: "Inter", "Microsoft YaHei", sans-serif;
+  --font-mono: "JetBrains Mono", Consolas, monospace;
 
-  --sidebar-width: 260px;
-  /* Default width */
+  /* Sizing */
+  --sidebar-width: 280px;
+  /* Slightly wider sidebar */
   --header-height: 64px;
-  /* Slightly shorter header */
 }
 
 * {
@@ -95,13 +114,17 @@ p {
   height: var(--header-height);
   padding: 0 1.5rem;
   border-bottom: 1px solid var(--line-soft);
-  background: #ffffff;
+  background: rgba(255, 255, 255, 0.85);
+  /* Slightly translucent for modern feel */
+  backdrop-filter: blur(12px);
+  /* Glassmorphism effect */
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
   flex-shrink: 0;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.03);
+  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.05);
+  /* very subtle shadow */
   z-index: 10;
 }
 
@@ -126,15 +149,17 @@ p {
 }
 
 .brand-mark {
-  width: 42px;
-  height: 42px;
-  border-radius: 10px;
-  background: linear-gradient(135deg, #0b4c8e, #2b7bc1 52%, #56a2e2);
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, var(--primary), var(--ai-accent));
+  /* Tech gradient */
   color: #fff;
   display: grid;
   place-content: center;
-  box-shadow: var(--shadow-soft);
-  border: 1px solid rgba(255, 255, 255, 0.4);
+  box-shadow: var(--shadow-glow);
+  /* Glowing brand */
+  border: 1px solid rgba(255, 255, 255, 0.2);
   overflow: hidden;
 }
 
@@ -165,9 +190,7 @@ p {
   margin-bottom: 2px;
 }
 
-.brand-title-handwritten {
-  /* Class logic moved to .brand-text h1 to ensure override */
-}
+/* Removed empty .brand-title-handwritten class logic */
 
 /* Version subtitle style */
 .brand-version {
@@ -211,12 +234,14 @@ p {
   color: var(--text-nav);
   display: flex;
   flex-direction: column;
-  padding: 0.5rem;
+  padding: 1rem 0.75rem;
+  /* Better padding */
   overflow-y: auto;
   flex-shrink: 0;
-  transition: width 0.1s ease;
-  /* Faster transition for resize */
+  transition: width 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
+  box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.05);
+  /* Subtle inner dark border */
 }
 
 /* Sidebar Resize Handle */
@@ -389,13 +414,16 @@ body:has(.flow-nav.collapsed) .brand-mark {
 .flow-item:hover {
   background: rgba(255, 255, 255, 0.08);
   /* Dark mode hover */
+  transform: translateX(4px);
+  /* Slight shift */
   color: #fff;
 }
 
 .flow-item.active {
   background: var(--primary);
   color: #fff;
-  box-shadow: 0 4px 12px rgba(74, 144, 226, 0.3);
+  box-shadow: var(--shadow-glow);
+  /* Glow for active */
 }
 
 .flow-item.active i,
@@ -426,13 +454,13 @@ body:has(.flow-nav.collapsed) .brand-mark {
 
 .view-panel.active {
   display: block;
-  animation: panelEnter 220ms ease;
+  animation: panelEnter 300ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 @keyframes panelEnter {
   from {
     opacity: 0;
-    transform: translateY(6px);
+    transform: translateY(10px);
   }
 
   to {
@@ -460,6 +488,9 @@ body:has(.flow-nav.collapsed) .brand-mark {
 
 .panel-header h2 i {
   color: var(--primary);
+  background: var(--bg-accent);
+  padding: 0.5rem;
+  border-radius: var(--radius-sm);
 }
 
 .panel-header p {
@@ -481,8 +512,17 @@ body:has(.flow-nav.collapsed) .brand-mark {
   background: var(--bg-panel);
   border: 1px solid var(--line-soft);
   border-radius: var(--radius-lg);
-  padding: 1rem 1rem 1.1rem;
-  box-shadow: var(--shadow-soft);
+  padding: 1.5rem;
+  /* Increased padding */
+  box-shadow: var(--shadow-sm);
+  /* More subtle default shadow */
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.card:hover {
+  box-shadow: var(--shadow-float);
+  transform: translateY(-2px);
+  border-color: var(--line-strong);
 }
 
 .card h3 {
@@ -535,16 +575,14 @@ textarea {
   width: 100%;
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-sm);
-  background: #ffffff;
+  background: var(--bg-surface);
   color: var(--text-main);
-  padding: 0.75rem 0.8rem;
-  /* Larger padding */
+  padding: 0.65rem 0.8rem;
   font-family: var(--font-ui);
   font-size: 0.95rem;
-  /* Larger font */
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   height: auto;
-  /* Automatic height */
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.02);
 }
 
 input[type="file"] {
@@ -563,8 +601,7 @@ select:focus,
 textarea:focus {
   outline: none;
   border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.15);
-  /* Soft focus ring */
+  box-shadow: var(--shadow-glow);
 }
 
 /* Consistent Select Arrow using standard appearance for now, 
@@ -598,29 +635,29 @@ select {
 .btn {
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
-  background: #ffffff;
+  background: var(--bg-surface);
   color: var(--text-main);
   font-size: 0.95rem;
-  /* Larger text */
-  padding: 0.6rem 1.2rem;
-  /* Larger touch target */
+  padding: 0.6rem 1.25rem;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   font-weight: 500;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  box-shadow: var(--shadow-sm);
+  position: relative;
+  overflow: hidden;
 }
 
 .btn:active {
-  transform: translateY(1px);
+  transform: translateY(1px) scale(0.98);
 }
 
 .btn:hover {
-  filter: brightness(0.95);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--shadow-soft);
+  transform: translateY(-1px);
 }
 
 .btn-sm {
@@ -632,34 +669,49 @@ select {
 .btn-primary {
   background: var(--primary);
   color: #fff;
-  border-color: var(--primary);
+  border-color: transparent;
+  box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.2), 0 2px 4px -2px rgba(37, 99, 235, 0.1);
 }
 
 .btn-primary:hover {
   background: var(--primary-hover);
-  border-color: var(--primary-hover);
+  box-shadow: var(--shadow-glow);
 }
 
 .btn-secondary {
   background: var(--secondary);
   color: #fff;
-  border-color: var(--secondary);
+  border-color: transparent;
 }
 
 .btn-secondary:hover {
   background: var(--secondary-hover);
-  border-color: var(--secondary-hover);
+  box-shadow: 0 0 15px rgba(16, 185, 129, 0.3);
+}
+
+/* New AI Accent Button */
+.btn-ai {
+  background: linear-gradient(135deg, var(--primary), var(--ai-accent));
+  color: #fff;
+  border: none;
+  box-shadow: 0 4px 6px -1px rgba(139, 92, 246, 0.3);
+}
+
+.btn-ai:hover {
+  background: linear-gradient(135deg, var(--primary-hover), var(--ai-accent-hover));
+  box-shadow: var(--shadow-glow-ai);
 }
 
 .btn-outline {
-  border-color: #cdbfa9;
-  background: #fffdf8;
-  color: #5f5546;
+  border-color: var(--line-strong);
+  background: var(--bg-surface);
+  color: var(--text-sub);
 }
 
 .btn-outline:hover {
-  border-color: #b6a386;
-  background: #f9f1e3;
+  border-color: var(--primary);
+  color: var(--primary);
+  background: var(--bg-accent);
 }
 
 .result-box {

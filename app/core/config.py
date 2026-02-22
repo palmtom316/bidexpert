@@ -121,7 +121,11 @@ class Settings(BaseSettings):
     expert_chunk_max_tokens: int = 1200
     expert_chunk_overlap_tokens: int = 120
 
-    model_config = SettingsConfigDict(env_prefix="BIDEXPERT_", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_prefix="BIDEXPERT_", 
+        extra="ignore",
+        env_file=".env"
+    )
 
 
 settings = Settings()
