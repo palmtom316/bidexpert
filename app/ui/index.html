@@ -12,7 +12,9 @@
 <body>
   <header class="ribbon">
     <div class="brand">
-      <div class="brand-mark"><i class="ri-cpu-line"></i></div>
+      <div class="brand-mark">
+        <img src="/ui/assets/app-logo.png?v=release/V1.0" alt="BidExpert Logo" class="brand-logo" />
+      </div>
       <div class="brand-text">
         <div class="brand-title-row">
           <h1 class="brand-title-handwritten">AI辅助投标系统</h1>
@@ -138,24 +140,13 @@
                 <input id="convertTitle" type="text" placeholder="示例：XX 项目技术标（结构化）" />
               </div>
             </div>
-            <div class="form-row">
-              <div class="form-group">
-                <label>OCR 引擎</label>
-                <select id="convertOcrProvider">
-                  <option value="glm-ocr" selected>glm-ocr（默认）</option>
-                  <option value="tesseract">tesseract（本地）</option>
-                  <option value="hunyuan">hunyuan</option>
-                  <option value="docai">docai</option>
-                </select>
-              </div>
-              <div class="form-group">
-                <label>最近转换会话</label>
-                <select id="convertSessionHistory">
-                  <option value="">无历史会话</option>
-                </select>
-              </div>
+            <div class="form-group">
+              <label>最近转换会话</label>
+              <select id="convertSessionHistory">
+                <option value="">无历史会话</option>
+              </select>
             </div>
-            <p class="hint">提示：可在“AI 模型设置”中录入 GLM-OCR key/base_url，本次转换请求将优先使用页面配置。</p>
+            <p class="hint">提示：OCR 引擎由“AI 模型设置”统一控制（仅支持 textin / glm-ocr）。</p>
             <div class="form-group">
               <label>转换会话 ID（只读）</label>
               <input id="convertSessionId" type="text" placeholder="转换后自动写入" readonly />
@@ -197,17 +188,8 @@
                 <input id="expertIndustryTag" type="text" list="engineeringCategoryHistory"
                   placeholder="默认使用顶部工程类别，可手动修改" />
               </div>
-              <div class="form-group">
-                <label>OCR 引擎</label>
-                <select id="ingestOcrProvider">
-                  <option value="glm-ocr" selected>glm-ocr（默认）</option>
-                  <option value="tesseract">tesseract（本地）</option>
-                  <option value="hunyuan">hunyuan</option>
-                  <option value="docai">docai</option>
-                </select>
-              </div>
             </div>
-            <p class="hint">提示：快速入库会优先使用“AI 模型设置”中填写的 GLM-OCR 配置（仅当前浏览器生效）。</p>
+            <p class="hint">提示：快速入库会使用“AI 模型设置”中的 OCR 商业模型配置（仅当前浏览器生效）。</p>
             <div class="form-actions">
               <button id="btnExpertIngest" class="btn btn-primary">
                 <i class="ri-upload-cloud-2-line"></i> 快速入库
@@ -917,6 +899,42 @@
         </section>
 
         <section class="drawer-section">
+          <h4>OCR 商业模型配置</h4>
+          <p class="hint">用于“文档结构化转换/快速入库”OCR 请求。配置仅保存在当前浏览器，不会写入服务器环境变量。选择 textin 时，API Key 对应 Secret Code，OCR Model 对应 App ID。</p>
+          <div class="form-row">
+            <div class="form-group">
+              <label>OCR Provider</label>
+              <select id="ocrProvider">
+                <option value="glm-ocr">glm-ocr</option>
+                <option value="textin">textin</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label id="ocrModelLabel">OCR Model</label>
+              <input id="ocrModel" type="text" value="glm-ocr" />
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label id="ocrApiKeyLabel">API Key</label>
+              <input id="ocrApiKey" type="password" placeholder="输入 OCR API Key" />
+            </div>
+            <div class="form-group">
+              <label>Base URL</label>
+              <input id="ocrBaseUrl" type="text" placeholder="例如：https://your-gateway/v1" />
+            </div>
+          </div>
+          <div class="form-actions left">
+            <button id="btnByokTestOcrSettings" class="btn btn-outline btn-sm" type="button">
+              <i class="ri-radar-line"></i> 测试 OCR 连接
+            </button>
+            <button id="btnByokSaveOcrSettings" class="btn btn-primary btn-sm" type="button">
+              <i class="ri-save-3-line"></i> 保存 OCR 设置
+            </button>
+          </div>
+        </section>
+
+        <section class="drawer-section">
           <h4>新增商用模型 Profile（默认百炼 Qwen3）</h4>
           <div class="form-row">
             <div class="form-group">
@@ -950,6 +968,9 @@
             <input id="byokApiKey" type="password" placeholder="输入商用模型 API Key" />
           </div>
           <div class="form-actions left">
+            <button id="btnByokTestProfileConnection" class="btn btn-outline btn-sm" type="button">
+              <i class="ri-radar-line"></i> 测试模型连接
+            </button>
             <button id="btnByokCreateProfile" class="btn btn-primary btn-sm" type="button">
               <i class="ri-add-line"></i> 创建 Profile
             </button>
@@ -990,32 +1011,6 @@
             <button id="btnByokSavePolicy" class="btn btn-primary btn-sm" type="button">
               <i class="ri-save-line"></i> 保存流程策略
             </button>
-          </div>
-        </section>
-
-        <section class="drawer-section">
-          <h4>OCR 商业模型配置（GLM-OCR）</h4>
-          <p class="hint">用于“文档结构化转换/快速入库”OCR 请求。配置仅保存在当前浏览器，不会写入服务器环境变量。</p>
-          <div class="form-row">
-            <div class="form-group">
-              <label>GLM-OCR API Key</label>
-              <input id="ocrGlmApiKey" type="password" placeholder="输入 GLM-OCR API Key" />
-            </div>
-            <div class="form-group">
-              <label>GLM-OCR Base URL</label>
-              <input id="ocrGlmBaseUrl" type="text" placeholder="例如：https://your-gateway/v1" />
-            </div>
-          </div>
-          <div class="form-row">
-            <div class="form-group">
-              <label>GLM-OCR Model</label>
-              <input id="ocrGlmModel" type="text" value="glm-ocr" />
-            </div>
-            <div class="form-group action-stack">
-              <button id="btnByokSaveOcrSettings" class="btn btn-primary btn-sm" type="button">
-                <i class="ri-save-3-line"></i> 保存 OCR 设置
-              </button>
-            </div>
           </div>
         </section>
 

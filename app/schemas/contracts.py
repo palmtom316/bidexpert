@@ -364,6 +364,34 @@ class ProviderProfileTestResponse(BaseModel):
     detail: str
 
 
+class ProviderConnectionTestRequest(BaseModel):
+    provider: str = Field(min_length=1)
+    base_url: str | None = None
+    default_model: str = Field(min_length=1)
+    api_key: str = Field(min_length=1)
+
+
+class ProviderConnectionTestResponse(BaseModel):
+    ok: bool
+    provider: str
+    model: str
+    detail: str
+
+
+class OCRConnectionTestRequest(BaseModel):
+    provider: str = Field(min_length=1)
+    base_url: str | None = None
+    model: str | None = None
+    api_key: str = Field(min_length=1)
+
+
+class OCRConnectionTestResponse(BaseModel):
+    ok: bool
+    provider: str
+    model: str
+    detail: str
+
+
 class ProviderProfileQualifyCase(BaseModel):
     case_id: str
     name: str

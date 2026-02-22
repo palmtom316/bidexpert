@@ -58,6 +58,9 @@ class Settings(BaseSettings):
     glm_ocr_api_key: str | None = None
     glm_ocr_base_url: str | None = None
     glm_ocr_model: str = "glm-ocr"
+    textin_ocr_api_key: str | None = None
+    textin_ocr_base_url: str = "https://api.textin.com/ai/service/v2/recognize/document"
+    textin_ocr_model: str | None = None
     hunyuan_ocr_api_key: str | None = None
     hunyuan_ocr_base_url: str | None = None
     docai_ocr_api_key: str | None = None

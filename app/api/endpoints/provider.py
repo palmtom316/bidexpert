@@ -3,6 +3,8 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from app.api.handlers.provider_completed_tender import (
+    test_ocr_connection_handler,
+    test_provider_connection_handler,
     create_completed_bid_handler,
     create_provider_profile_handler,
     delete_completed_bid_handler,
@@ -16,6 +18,8 @@ from app.api.handlers.provider_completed_tender import (
     test_provider_profile_handler,
 )
 from app.schemas.contracts import (
+    OCRConnectionTestRequest,
+    OCRConnectionTestResponse,
     AuditLogListResponse,
     CompletedBidCreateRequest,
     CompletedBidDeleteResponse,
@@ -23,6 +27,8 @@ from app.schemas.contracts import (
     CompletedBidListResponse,
     ProjectModelPolicyResponse,
     ProjectModelPolicyUpsertRequest,
+    ProviderConnectionTestRequest,
+    ProviderConnectionTestResponse,
     ProviderProfileCreateRequest,
     ProviderProfileCreateResponse,
     ProviderProfileDeleteResponse,
@@ -57,6 +63,24 @@ def list_provider_profiles_api(project_id: str) -> ProviderProfileListResponse:
     return list_provider_profiles_handler(
         project_id,
         list_provider_profiles_fn=ctx.list_provider_profiles,
+    )
+
+
+@router.post("/api/provider-profiles/test-connection", response_model=ProviderConnectionTestResponse)
+def test_provider_connection_api(payload: ProviderConnectionTestRequest) -> ProviderConnectionTestResponse:
+    ctx = _ctx()
+    return test_provider_connection_handler(
+        payload,
+        test_provider_connection_fn=ctx.test_provider_connection,
+    )
+
+
+@router.post("/api/ocr/test-connection", response_model=OCRConnectionTestResponse)
+def test_ocr_connection_api(payload: OCRConnectionTestRequest) -> OCRConnectionTestResponse:
+    ctx = _ctx()
+    return test_ocr_connection_handler(
+        payload,
+        test_ocr_connection_fn=ctx.test_ocr_connection,
     )
 
 

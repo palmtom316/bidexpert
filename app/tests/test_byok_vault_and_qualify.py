@@ -206,3 +206,58 @@ def test_temp_and_vault_fallback_writes_share_same_ttl(monkeypatch) -> None:
     assert first[2] is not None
     assert second[2] is not None
     assert first[2] == second[2]
+
+
+def test_test_provider_connection_requires_credential() -> None:
+    ok, detail = profiles.test_provider_connection(
+        provider="qwen",
+        default_model="qwen3",
+        api_key="",
+        base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+    )
+
+    assert ok is False
+    assert detail == "missing credential"
+
+
+def test_test_provider_connection_resolves_global_base_url(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    def _fake_probe(**kwargs):
+        captured.update(kwargs)
+        return True, "completion probe OK (200)"
+
+    monkeypatch.setattr(profiles, "_completion_probe", _fake_probe)
+    monkeypatch.setattr(
+        profiles,
+        "_global_credentials",
+        lambda _provider: (None, "https://global.example/v1"),
+    )
+
+    ok, detail = profiles.test_provider_connection(
+        provider="qwen",
+        default_model="qwen3",
+        api_key="sk-test",
+        base_url=None,
+    )
+
+    assert ok is True
+    assert detail == "completion probe OK (200)"
+    assert captured["api_key"] == "sk-test"
+    assert captured["base_url"] == "https://global.example/v1"
+    profile = captured["profile"]
+    assert profile.default_model == "qwen3"
+
+
+def test_test_provider_connection_requires_base_url_when_no_fallback(monkeypatch) -> None:
+    monkeypatch.setattr(profiles, "_global_credentials", lambda _provider: (None, None))
+
+    ok, detail = profiles.test_provider_connection(
+        provider="qwen",
+        default_model="qwen3",
+        api_key="sk-test",
+        base_url=None,
+    )
+
+    assert ok is False
+    assert detail == "missing base_url"

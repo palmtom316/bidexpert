@@ -133,9 +133,17 @@ p {
   color: #fff;
   display: grid;
   place-content: center;
-  font-size: 1.45rem;
   box-shadow: var(--shadow-soft);
   border: 1px solid rgba(255, 255, 255, 0.4);
+  overflow: hidden;
+}
+
+.brand-logo {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
 }
 
 /* Brand Text Container */

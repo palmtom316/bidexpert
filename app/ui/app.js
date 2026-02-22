@@ -1,9 +1,14 @@
 const API_BASE = "";
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const CONVERSION_HISTORY_STORAGE_KEY = "be_conversion_history";
-const GLM_OCR_API_KEY_STORAGE_KEY = "be_glm_ocr_api_key";
-const GLM_OCR_BASE_URL_STORAGE_KEY = "be_glm_ocr_base_url";
-const GLM_OCR_MODEL_STORAGE_KEY = "be_glm_ocr_model";
+const OCR_PROVIDER_STORAGE_KEY = "be_ocr_provider";
+const OCR_API_KEY_STORAGE_KEY = "be_ocr_api_key";
+const OCR_BASE_URL_STORAGE_KEY = "be_ocr_base_url";
+const OCR_MODEL_STORAGE_KEY = "be_ocr_model";
+const LEGACY_GLM_OCR_API_KEY_STORAGE_KEY = "be_glm_ocr_api_key";
+const LEGACY_GLM_OCR_BASE_URL_STORAGE_KEY = "be_glm_ocr_base_url";
+const LEGACY_GLM_OCR_MODEL_STORAGE_KEY = "be_glm_ocr_model";
+const TEXTIN_OCR_DEFAULT_BASE_URL = "https://api.textin.com/ai/service/v2/recognize/document";
 
 function isValidUuid(value) {
   return UUID_PATTERN.test(String(value || "").trim());
@@ -42,9 +47,18 @@ const state = {
   coverTemplate: "none",
   byokProfiles: [],
   conversionHistory: parseStoredArray(localStorage.getItem(CONVERSION_HISTORY_STORAGE_KEY)),
-  glmOcrApiKey: String(localStorage.getItem(GLM_OCR_API_KEY_STORAGE_KEY) || "").trim(),
-  glmOcrBaseUrl: String(localStorage.getItem(GLM_OCR_BASE_URL_STORAGE_KEY) || "").trim(),
-  glmOcrModel: String(localStorage.getItem(GLM_OCR_MODEL_STORAGE_KEY) || "glm-ocr").trim() || "glm-ocr",
+  ocrProvider: normalizeConfiguredOcrProvider(localStorage.getItem(OCR_PROVIDER_STORAGE_KEY) || "glm-ocr"),
+  ocrApiKey: String(
+    localStorage.getItem(OCR_API_KEY_STORAGE_KEY) || localStorage.getItem(LEGACY_GLM_OCR_API_KEY_STORAGE_KEY) || "",
+  ).trim(),
+  ocrBaseUrl: resolveOcrBaseUrl(
+    localStorage.getItem(OCR_PROVIDER_STORAGE_KEY) || "glm-ocr",
+    localStorage.getItem(OCR_BASE_URL_STORAGE_KEY) || localStorage.getItem(LEGACY_GLM_OCR_BASE_URL_STORAGE_KEY) || "",
+  ).trim(),
+  ocrModel: resolveOcrModel(
+    localStorage.getItem(OCR_PROVIDER_STORAGE_KEY) || "glm-ocr",
+    localStorage.getItem(OCR_MODEL_STORAGE_KEY) || localStorage.getItem(LEGACY_GLM_OCR_MODEL_STORAGE_KEY) || "",
+  ),
   sidebarWidth: parseInt(localStorage.getItem("be_sidebar_width") || "260", 10),
   sidebarCollapsed: localStorage.getItem("be_sidebar_collapsed") === "true",
 };
@@ -132,15 +146,41 @@ function splitLines(text) {
 function normalizeOcrProviderValue(value) {
   const normalized = String(value || "").trim().toLowerCase().replace(/_/g, "-");
   if (normalized === "glmocr") return "glm-ocr";
+  if (normalized === "text-in") return "textin";
   return normalized;
 }
 
-function appendGlmOcrRuntimeConfig(formData, provider) {
-  const normalizedProvider = normalizeOcrProviderValue(provider);
-  if (normalizedProvider !== "glm-ocr") return;
-  if (state.glmOcrApiKey) formData.append("ocr_api_key", state.glmOcrApiKey);
-  if (state.glmOcrBaseUrl) formData.append("ocr_base_url", state.glmOcrBaseUrl);
-  if (state.glmOcrModel) formData.append("ocr_model", state.glmOcrModel);
+function normalizeConfiguredOcrProvider(value) {
+  const normalized = normalizeOcrProviderValue(value);
+  if (normalized === "textin") return "textin";
+  return "glm-ocr";
+}
+
+function defaultOcrModelForProvider(provider) {
+  return normalizeConfiguredOcrProvider(provider) === "textin" ? "your-textin-app-id" : "glm-ocr";
+}
+
+function defaultOcrBaseUrlForProvider(provider) {
+  return normalizeConfiguredOcrProvider(provider) === "textin" ? TEXTIN_OCR_DEFAULT_BASE_URL : "";
+}
+
+function resolveOcrBaseUrl(provider, value) {
+  const baseUrl = String(value || "").trim();
+  if (baseUrl) return baseUrl;
+  return defaultOcrBaseUrlForProvider(provider);
+}
+
+function resolveOcrModel(provider, value) {
+  const model = String(value || "").trim();
+  if (model) return model;
+  return defaultOcrModelForProvider(provider);
+}
+
+function appendOcrRuntimeConfig(formData, provider) {
+  const normalizedProvider = normalizeConfiguredOcrProvider(provider);
+  if (state.ocrApiKey) formData.append("ocr_api_key", state.ocrApiKey);
+  if (state.ocrBaseUrl) formData.append("ocr_base_url", state.ocrBaseUrl);
+  formData.append("ocr_model", resolveOcrModel(normalizedProvider, state.ocrModel));
 }
 
 function escapeHtml(text) {
@@ -566,15 +606,15 @@ const ExpertHub = {
 
     const industryTag = effectiveIndustryTag();
     const docType = $("#expertDocType").value;
-    const ocrProvider = ($("#ingestOcrProvider")?.value || "").trim();
+    const ocrProvider = normalizeConfiguredOcrProvider(state.ocrProvider);
     const projectId = state.projectId.trim();
     const resultView = $("#expertIngestResult");
     const formData = new FormData();
     files.forEach((file) => formData.append("files", file));
     formData.append("doc_type", docType);
     formData.append("industry_tag", industryTag);
-    if (ocrProvider) formData.append("ocr_provider", ocrProvider);
-    appendGlmOcrRuntimeConfig(formData, ocrProvider);
+    formData.append("ocr_provider", ocrProvider);
+    appendOcrRuntimeConfig(formData, ocrProvider);
     if (projectId) formData.append("project_id", projectId);
 
     setTaskStatus(`资料入库提交中（${files.length} 个文件）`);
@@ -612,9 +652,9 @@ const ExpertHub = {
     formData.append("file", file);
     formData.append("doc_type", $("#convertDocType").value);
     formData.append("industry_tag", effectiveIndustryTag());
-    const ocrProvider = ($("#convertOcrProvider")?.value || "").trim();
-    if (ocrProvider) formData.append("ocr_provider", ocrProvider);
-    appendGlmOcrRuntimeConfig(formData, ocrProvider);
+    const ocrProvider = normalizeConfiguredOcrProvider(state.ocrProvider);
+    formData.append("ocr_provider", ocrProvider);
+    appendOcrRuntimeConfig(formData, ocrProvider);
     const title = $("#convertTitle").value.trim();
     const docType = $("#convertDocType").value;
     if (title) formData.append("title", title);
@@ -821,10 +861,9 @@ const ExpertHub = {
     formData.append("file", file);
     formData.append("doc_type", $("#feedbackDocType").value);
     formData.append("industry_tag", effectiveIndustryTag());
-    if (state.glmOcrApiKey || state.glmOcrBaseUrl) {
-      formData.append("ocr_provider", "glm-ocr");
-      appendGlmOcrRuntimeConfig(formData, "glm-ocr");
-    }
+    const ocrProvider = normalizeConfiguredOcrProvider(state.ocrProvider);
+    formData.append("ocr_provider", ocrProvider);
+    appendOcrRuntimeConfig(formData, ocrProvider);
     const title = $("#feedbackTitle").value.trim();
     if (title) formData.append("title", title);
     if (state.projectId.trim()) formData.append("project_id", state.projectId.trim());
@@ -2328,11 +2367,14 @@ const ByokSettings = {
 
     $("#btnByokLoadProfiles").addEventListener("click", guarded(() => this.loadProfiles()));
     $("#btnByokLoadPolicy").addEventListener("click", guarded(() => this.loadPolicy()));
+    $("#btnByokTestProfileConnection").addEventListener("click", guarded(() => this.testProfileConnection()));
     $("#btnByokCreateProfile").addEventListener("click", guarded(() => this.createProfile()));
     $("#btnByokSavePolicy").addEventListener("click", guarded(() => this.savePolicy()));
     $("#btnByokPresetQwen3").addEventListener("click", () => this.applyQwen3Preset());
     $("#byokProvider").addEventListener("change", () => this.onProviderChange());
+    $("#ocrProvider").addEventListener("change", () => this.onOcrProviderChange());
     $("#byokProfileList").addEventListener("click", guarded((event) => this.onProfileAction(event)));
+    $("#btnByokTestOcrSettings").addEventListener("click", guarded(() => this.testOcrSettings()));
     $("#btnByokSaveOcrSettings").addEventListener("click", () => this.saveOcrSettings());
     document.addEventListener("keydown", (event) => {
       if (event.key === "Escape" && !$("#drawerByok").classList.contains("hidden")) this.close();
@@ -2382,23 +2424,99 @@ const ByokSettings = {
   },
 
   syncOcrSettingsInputs() {
-    if ($("#ocrGlmApiKey")) $("#ocrGlmApiKey").value = state.glmOcrApiKey;
-    if ($("#ocrGlmBaseUrl")) $("#ocrGlmBaseUrl").value = state.glmOcrBaseUrl;
-    if ($("#ocrGlmModel")) $("#ocrGlmModel").value = state.glmOcrModel || "glm-ocr";
+    const provider = normalizeConfiguredOcrProvider(state.ocrProvider);
+    state.ocrProvider = provider;
+    state.ocrBaseUrl = resolveOcrBaseUrl(provider, state.ocrBaseUrl);
+    state.ocrModel = resolveOcrModel(provider, state.ocrModel);
+    if ($("#ocrProvider")) $("#ocrProvider").value = provider;
+    if ($("#ocrApiKey")) $("#ocrApiKey").value = state.ocrApiKey;
+    if ($("#ocrBaseUrl")) $("#ocrBaseUrl").value = state.ocrBaseUrl;
+    if ($("#ocrModel")) $("#ocrModel").value = state.ocrModel;
+    this.onOcrProviderChange({ preserveInputValues: true });
+  },
+
+  onOcrProviderChange({ preserveInputValues = false } = {}) {
+    const previousProvider = normalizeConfiguredOcrProvider(state.ocrProvider);
+    const provider = normalizeConfiguredOcrProvider($("#ocrProvider")?.value || previousProvider);
+    state.ocrProvider = provider;
+    if ($("#ocrProvider")) $("#ocrProvider").value = provider;
+    const apiKeyLabel = $("#ocrApiKeyLabel");
+    const modelLabel = $("#ocrModelLabel");
+    const modelInput = $("#ocrModel");
+    const baseInput = $("#ocrBaseUrl");
+    if (apiKeyLabel) {
+      apiKeyLabel.textContent = provider === "textin" ? "Secret Code（TextIn）" : "API Key";
+    }
+    if (modelLabel) {
+      modelLabel.textContent = provider === "textin" ? "App ID（TextIn）" : "OCR Model";
+    }
+    if (baseInput) {
+      baseInput.placeholder = provider === "textin" ? TEXTIN_OCR_DEFAULT_BASE_URL : "例如：https://your-gateway/v1";
+      if (!preserveInputValues) {
+        const current = baseInput.value.trim();
+        const previousDefault = defaultOcrBaseUrlForProvider(previousProvider);
+        if (!current || current === previousDefault) {
+          baseInput.value = defaultOcrBaseUrlForProvider(provider);
+        }
+      }
+    }
+    if (modelInput) {
+      modelInput.placeholder = provider === "textin" ? "例如：your-textin-app-id" : "例如：glm-ocr";
+      if (!preserveInputValues) {
+        const current = modelInput.value.trim();
+        const previousDefault = defaultOcrModelForProvider(previousProvider);
+        if (!current || current === previousDefault) {
+          modelInput.value = defaultOcrModelForProvider(provider);
+        }
+      }
+    }
   },
 
   saveOcrSettings() {
-    const apiKey = ($("#ocrGlmApiKey")?.value || "").trim();
-    const baseUrl = ($("#ocrGlmBaseUrl")?.value || "").trim();
-    const model = ($("#ocrGlmModel")?.value || "glm-ocr").trim() || "glm-ocr";
-    state.glmOcrApiKey = apiKey;
-    state.glmOcrBaseUrl = baseUrl;
-    state.glmOcrModel = model;
-    localStorage.setItem(GLM_OCR_API_KEY_STORAGE_KEY, apiKey);
-    localStorage.setItem(GLM_OCR_BASE_URL_STORAGE_KEY, baseUrl);
-    localStorage.setItem(GLM_OCR_MODEL_STORAGE_KEY, model);
-    $("#byokResult").textContent = `OCR 设置已保存\nprovider=glm-ocr\nbase_url=${baseUrl || "(未填写)"}\nmodel=${model}\napi_key=${apiKey ? "已填写" : "未填写"}`;
-    Toast.success("已保存 GLM-OCR 配置");
+    const provider = normalizeConfiguredOcrProvider($("#ocrProvider")?.value || state.ocrProvider);
+    const apiKey = ($("#ocrApiKey")?.value || "").trim();
+    const baseUrl = resolveOcrBaseUrl(provider, ($("#ocrBaseUrl")?.value || "").trim());
+    const model = resolveOcrModel(provider, ($("#ocrModel")?.value || "").trim());
+    if (provider === "textin" && model === defaultOcrModelForProvider("textin")) {
+      Toast.error("请选择 textin 时，请将 OCR Model 填写为 TextIn App ID");
+      return;
+    }
+    state.ocrProvider = provider;
+    state.ocrApiKey = apiKey;
+    state.ocrBaseUrl = baseUrl;
+    state.ocrModel = model;
+    localStorage.setItem(OCR_PROVIDER_STORAGE_KEY, provider);
+    localStorage.setItem(OCR_API_KEY_STORAGE_KEY, apiKey);
+    localStorage.setItem(OCR_BASE_URL_STORAGE_KEY, baseUrl);
+    localStorage.setItem(OCR_MODEL_STORAGE_KEY, model);
+    $("#byokResult").textContent = `OCR 设置已保存\nprovider=${provider}\nbase_url=${baseUrl || "(未填写)"}\nmodel=${model}\napi_key=${apiKey ? "已填写" : "未填写"}`;
+    Toast.success("已保存 OCR 配置");
+  },
+
+  async testOcrSettings() {
+    const provider = normalizeConfiguredOcrProvider($("#ocrProvider")?.value || state.ocrProvider);
+    const apiKey = ($("#ocrApiKey")?.value || "").trim();
+    const baseUrl = resolveOcrBaseUrl(provider, ($("#ocrBaseUrl")?.value || "").trim());
+    const model = resolveOcrModel(provider, ($("#ocrModel")?.value || "").trim());
+
+    if (!apiKey) throw new Error("请填写 OCR API Key");
+    if (provider === "textin" && model === defaultOcrModelForProvider("textin")) {
+      throw new Error("请选择 textin 时，请将 OCR Model 填写为 TextIn App ID");
+    }
+
+    const payload = {
+      provider,
+      api_key: apiKey,
+      base_url: baseUrl || null,
+      model,
+    };
+    const res = await api("/api/ocr/test-connection", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    $("#byokResult").textContent = JSON.stringify(res, null, 2);
+    Toast.info(`OCR 连接测试: ${res.ok ? "OK" : "FAIL"}`);
   },
 
   onProviderChange() {
@@ -2558,6 +2676,34 @@ const ByokSettings = {
     $("#byokResult").textContent = JSON.stringify(res, null, 2);
     Toast.success("Profile 创建成功");
     await this.loadProfiles();
+  },
+
+  async testProfileConnection() {
+    const provider = ($("#byokProvider").value || "").trim();
+    const defaultModel = ($("#byokModelName").value || "").trim();
+    const apiKey = ($("#byokApiKey").value || "").trim();
+    const baseUrl = ($("#byokBaseUrl").value || "").trim();
+
+    if (!provider) throw new Error("请选择 Provider");
+    if (!defaultModel) throw new Error("请填写模型名称");
+    if (!apiKey) throw new Error("请填写 API Key");
+    if (!baseUrl) throw new Error("请填写 Base URL");
+
+    const payload = {
+      provider,
+      default_model: defaultModel,
+      api_key: apiKey,
+      base_url: baseUrl || null,
+    };
+
+    const res = await api("/api/provider-profiles/test-connection", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    $("#byokResult").textContent = JSON.stringify(res, null, 2);
+    Toast.info(`模型连接测试: ${res.ok ? "OK" : "FAIL"}`);
   },
 
   async loadPolicy() {

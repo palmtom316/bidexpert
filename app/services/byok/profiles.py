@@ -462,6 +462,42 @@ def test_provider_profile(profile_id: str) -> tuple[ProviderProfile, bool, str]:
     return profile, ok, detail
 
 
+def test_provider_connection(
+    *,
+    provider: str,
+    default_model: str,
+    api_key: str,
+    base_url: str | None = None,
+) -> tuple[bool, str]:
+    normalized_provider = str(provider or "").strip().lower()
+    model = str(default_model or "").strip()
+    if not normalized_provider:
+        raise ValueError("provider is required")
+    if not model:
+        raise ValueError("default_model is required")
+
+    effective_key = str(api_key or "").strip()
+    if not effective_key:
+        return False, "missing credential"
+
+    global_key, global_base_url = _global_credentials(normalized_provider)
+    del global_key
+    effective_base_url = (base_url or "").strip() or (global_base_url or "").strip() or None
+    if not effective_base_url:
+        return False, "missing base_url"
+
+    probe_profile = SimpleNamespace(
+        provider=normalized_provider,
+        default_model=model,
+        base_url=effective_base_url,
+    )
+    return _completion_probe(
+        profile=probe_profile,
+        api_key=effective_key,
+        base_url=effective_base_url,
+    )
+
+
 def _qualify_case(
     *,
     case_id: str,

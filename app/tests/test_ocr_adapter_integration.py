@@ -9,6 +9,11 @@ def test_create_ocr_adapter_selects_hunyuan() -> None:
     assert adapter.__class__.__name__ == "HunyuanOCRAdapter"
 
 
+def test_create_ocr_adapter_selects_textin() -> None:
+    adapter = ocr_adapter.create_ocr_adapter("textin")
+    assert adapter.__class__.__name__ == "TextInOCRAdapter"
+
+
 def test_professional_ocr_provider_path(monkeypatch) -> None:
     monkeypatch.setattr(pdf_ingest.settings, "ocr_provider", "hunyuan", raising=False)
     monkeypatch.setattr(pdf_ingest, "_render_page_png", lambda *_: b"fake-image")
@@ -19,7 +24,7 @@ def test_professional_ocr_provider_path(monkeypatch) -> None:
             assert page_no == 1
             return "专业OCR文本"
 
-    monkeypatch.setattr(pdf_ingest, "create_ocr_adapter", lambda *_: _FakeAdapter())
+    monkeypatch.setattr(pdf_ingest, "create_ocr_adapter", lambda *_args, **_kwargs: _FakeAdapter())
     text = pdf_ingest._ocr_page_with_configured_provider(b"%PDF", 1)
     assert text == "专业OCR文本"
 

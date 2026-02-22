@@ -46,6 +46,8 @@ from app.api.endpoints.provider import (
     list_provider_profiles_api,
     put_model_policy_api,
     qualify_provider_profile_api,
+    test_ocr_connection_api,
+    test_provider_connection_api,
     test_provider_profile_api,
 )
 from app.api.endpoints.render import render_doc, render_structured_doc
@@ -76,11 +78,13 @@ from app.services.byok import (
     get_project_model_policy,
     list_provider_profiles,
     qualify_provider_profile,
+    test_provider_connection,
     test_provider_profile,
     upsert_project_model_policy,
 )
 from app.services.audit_log import list_audit_logs, record_audit_event
 from app.services.completed_bids import create_completed_bid, delete_completed_bid, list_completed_bids
+from app.services.adapters.ocr import test_ocr_connection
 from app.services.evidence_validator import run_three_gates
 from app.services.expert_library import (
     confirm_structured_conversion_ingest,
@@ -137,6 +141,8 @@ __all__ = [
     "_service_unavailable",
     "create_provider_profile_api",
     "list_provider_profiles_api",
+    "test_provider_connection_api",
+    "test_ocr_connection_api",
     "test_provider_profile_api",
     "qualify_provider_profile_api",
     "delete_provider_profile_api",
@@ -188,7 +194,9 @@ __all__ = [
     "delete_provider_profile",
     "get_project_model_policy",
     "list_provider_profiles",
+    "test_provider_connection",
     "qualify_provider_profile",
+    "test_ocr_connection",
     "test_provider_profile",
     "upsert_project_model_policy",
     "record_audit_event",

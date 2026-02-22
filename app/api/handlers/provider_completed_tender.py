@@ -5,6 +5,8 @@ from collections.abc import Awaitable, Callable
 from fastapi import HTTPException, UploadFile
 
 from app.schemas.contracts import (
+    OCRConnectionTestRequest,
+    OCRConnectionTestResponse,
     AuditLogItem,
     AuditLogListResponse,
     CompletedBidCreateRequest,
@@ -15,6 +17,8 @@ from app.schemas.contracts import (
     ParseTenderResponse,
     ProjectModelPolicyResponse,
     ProjectModelPolicyUpsertRequest,
+    ProviderConnectionTestRequest,
+    ProviderConnectionTestResponse,
     ProviderProfileCreateRequest,
     ProviderProfileCreateResponse,
     ProviderProfileDeleteResponse,
@@ -188,6 +192,50 @@ def test_provider_profile_handler(
         )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+def test_provider_connection_handler(
+    payload: ProviderConnectionTestRequest,
+    *,
+    test_provider_connection_fn: Callable[..., tuple[bool, str]],
+) -> ProviderConnectionTestResponse:
+    try:
+        ok, detail = test_provider_connection_fn(
+            provider=payload.provider,
+            default_model=payload.default_model,
+            api_key=payload.api_key,
+            base_url=payload.base_url,
+        )
+        return ProviderConnectionTestResponse(
+            ok=ok,
+            provider=payload.provider,
+            model=payload.default_model,
+            detail=detail,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+def test_ocr_connection_handler(
+    payload: OCRConnectionTestRequest,
+    *,
+    test_ocr_connection_fn: Callable[..., tuple[str, str, bool, str]],
+) -> OCRConnectionTestResponse:
+    try:
+        provider, model, ok, detail = test_ocr_connection_fn(
+            provider=payload.provider,
+            api_key=payload.api_key,
+            base_url=payload.base_url,
+            model=payload.model,
+        )
+        return OCRConnectionTestResponse(
+            ok=ok,
+            provider=provider,
+            model=model,
+            detail=detail,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 def qualify_provider_profile_handler(
