@@ -3,7 +3,7 @@
   "disqualify_coverage_rate": 1.0,
   "scoring_response_rate": 1.0,
   "key_param_consistency_rate": 1.0,
-  "generated_at": "2026-02-23T19:35:53",
+  "generated_at": "2026-02-23T19:40:16",
   "cases": [
     {
       "case_id": "case_01",
