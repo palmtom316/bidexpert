@@ -17,6 +17,8 @@ logger = logging.getLogger(__name__)
 
 
 _INCONSISTENCY_PATTERN = re.compile(r"(矛盾|冲突|不一致)", re.IGNORECASE)
+_REWRITE_MARKERS = ("rewrite", "non_compliant", "fatal", "disqualify_missing", "not_covered", "缺失")
+_ADJUST_MARKERS = ("warn", "warning", "adjust", "manual", "需人工")
 
 
 def _as_requirement_code_set(requirements: list[Requirement]) -> set[str]:
@@ -59,6 +61,35 @@ def _risk_points_from_issues(modeled_issues: list[dict[str, Any]]) -> list[str]:
         if desc:
             points.append(desc)
     return points
+
+
+def resolve_triage_gate(
+    *,
+    review_status: str | None,
+    review_report: dict[str, Any] | None,
+    warnings: list[str],
+    disqualify_coverage_ok: bool,
+) -> str:
+    normalized_status = str(review_status or "").strip().upper()
+    if not disqualify_coverage_ok:
+        return "REWRITE"
+    if normalized_status in {"REWRITE", "FAIL"}:
+        return "REWRITE"
+
+    issues_raw = review_report.get("issues", []) if isinstance(review_report, dict) else []
+    issue_text = " ".join(str(item).lower() for item in issues_raw)
+    if any(marker in issue_text for marker in _REWRITE_MARKERS):
+        return "REWRITE"
+    if any(marker in issue_text for marker in _ADJUST_MARKERS):
+        return "ADJUST_PASS"
+
+    warnings_text = " ".join(str(item).lower() for item in warnings)
+    if warnings and any(marker in warnings_text for marker in _REWRITE_MARKERS):
+        return "REWRITE"
+    if warnings:
+        return "ADJUST_PASS"
+
+    return "PASS"
 
 
 def _section_coverage_map(

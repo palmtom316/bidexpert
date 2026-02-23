@@ -253,6 +253,7 @@ class DraftGenerationResponse(BaseModel):
     generated_text: str
     evidence_ids: list[str]
     status: str
+    review_gate: str | None = None
     llm_provider: str = _DEFAULT_GENERATE_PROVIDER
     llm_model: str = _DEFAULT_GENERATE_MODEL
     missing_sentences: list[str]

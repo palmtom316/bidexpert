@@ -16,6 +16,7 @@ from app.services.llm_audit import log_llm_call, reserve_budget_persistent
 from app.services.llm_gateway import generate_with_fallback_chain, review_with_fallback_chain
 from app.services.fallback_templates import render_section_fallback_template
 from app.services.pii_policy import sanitize_inbound_text, sanitize_outbound_text
+from app.services.review_engine import resolve_triage_gate
 from app.rag.rag_flow import decompose_requirement, merge_retrieval, retrieve_for_subrequirements
 from app.services.semantic_cache import build_cache_key, get_cache, set_cache
 from app.validator import (
@@ -267,6 +268,43 @@ def _global_fact_conflict_warnings(global_facts: dict | None, generated_text: st
         return []
     conflicts = detect_global_fact_conflicts(global_facts, candidate)
     return [f"global_facts_conflict:{field}" for field in conflicts]
+
+
+def _review_status_hint(review_report: dict | None, fallback_status: str) -> str:
+    if isinstance(review_report, dict):
+        raw_status = review_report.get("status")
+        if isinstance(raw_status, str) and raw_status.strip():
+            return raw_status.strip().upper()
+        raw_approved = review_report.get("approved")
+        if isinstance(raw_approved, bool):
+            return "PASS" if raw_approved else "REWRITE"
+    return "PASS" if fallback_status == "SUPPORTED" else "WARN"
+
+
+def _disqualify_coverage_ok(review_report: dict | None, warnings: list[str]) -> bool:
+    joined_warnings = " ".join(str(item).lower() for item in warnings)
+    if "disqualify" in joined_warnings and ("missing" in joined_warnings or "not_covered" in joined_warnings):
+        return False
+    if "废标" in joined_warnings and "缺失" in joined_warnings:
+        return False
+    if not isinstance(review_report, dict):
+        return True
+    for key in ("disqualify_clause_coverage", "disqualify_coverage", "disqualify_covered"):
+        if key not in review_report:
+            continue
+        value = review_report.get(key)
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, (int, float)):
+            return float(value) >= 1.0
+    issues = review_report.get("issues", [])
+    if isinstance(issues, list):
+        issue_text = " ".join(str(item).lower() for item in issues)
+        if "disqualify" in issue_text and ("missing" in issue_text or "not_covered" in issue_text):
+            return False
+        if "废标" in issue_text and "缺失" in issue_text:
+            return False
+    return True
 
 
 def _run_review_step(
@@ -593,20 +631,32 @@ def generate_draft_with_retrieval(
         fallback_count=fallback_count,
         generation_fallback_index=generation_step.generation_fallback_index,
     )
+    triage_gate = resolve_triage_gate(
+        review_status=_review_status_hint(review_step.review_report, review_step.status),
+        review_report=review_step.review_report,
+        warnings=review_step.warnings,
+        disqualify_coverage_ok=_disqualify_coverage_ok(review_step.review_report, review_step.warnings),
+    )
+    final_status = review_step.status
+    triage_warnings: list[str] = []
+    if triage_gate != "PASS":
+        final_status = "NEED_HUMAN_INPUT"
+        triage_warnings.append(f"review_gate:{triage_gate}")
 
     total_fallbacks = fallback_count + generation_step.generation_fallback_index + review_step.review_fallback_index
 
     response = DraftGenerationResponse(
         generated_text=sanitize.text or "NEED_HUMAN_INPUT",
         evidence_ids=retrieval_ctx.merged_evidence_ids,
-        status=review_step.status,
+        status=final_status,
+        review_gate=triage_gate,
         llm_provider=llm_provider,
         llm_model=llm_model,
         missing_sentences=gate_result.missing_sentences,
         coverage=gate_result.coverage,
         budget_remaining=budget_remaining,
         cache_hit=False,
-        warnings=review_step.warnings + sanitize.warnings + ([budget_warning] if budget_warning else []),
+        warnings=review_step.warnings + triage_warnings + sanitize.warnings + ([budget_warning] if budget_warning else []),
         coverage_map=retrieval_ctx.coverage_map,
         retrieval_log=retrieval_ctx.retrieval_log,
         generation_json=_safe_generation_json(generation_step.generation_payload),
