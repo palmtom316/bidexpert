@@ -405,9 +405,10 @@ def _fallback_chunks_from_blocks(
     doc_id: str,
 ) -> list[EvidenceUpsertItem]:
     chunks: list[EvidenceUpsertItem] = []
+    min_chars = max(24, int(getattr(settings, "expert_chunk_min_chars", 80)))
     for idx, block in enumerate(blocks, start=1):
         text = (block.content_text or "").strip()
-        if len(text) < 24:
+        if len(text) < min_chars:
             continue
         page_no = int(getattr(block, "page_no", 1) or 1)
         section_id = f"fb-sec-{idx:04d}"
