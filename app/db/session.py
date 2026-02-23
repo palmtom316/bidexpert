@@ -18,6 +18,20 @@ engine = create_engine(settings.database_url, **_engine_kwargs)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, class_=Session)
 
 
+def _bootstrap_sqlite_schema() -> None:
+    """Ensure local sqlite schema exists for direct service/test entrypoints."""
+    if engine.dialect.name != "sqlite":
+        return
+
+    from app.db.base import Base
+    from app.models import tables as _tables  # noqa: F401
+
+    Base.metadata.create_all(bind=engine)
+
+
+_bootstrap_sqlite_schema()
+
+
 def get_db() -> Generator[Session, None, None]:
     db = SessionLocal()
     try:

@@ -78,15 +78,20 @@
 
 结果：`5 passed`
 
-### 2.3 全量 app/tests 回归（存在历史阻断）
+### 2.3 全量 app/tests 回归（已清零）
 执行命令：
 
 ```bash
 .venv/bin/python -m pytest app/tests -q
 ```
 
-结果：`206 passed, 16 failed`。
-主要失败原因为测试数据库缺少 `workflow_run` 表（`sqlite3.OperationalError: no such table: workflow_run`），属于既有基线问题，未由本轮 Task 12-15 引入。
+结果：`222 passed, 0 failed`。
+
+阻断项清零说明：
+- 修复 sqlite 直连入口的 schema 自举，确保 `workflow_run` 可用。
+- 修复 G2/G3/G4 阶段在缺失 `outline_id` 场景下的缓存污染。
+- 修复 `enable_review=False` 时 triage gate 误降级状态问题。
+- 清理仓库根目录 markdown 策略违规（`CLAUDE.md` 迁移至 `docs/`）。
 
 ## 3. 质量基准指标
 
@@ -106,4 +111,4 @@
 - Task 14：通过
 - Task 15：通过（专项与基准维度）
 
-综合结论：P3/P4 整改项已完成落地并通过对应验收测试；全量 `app/tests` 仍受历史数据库迁移基线问题影响，建议在后续统一修复 `workflow_run` 迁移链路后再次执行全回归。
+综合结论：P3/P4 整改项已完成落地并通过对应验收测试，全量 `app/tests` 阻断项已清零。

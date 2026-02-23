@@ -631,17 +631,19 @@ def generate_draft_with_retrieval(
         fallback_count=fallback_count,
         generation_fallback_index=generation_step.generation_fallback_index,
     )
-    triage_gate = resolve_triage_gate(
-        review_status=_review_status_hint(review_step.review_report, review_step.status),
-        review_report=review_step.review_report,
-        warnings=review_step.warnings,
-        disqualify_coverage_ok=_disqualify_coverage_ok(review_step.review_report, review_step.warnings),
-    )
     final_status = review_step.status
+    triage_gate = "PASS"
     triage_warnings: list[str] = []
-    if triage_gate != "PASS":
-        final_status = "NEED_HUMAN_INPUT"
-        triage_warnings.append(f"review_gate:{triage_gate}")
+    if review_enabled:
+        triage_gate = resolve_triage_gate(
+            review_status=_review_status_hint(review_step.review_report, review_step.status),
+            review_report=review_step.review_report,
+            warnings=review_step.warnings,
+            disqualify_coverage_ok=_disqualify_coverage_ok(review_step.review_report, review_step.warnings),
+        )
+        if triage_gate != "PASS":
+            final_status = "NEED_HUMAN_INPUT"
+            triage_warnings.append(f"review_gate:{triage_gate}")
 
     total_fallbacks = fallback_count + generation_step.generation_fallback_index + review_step.review_fallback_index
 

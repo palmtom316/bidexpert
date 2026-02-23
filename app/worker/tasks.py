@@ -370,11 +370,17 @@ def section_extract_stage_task(
 )
 def section_generate_stage_task(self, context: dict) -> dict:  # type: ignore[no-untyped-def]
     self.update_state(state="PROGRESS", meta={"stage": "SECTION_GENERATE"})
-    outline_id = _safe_token(str(context.get("outline_id", "")), "outline")
+    raw_outline_id = str(context.get("outline_id", "") or "").strip()
+    outline_id = _safe_token(raw_outline_id, "outline")
+    cache_enabled = bool(raw_outline_id)
     section_key = _safe_token(str(context.get("section_key", "")), "section")
     resume_from_step = str(context.get("resume_from_step", "G1") or "G1")
     try:
-        cached = load_gate_artifact(outline_id=outline_id, section_key=section_key, gate="G2")
+        cached = (
+            load_gate_artifact(outline_id=outline_id, section_key=section_key, gate="G2")
+            if cache_enabled
+            else None
+        )
 
         if cached:
             generated = cached
@@ -388,12 +394,13 @@ def section_generate_stage_task(self, context: dict) -> dict:  # type: ignore[no
                 global_facts=context.get("global_facts") if isinstance(context.get("global_facts"), dict) else None,
                 retries=int(getattr(self.request, "retries", 0)),
             )
-            persist_gate_artifact(
-                outline_id=outline_id,
-                section_key=section_key,
-                gate="G2",
-                payload=generated,
-            )
+            if cache_enabled:
+                persist_gate_artifact(
+                    outline_id=outline_id,
+                    section_key=section_key,
+                    gate="G2",
+                    payload=generated,
+                )
 
         _safe_update_run_progress(
             outline_id=outline_id,
@@ -428,11 +435,17 @@ def section_generate_stage_task(self, context: dict) -> dict:  # type: ignore[no
 )
 def section_validate_stage_task(self, context: dict) -> dict:  # type: ignore[no-untyped-def]
     self.update_state(state="PROGRESS", meta={"stage": "SECTION_VALIDATE"})
-    outline_id = _safe_token(str(context.get("outline_id", "")), "outline")
+    raw_outline_id = str(context.get("outline_id", "") or "").strip()
+    outline_id = _safe_token(raw_outline_id, "outline")
+    cache_enabled = bool(raw_outline_id)
     section_key = _safe_token(str(context.get("section_key", "")), "section")
     resume_from_step = str(context.get("resume_from_step", "G1") or "G1")
     try:
-        cached = load_gate_artifact(outline_id=outline_id, section_key=section_key, gate="G3")
+        cached = (
+            load_gate_artifact(outline_id=outline_id, section_key=section_key, gate="G3")
+            if cache_enabled
+            else None
+        )
 
         if cached:
             validated = cached
@@ -442,12 +455,13 @@ def section_validate_stage_task(self, context: dict) -> dict:  # type: ignore[no
                 requirement_text=str(context.get("requirement_text", "")),
                 generated=generated,
             )
-            persist_gate_artifact(
-                outline_id=outline_id,
-                section_key=section_key,
-                gate="G3",
-                payload=validated,
-            )
+            if cache_enabled:
+                persist_gate_artifact(
+                    outline_id=outline_id,
+                    section_key=section_key,
+                    gate="G3",
+                    payload=validated,
+                )
         _safe_update_run_progress(
             outline_id=outline_id,
             current_step="G3",
@@ -480,23 +494,30 @@ def section_validate_stage_task(self, context: dict) -> dict:  # type: ignore[no
 )
 def section_render_stage_task(self, context: dict) -> dict:  # type: ignore[no-untyped-def]
     self.update_state(state="PROGRESS", meta={"stage": "RENDER_EXPORT"})
-    outline_id = _safe_token(str(context.get("outline_id", "")), "outline")
+    raw_outline_id = str(context.get("outline_id", "") or "").strip()
+    outline_id = _safe_token(raw_outline_id, "outline")
+    cache_enabled = bool(raw_outline_id)
     section_key = _safe_token(str(context.get("section_key", "")), "section")
     resume_from_step = str(context.get("resume_from_step", "G1") or "G1")
     try:
-        cached = load_gate_artifact(outline_id=outline_id, section_key=section_key, gate="G4")
+        cached = (
+            load_gate_artifact(outline_id=outline_id, section_key=section_key, gate="G4")
+            if cache_enabled
+            else None
+        )
         if cached:
             render_result = cached
             generated = context.get("stages", {}).get("generate", {})
         else:
             generated = context.get("stages", {}).get("generate", {})
             render_result = _render_stage(context=context, generated=generated)
-            persist_gate_artifact(
-                outline_id=outline_id,
-                section_key=section_key,
-                gate="G4",
-                payload=render_result,
-            )
+            if cache_enabled:
+                persist_gate_artifact(
+                    outline_id=outline_id,
+                    section_key=section_key,
+                    gate="G4",
+                    payload=render_result,
+                )
         context.setdefault("stages", {})["render"] = render_result
         final_status = str(generated.get("status", "NEED_HUMAN_INPUT"))
         if final_status == "SUPPORTED" and render_result.get("status") == "FAILED":
