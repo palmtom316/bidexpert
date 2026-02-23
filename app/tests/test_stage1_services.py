@@ -14,6 +14,14 @@ def test_pricing_guard_does_not_block_generic_summary_without_amount_context() -
     assert blocked is False
 
 
+def test_pricing_guard_does_not_block_rmb_technical_parameters() -> None:
+    blocked, reasons = detect_pricing_content(
+        "设备技术参数：输入RMB220V，输出频率50Hz，防护等级IP65，信号延迟<10ms，不包含报价信息。"
+    )
+    assert blocked is False
+    assert reasons == []
+
+
 def test_tender_parser_extracts_requirements() -> None:
     text = "第一章 总则。投标人必须具备ISO9001资质。技术评分分值10分。"
     result = parse_tender_requirements(text)
