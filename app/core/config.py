@@ -82,6 +82,15 @@ class Settings(BaseSettings):
     project_token_budget_default: int = 500000
     section_max_input_tokens: int = 16000
     section_max_output_tokens: int = 4000
+    section_output_tokens_map: dict[str, int] = {
+        "default": 4000,
+        "施工方案": 12000,
+        "施工组织设计": 12000,
+        "技术方案": 10000,
+        "商务响应": 6000,
+        "资审文件": 5000,
+        "评标响应": 7000,
+    }
     task_max_retries: int = 2
     task_max_fallbacks: int = 1
     max_parallel_sections: int = 4

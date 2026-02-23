@@ -14,6 +14,7 @@ from app.services.governance import estimate_tokens
 from app.services.global_facts import detect_global_fact_conflicts, extract_global_facts_from_text
 from app.services.llm_audit import log_llm_call, reserve_budget_persistent
 from app.services.llm_gateway import generate_with_fallback_chain, review_with_fallback_chain
+from app.services.fallback_templates import render_section_fallback_template
 from app.services.pii_policy import sanitize_inbound_text, sanitize_outbound_text
 from app.rag.rag_flow import decompose_requirement, merge_retrieval, retrieve_for_subrequirements
 from app.services.semantic_cache import build_cache_key, get_cache, set_cache
@@ -30,13 +31,25 @@ def _schema_evidence_ids(evidence_ids: list[str]) -> list[str]:
     return evidence_ids or ["NEED_EVIDENCE"]
 
 
-def _compose_draft(requirement_text: str, evidence_texts: list[str]) -> str:
-    if not evidence_texts:
-        return ""
-    snippets = [text.strip().split("。", maxsplit=1)[0] for text in evidence_texts if text.strip()]
-    if not snippets:
-        return ""
-    return f"针对要求“{requirement_text}”，我们具备以下能力：" + "；".join(snippets[:3]) + "。"
+def _resolve_section_output_tokens(*, section_type: str | None, requirement_text: str) -> int:
+    output_map = settings.section_output_tokens_map or {}
+    default_limit = int(output_map.get("default", settings.section_max_output_tokens))
+
+    normalized_section_type = (section_type or "").strip()
+    if normalized_section_type and normalized_section_type in output_map:
+        return max(1, int(output_map[normalized_section_type]))
+
+    lowered_text = (requirement_text or "").lower()
+    for key, value in output_map.items():
+        if key == "default":
+            continue
+        normalized_key = str(key).strip()
+        if not normalized_key:
+            continue
+        if normalized_key in requirement_text or normalized_key.lower() in lowered_text:
+            return max(1, int(value))
+
+    return max(1, default_limit)
 
 
 def _expiry_warnings(payloads: list[dict]) -> list[str]:
@@ -175,6 +188,7 @@ def _run_generation_step(
     gen_chain: list[object],
     project_id: str | None,
     requirement_text: str,
+    section_type: str | None,
     generation_evidence_texts: list[str],
     merged_evidence_ids: list[str],
     top_chunks: list[dict],
@@ -219,7 +233,11 @@ def _run_generation_step(
                 next_warnings.append("generate_schema_validation_failed")
     except AdapterUnavailableError:
         generation_fallback_index = len(gen_chain)
-        generated_text_fallback = _compose_draft(requirement_text, generation_evidence_texts) or "NEED_HUMAN_INPUT"
+        generated_text_fallback = render_section_fallback_template(
+            requirement_text=requirement_text,
+            evidence_texts=generation_evidence_texts,
+            section_type=section_type,
+        )
         generation_payload = build_generation_payload(generated_text_fallback, _schema_evidence_ids(merged_evidence_ids))
         next_warnings.append("generate_all_providers_failed_local_template")
 
@@ -358,6 +376,7 @@ def generate_draft_with_retrieval(
     requirement_text: str,
     top_k: int = 5,
     project_id: str | None = None,
+    section_type: str | None = None,
     industry_tag: str | None = None,
     tender_template_id: str | None = None,
     sensitive_strategy: str = "mask",
@@ -445,6 +464,7 @@ def generate_draft_with_retrieval(
         gen_chain=gen_chain,
         project_id=project_id,
         requirement_text=requirement_text,
+        section_type=section_type,
         generation_evidence_texts=retrieval_ctx.generation_evidence_texts,
         merged_evidence_ids=retrieval_ctx.merged_evidence_ids,
         top_chunks=retrieval_ctx.top_chunks,
@@ -456,9 +476,13 @@ def generate_draft_with_retrieval(
     llm_provider = generation_step.llm_provider
     llm_model = generation_step.llm_model
 
+    section_output_limit = _resolve_section_output_tokens(
+        section_type=section_type,
+        requirement_text=requirement_text,
+    )
     if (
         generation_step.input_tokens > settings.section_max_input_tokens
-        or generation_step.output_tokens > settings.section_max_output_tokens
+        or generation_step.output_tokens > section_output_limit
     ):
         return DraftGenerationResponse(
             generated_text="NEED_HUMAN_INPUT",
@@ -474,6 +498,7 @@ def generate_draft_with_retrieval(
                 *generation_step.warnings,
                 f"input_tokens={generation_step.input_tokens}",
                 f"output_tokens={generation_step.output_tokens}",
+                f"section_output_limit={section_output_limit}",
             ],
             coverage_map=retrieval_ctx.coverage_map,
             retrieval_log=retrieval_ctx.retrieval_log,
