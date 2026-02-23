@@ -1,0 +1,8 @@
+{
+  "case_id": "case_01",
+  "tender_text": "项目名称：东区变电站。投标人若提供虚假资料则取消投标资格。技术评分分值10分，提供安全方案可加分2分。",
+  "expected_disqualify_phrases": ["取消投标资格"],
+  "expected_scoring_phrases": ["评分分值10分", "加分2分"],
+  "base_facts_text": "项目名称: 东区变电站\n项目编号: DZ-001\n工期: 180天\n质量标准: 合格\n项目经理: 张三\n证书编号: ZS-001",
+  "candidate_facts_text": "项目名称: 东区变电站\n项目编号: DZ-001\n工期: 180天\n质量标准: 合格\n项目经理: 张三\n证书编号: ZS-001"
+}

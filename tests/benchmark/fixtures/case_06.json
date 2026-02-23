@@ -1,0 +1,8 @@
+{
+  "case_id": "case_06",
+  "tender_text": "关键资料缺失判定资格审查不通过。技术评分18分，不满足核心指标每项扣分2分。",
+  "expected_disqualify_phrases": ["资格审查不通过"],
+  "expected_scoring_phrases": ["评分18分", "扣分2分"],
+  "base_facts_text": "项目名称: 园区电气升级\n项目编号: DQ-006\n工期: 110天\n质量标准: 合格\n项目经理: 周八\n证书编号: ZB-006",
+  "candidate_facts_text": "项目名称: 园区电气升级\n项目编号: DQ-006\n工期: 110天\n质量标准: 合格\n项目经理: 周八\n证书编号: ZB-006"
+}

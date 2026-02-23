@@ -1,0 +1,8 @@
+{
+  "case_id": "case_02",
+  "tender_text": "未按要求提交保证金的投标文件作废标处理。商务评分20分，履约业绩每增加1项加分1分。",
+  "expected_disqualify_phrases": ["作废标处理"],
+  "expected_scoring_phrases": ["评分20分", "加分1分"],
+  "base_facts_text": "项目名称: 西区配网改造\n项目编号: PW-002\n工期: 120天\n质量标准: 优良\n项目经理: 李四\n证书编号: LS-002",
+  "candidate_facts_text": "项目名称: 西区配网改造\n项目编号: PW-002\n工期: 120天\n质量标准: 优良\n项目经理: 李四\n证书编号: LS-002"
+}

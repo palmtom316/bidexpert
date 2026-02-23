@@ -1,0 +1,8 @@
+{
+  "case_id": "case_04",
+  "tender_text": "逾期送达的文件作为无效投标。商务条款评分12分，服务承诺优秀可加分2分。",
+  "expected_disqualify_phrases": ["无效投标"],
+  "expected_scoring_phrases": ["评分12分", "加分2分"],
+  "base_facts_text": "项目名称: 北区照明改造\n项目编号: ZM-004\n工期: 90天\n质量标准: 合格\n项目经理: 赵六\n证书编号: ZL-004",
+  "candidate_facts_text": "项目名称: 北区照明改造\n项目编号: ZM-004\n工期: 90天\n质量标准: 合格\n项目经理: 赵六\n证书编号: ZL-004"
+}

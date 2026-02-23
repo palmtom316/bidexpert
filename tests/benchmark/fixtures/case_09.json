@@ -1,0 +1,8 @@
+{
+  "case_id": "case_09",
+  "tender_text": "文件不符合密封要求不予受理。评分细则13分，交付周期每提前5天加分1分。",
+  "expected_disqualify_phrases": ["不予受理"],
+  "expected_scoring_phrases": ["评分细则13分", "加分1分"],
+  "base_facts_text": "项目名称: 电缆沟治理\n项目编号: DG-009\n工期: 80天\n质量标准: 合格\n项目经理: 钱一\n证书编号: QY-009",
+  "candidate_facts_text": "项目名称: 电缆沟治理\n项目编号: DG-009\n工期: 80天\n质量标准: 合格\n项目经理: 钱一\n证书编号: QY-009"
+}

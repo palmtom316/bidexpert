@@ -1,0 +1,8 @@
+{
+  "case_id": "case_07",
+  "tender_text": "出现串标行为将作资格否决。评标打分11分，售后响应承诺可加分1分。",
+  "expected_disqualify_phrases": ["资格否决"],
+  "expected_scoring_phrases": ["打分11分", "加分1分"],
+  "base_facts_text": "项目名称: 站房智能化\n项目编号: ZF-007\n工期: 140天\n质量标准: 合格\n项目经理: 吴九\n证书编号: WJ-007",
+  "candidate_facts_text": "项目名称: 站房智能化\n项目编号: ZF-007\n工期: 140天\n质量标准: 合格\n项目经理: 吴九\n证书编号: WJ-007"
+}
