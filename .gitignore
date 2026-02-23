@@ -27,3 +27,4 @@ data/tender-expert-lib/99_logs/*
 backups/*
 !backups/.gitkeep
 dummy.pdf
+.worktrees/
