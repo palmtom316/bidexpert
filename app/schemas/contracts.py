@@ -585,6 +585,12 @@ class ExpertLibraryStructuredIngestRequest(BaseModel):
     company_performance_items: list[str] = Field(default_factory=list)
     company_qualification_items: list[str] = Field(default_factory=list)
     pm_qualification_performance_items: list[str] = Field(default_factory=list)
+    safety_production_items: list[str] = Field(default_factory=list)
+    quality_management_items: list[str] = Field(default_factory=list)
+    equipment_capability_items: list[str] = Field(default_factory=list)
+    financial_credit_items: list[str] = Field(default_factory=list)
+    award_honors_items: list[str] = Field(default_factory=list)
+    service_commitment_items: list[str] = Field(default_factory=list)
 
 
 class ExpertLibraryStructuredIngestItem(BaseModel):

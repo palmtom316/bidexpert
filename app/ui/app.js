@@ -750,13 +750,25 @@ const ExpertHub = {
       company_performance_items: splitLines($("#structuredCompanyPerformance").value),
       company_qualification_items: splitLines($("#structuredCompanyQualification").value),
       pm_qualification_performance_items: splitLines($("#structuredPmQualificationPerformance").value),
+      safety_production_items: splitLines($("#structuredSafetyProduction").value),
+      quality_management_items: splitLines($("#structuredQualityManagement").value),
+      equipment_capability_items: splitLines($("#structuredEquipmentCapability").value),
+      financial_credit_items: splitLines($("#structuredFinancialCredit").value),
+      award_honors_items: splitLines($("#structuredAwardHonors").value),
+      service_commitment_items: splitLines($("#structuredServiceCommitment").value),
     };
 
     const totalItems =
       payload.standard_items.length +
       payload.company_performance_items.length +
       payload.company_qualification_items.length +
-      payload.pm_qualification_performance_items.length;
+      payload.pm_qualification_performance_items.length +
+      payload.safety_production_items.length +
+      payload.quality_management_items.length +
+      payload.equipment_capability_items.length +
+      payload.financial_credit_items.length +
+      payload.award_honors_items.length +
+      payload.service_commitment_items.length;
 
     if (!totalItems) {
       Toast.error("请至少填写一条结构化数据");

@@ -285,6 +285,12 @@ def expert_library_ingest_structured_handler(
             company_performance_items=payload.company_performance_items,
             company_qualification_items=payload.company_qualification_items,
             pm_qualification_performance_items=payload.pm_qualification_performance_items,
+            safety_production_items=payload.safety_production_items,
+            quality_management_items=payload.quality_management_items,
+            equipment_capability_items=payload.equipment_capability_items,
+            financial_credit_items=payload.financial_credit_items,
+            award_honors_items=payload.award_honors_items,
+            service_commitment_items=payload.service_commitment_items,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

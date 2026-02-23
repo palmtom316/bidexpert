@@ -52,6 +52,12 @@ _STRUCTURED_CATEGORY_MAP = {
     "COMPANY_PERFORMANCE": ("公司业绩", "COMPANY_PERFORMANCE", "PERFORMANCE"),
     "COMPANY_QUALIFICATION": ("公司资质", "COMPANY_QUALIFICATION", "QUALIFICATION"),
     "PM_QUALIFICATION_PERFORMANCE": ("项目管理人员资质及业绩", "PM_QUAL_PERFORMANCE", "PM_TEAM"),
+    "SAFETY_PRODUCTION": ("安全生产", "SAFETY_PRODUCTION", "SAFETY"),
+    "QUALITY_MANAGEMENT": ("质量管理", "QUALITY_MANAGEMENT", "QUALITY"),
+    "EQUIPMENT_CAPABILITY": ("设备能力", "EQUIPMENT_CAPABILITY", "EQUIPMENT"),
+    "FINANCIAL_CREDIT": ("财务与信用", "FINANCIAL_CREDIT", "FINANCE"),
+    "AWARD_HONORS": ("奖项荣誉", "AWARD_HONORS", "HONOR"),
+    "SERVICE_COMMITMENT": ("服务承诺", "SERVICE_COMMITMENT", "SERVICE"),
 }
 
 _CONVERSION_STAGE_DIR = "08_conversion_sessions"
@@ -1147,6 +1153,12 @@ def ingest_structured_expert_knowledge(
     company_performance_items: list[str],
     company_qualification_items: list[str],
     pm_qualification_performance_items: list[str],
+    safety_production_items: list[str],
+    quality_management_items: list[str],
+    equipment_capability_items: list[str],
+    financial_credit_items: list[str],
+    award_honors_items: list[str],
+    service_commitment_items: list[str],
 ) -> ExpertLibraryStructuredIngestResponse:
     parsed_project = _parse_project_id(project_id)
     _ensure_project_exists(parsed_project.project_uuid)
@@ -1156,6 +1168,12 @@ def ingest_structured_expert_knowledge(
         "COMPANY_PERFORMANCE": _clean_lines(company_performance_items),
         "COMPANY_QUALIFICATION": _clean_lines(company_qualification_items),
         "PM_QUALIFICATION_PERFORMANCE": _clean_lines(pm_qualification_performance_items),
+        "SAFETY_PRODUCTION": _clean_lines(safety_production_items),
+        "QUALITY_MANAGEMENT": _clean_lines(quality_management_items),
+        "EQUIPMENT_CAPABILITY": _clean_lines(equipment_capability_items),
+        "FINANCIAL_CREDIT": _clean_lines(financial_credit_items),
+        "AWARD_HONORS": _clean_lines(award_honors_items),
+        "SERVICE_COMMITMENT": _clean_lines(service_commitment_items),
     }
     if not any(grouped.values()):
         raise ValueError("at least one structured item is required")

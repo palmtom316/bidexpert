@@ -102,6 +102,50 @@ def test_expert_library_structured_ingest_route(monkeypatch) -> None:
     assert result.total_docs == 2
 
 
+def test_expert_library_structured_ingest_route_accepts_extended_categories(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    def _fake_ingest(**kwargs):  # noqa: ANN003
+        captured.update(kwargs)
+        return ExpertLibraryStructuredIngestResponse(
+            status="SUCCEEDED",
+            total_docs=1,
+            total_chunks=1,
+            items=[
+                ExpertLibraryStructuredIngestItem(
+                    category="SAFETY_PRODUCTION",
+                    expert_doc_id="doc-2",
+                    title="安全生产",
+                    chunk_count=1,
+                    qdrant_upserted=1,
+                    warnings=[],
+                )
+            ],
+        )
+
+    monkeypatch.setattr(routes, "ingest_structured_expert_knowledge", _fake_ingest)
+    payload = ExpertLibraryStructuredIngestRequest(
+        project_id="p1",
+        industry_tag="政企",
+        created_by="tester",
+        safety_production_items=["三级安全教育记录完整"],
+        quality_management_items=["质量管理体系证书在有效期内"],
+        equipment_capability_items=["关键机械设备清单齐全"],
+        financial_credit_items=["近三年财务审计报告完整"],
+        award_honors_items=["获得省级优质工程奖"],
+        service_commitment_items=["提供 7x24 现场响应"],
+    )
+    result = routes.expert_library_ingest_structured(payload)
+
+    assert result.status == "SUCCEEDED"
+    assert captured["safety_production_items"] == ["三级安全教育记录完整"]
+    assert captured["quality_management_items"] == ["质量管理体系证书在有效期内"]
+    assert captured["equipment_capability_items"] == ["关键机械设备清单齐全"]
+    assert captured["financial_credit_items"] == ["近三年财务审计报告完整"]
+    assert captured["award_honors_items"] == ["获得省级优质工程奖"]
+    assert captured["service_commitment_items"] == ["提供 7x24 现场响应"]
+
+
 def test_expert_library_ingest_upload_route_with_model_id(monkeypatch) -> None:
     captured: dict[str, object] = {}
 
