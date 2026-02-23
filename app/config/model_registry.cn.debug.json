@@ -1,0 +1,61 @@
+{
+  "version": "cn-debug-1.0",
+  "notes": "国产模型调试配置：低成本优先，保证 JSON 稳定与可回退。",
+  "roles": {
+    "EXTRACT": {
+      "primary": {"provider": "deepseek", "model": "deepseek-chat"},
+      "fallback": [
+        {"provider": "qwen", "model": "qwen-turbo"},
+        {"provider": "glm", "model": "glm-4"}
+      ]
+    },
+    "QUERY_REWRITE": {
+      "primary": {"provider": "qwen", "model": "qwen-turbo"},
+      "fallback": [
+        {"provider": "deepseek", "model": "deepseek-chat"}
+      ]
+    },
+    "EMBED": {
+      "primary": {"provider": "qwen", "model": "text-embedding-v3"},
+      "fallback": [
+        {"provider": "glm", "model": "embedding-3"}
+      ]
+    },
+    "GENERATE": {
+      "primary": {"provider": "qwen", "model": "qwen-plus"},
+      "fallback": [
+        {"provider": "qwen", "model": "qwen-turbo"},
+        {"provider": "deepseek", "model": "deepseek-chat"}
+      ]
+    },
+    "REVIEW": {
+      "primary": {"provider": "deepseek", "model": "deepseek-reasoner"},
+      "fallback": [
+        {"provider": "qwen", "model": "qwen-max"}
+      ]
+    },
+    "PROGRAM_SUPPORT": {
+      "primary": {"provider": "qwen", "model": "qwen-coder"},
+      "fallback": [
+        {"provider": "glm", "model": "glm-4"}
+      ]
+    }
+  },
+  "providers": {
+    "deepseek": {
+      "base_url_env": "DEEPSEEK_BASE_URL",
+      "api_key_env": "DEEPSEEK_API_KEY",
+      "timeout_ms": 60000
+    },
+    "qwen": {
+      "base_url_env": "DASHSCOPE_BASE_URL",
+      "api_key_env": "DASHSCOPE_API_KEY",
+      "timeout_ms": 60000
+    },
+    "glm": {
+      "base_url_env": "ZHIPU_BASE_URL",
+      "api_key_env": "ZHIPU_API_KEY",
+      "timeout_ms": 60000
+    }
+  }
+}

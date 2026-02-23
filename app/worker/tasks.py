@@ -38,6 +38,7 @@ def _generate_stage(
     *,
     project_id: str,
     section_key: str,
+    section_title: str | None,
     requirement_text: str,
     industry_tag: str | None,
     global_facts: dict | None,
@@ -52,6 +53,10 @@ def _generate_stage(
         global_facts=global_facts,
         retry_count=retries,
         fallback_count=0,
+        section_context={
+            "section_key": section_key,
+            "section_title": section_title or section_key,
+        },
     )
     return result.model_dump()
 
@@ -83,6 +88,10 @@ def _safe_update_run_progress(**kwargs) -> None:  # noqa: ANN003
         update_run_progress(**kwargs)
     except ValueError:
         return None
+
+
+def _context_outline_id(context: dict) -> str:
+    return str(context.get("outline_id", "") or "").strip()
 
 
 def _structured_content_from_generated(*, section_key: str, generated: dict) -> dict[str, list[dict[str, str]]]:
@@ -186,14 +195,17 @@ def section_generate_task(
     project_id: str,
     section_key: str,
     requirement_text: str,
+    section_title: str | None = None,
     industry_tag: str | None = None,
 ) -> dict:  # type: ignore[no-untyped-def]
     self.update_state(state="PROGRESS", meta={"stage": "SECTION_GENERATE"})
     return _generate_stage(
         project_id=project_id,
         section_key=section_key,
+        section_title=section_title,
         requirement_text=requirement_text,
         industry_tag=industry_tag,
+        global_facts=None,
         retries=int(getattr(self.request, "retries", 0)),
     )
 
@@ -299,6 +311,7 @@ def section_extract_stage_task(
     requirement_text: str,
     industry_tag: str | None = None,
     resume_from_step: str = "G1",
+    section_title: str | None = None,
 ) -> dict:  # type: ignore[no-untyped-def]
     self.update_state(state="PROGRESS", meta={"stage": "REQUIREMENT_EXTRACT"})
     try:
@@ -331,6 +344,7 @@ def section_extract_stage_task(
             "outline_id": outline_id,
             "project_id": project_id,
             "section_key": section_key,
+            "section_title": section_title or section_key,
             "requirement_text": requirement_text,
             "industry_tag": industry_tag,
             "resume_from_step": resume_from_step,
@@ -362,11 +376,15 @@ def section_extract_stage_task(
 )
 def section_generate_stage_task(self, context: dict) -> dict:  # type: ignore[no-untyped-def]
     self.update_state(state="PROGRESS", meta={"stage": "SECTION_GENERATE"})
-    outline_id = _safe_token(str(context.get("outline_id", "")), "outline")
+    outline_raw = _context_outline_id(context)
+    outline_id = _safe_token(outline_raw, "outline")
     section_key = _safe_token(str(context.get("section_key", "")), "section")
-    resume_from_step = str(context.get("resume_from_step", "G1") or "G1")
     try:
-        cached = load_gate_artifact(outline_id=outline_id, section_key=section_key, gate="G2")
+        cached = (
+            load_gate_artifact(outline_id=outline_id, section_key=section_key, gate="G2")
+            if outline_raw
+            else None
+        )
 
         if cached:
             generated = cached
@@ -374,17 +392,19 @@ def section_generate_stage_task(self, context: dict) -> dict:  # type: ignore[no
             generated = _generate_stage(
                 project_id=str(context["project_id"]),
                 section_key=section_key,
+                section_title=str(context.get("section_title") or section_key),
                 requirement_text=str(context["requirement_text"]),
                 industry_tag=context.get("industry_tag"),
                 global_facts=context.get("global_facts") if isinstance(context.get("global_facts"), dict) else None,
                 retries=int(getattr(self.request, "retries", 0)),
             )
-            persist_gate_artifact(
-                outline_id=outline_id,
-                section_key=section_key,
-                gate="G2",
-                payload=generated,
-            )
+            if outline_raw:
+                persist_gate_artifact(
+                    outline_id=outline_id,
+                    section_key=section_key,
+                    gate="G2",
+                    payload=generated,
+                )
 
         _safe_update_run_progress(
             outline_id=outline_id,
@@ -419,11 +439,15 @@ def section_generate_stage_task(self, context: dict) -> dict:  # type: ignore[no
 )
 def section_validate_stage_task(self, context: dict) -> dict:  # type: ignore[no-untyped-def]
     self.update_state(state="PROGRESS", meta={"stage": "SECTION_VALIDATE"})
-    outline_id = _safe_token(str(context.get("outline_id", "")), "outline")
+    outline_raw = _context_outline_id(context)
+    outline_id = _safe_token(outline_raw, "outline")
     section_key = _safe_token(str(context.get("section_key", "")), "section")
-    resume_from_step = str(context.get("resume_from_step", "G1") or "G1")
     try:
-        cached = load_gate_artifact(outline_id=outline_id, section_key=section_key, gate="G3")
+        cached = (
+            load_gate_artifact(outline_id=outline_id, section_key=section_key, gate="G3")
+            if outline_raw
+            else None
+        )
 
         if cached:
             validated = cached
@@ -433,12 +457,13 @@ def section_validate_stage_task(self, context: dict) -> dict:  # type: ignore[no
                 requirement_text=str(context.get("requirement_text", "")),
                 generated=generated,
             )
-            persist_gate_artifact(
-                outline_id=outline_id,
-                section_key=section_key,
-                gate="G3",
-                payload=validated,
-            )
+            if outline_raw:
+                persist_gate_artifact(
+                    outline_id=outline_id,
+                    section_key=section_key,
+                    gate="G3",
+                    payload=validated,
+                )
         _safe_update_run_progress(
             outline_id=outline_id,
             current_step="G3",
@@ -471,23 +496,28 @@ def section_validate_stage_task(self, context: dict) -> dict:  # type: ignore[no
 )
 def section_render_stage_task(self, context: dict) -> dict:  # type: ignore[no-untyped-def]
     self.update_state(state="PROGRESS", meta={"stage": "RENDER_EXPORT"})
-    outline_id = _safe_token(str(context.get("outline_id", "")), "outline")
+    outline_raw = _context_outline_id(context)
+    outline_id = _safe_token(outline_raw, "outline")
     section_key = _safe_token(str(context.get("section_key", "")), "section")
-    resume_from_step = str(context.get("resume_from_step", "G1") or "G1")
     try:
-        cached = load_gate_artifact(outline_id=outline_id, section_key=section_key, gate="G4")
+        cached = (
+            load_gate_artifact(outline_id=outline_id, section_key=section_key, gate="G4")
+            if outline_raw
+            else None
+        )
         if cached:
             render_result = cached
             generated = context.get("stages", {}).get("generate", {})
         else:
             generated = context.get("stages", {}).get("generate", {})
             render_result = _render_stage(context=context, generated=generated)
-            persist_gate_artifact(
-                outline_id=outline_id,
-                section_key=section_key,
-                gate="G4",
-                payload=render_result,
-            )
+            if outline_raw:
+                persist_gate_artifact(
+                    outline_id=outline_id,
+                    section_key=section_key,
+                    gate="G4",
+                    payload=render_result,
+                )
         context.setdefault("stages", {})["render"] = render_result
         final_status = str(generated.get("status", "NEED_HUMAN_INPUT"))
         if final_status == "SUPPORTED" and render_result.get("status") == "FAILED":
@@ -536,7 +566,15 @@ def section_pipeline_task(
 ) -> dict:  # type: ignore[no-untyped-def]
     """Fallback single-task pipeline: extract -> generate -> validate -> render."""
     outline_id = f"pipeline-{project_id}-{section_key}"
-    context = section_extract_stage_task.run(outline_id, project_id, section_key, requirement_text, industry_tag, "G1")
+    context = section_extract_stage_task.run(
+        outline_id,
+        project_id,
+        section_key,
+        requirement_text,
+        industry_tag,
+        "G1",
+        section_key,
+    )
     context = section_generate_stage_task.run(context)
     context = section_validate_stage_task.run(context)
     return section_render_stage_task.run(context)

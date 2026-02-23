@@ -90,6 +90,8 @@ celery -A app.worker.celery_app.celery_app worker --loglevel=INFO
 
 核心新增变量：
 - `BIDEXPERT_MASTER_KEY_B64`：32 字节主密钥（base64）
+- `MODEL_REGISTRY_PATH`：可选，模型注册表路径（优先于默认 `app/config/model_registry.json`）
+- `SECTION_ROUTING_PATH`：可选，章节路由配置路径（默认 `app/config/section_routing.cn.json`）
 - `BIDEXPERT_OCR_PROVIDER`：OCR 默认引擎（推荐 `glm-ocr`）
 - `BIDEXPERT_GLM_OCR_API_KEY`：GLM OCR API Key
 - `BIDEXPERT_GLM_OCR_BASE_URL`：GLM OCR 网关地址（OpenAI-compatible，通常以 `/v1` 结尾）
@@ -102,6 +104,18 @@ celery -A app.worker.celery_app.celery_app worker --loglevel=INFO
 - `BIDEXPERT_QDRANT_LLM_RERANK_CANDIDATE_LIMIT`：LLM rerank 候选数
 - `BIDEXPERT_QDRANT_LLM_RERANK_TOP_K`：LLM rerank 输出上限
 - `BIDEXPERT_LANGEXTRACT_DEFAULT_MODEL`：可选，LangExtract 默认模型（接口未传 `model_id` 时使用）
+
+国产模型切换示例：
+
+```bash
+# CN_DEBUG（低成本调试）
+export MODEL_REGISTRY_PATH=app/config/model_registry.cn.debug.json
+export SECTION_ROUTING_PATH=app/config/section_routing.cn.json
+
+# CN_PROD（质量优先生产）
+export MODEL_REGISTRY_PATH=app/config/model_registry.cn.prod.json
+export SECTION_ROUTING_PATH=app/config/section_routing.cn.json
+```
 
 ## 注意
 

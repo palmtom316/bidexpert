@@ -22,7 +22,7 @@ ADAPTER_REGISTRY: dict[str, AdapterFactory] = {
     "voyage": VoyageAdapter,
 }
 
-_OPENAI_COMPATIBLE_FALLBACK = {"doubao", "glm"}
+_OPENAI_COMPATIBLE_FALLBACK = {"doubao", "glm", "kimi"}
 
 
 def create_adapter(provider: str) -> LLMAdapter:

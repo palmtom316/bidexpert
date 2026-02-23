@@ -335,6 +335,7 @@ def enqueue_section_workflow_handler(
                 req_text,
                 payload.industry_tag,
                 resume_from_step,
+                payload.section_title,
             ),
             section_generate_stage_task_obj.s(),
             section_validate_stage_task_obj.s(),

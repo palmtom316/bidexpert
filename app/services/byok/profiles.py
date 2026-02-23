@@ -14,7 +14,12 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.config import normalized_app_env, settings
 from app.db.session import session_scope
-from app.llm import default_model_for_role, get_fallback_chain, normalize_role
+from app.llm import (
+    default_model_for_role,
+    get_fallback_chain,
+    get_provider_runtime_config,
+    normalize_role,
+)
 from app.models.tables import KeyStorage, ProjectModelPolicy, ProviderProfile, ProviderScope
 from app.secrets.crypto import decrypt, encrypt, load_master_key
 from app.services.adapters import (
@@ -155,32 +160,57 @@ class ResolvedProfile:
 
 def _global_credentials(provider: str) -> tuple[str | None, str | None]:
     normalized = (provider or "").strip().lower()
+    runtime = get_provider_runtime_config(normalized)
+    runtime_key_env = str(runtime.get("api_key_env", "")).strip()
+    runtime_base_env = str(runtime.get("base_url_env", "")).strip()
+    runtime_api_key = os.getenv(runtime_key_env) if runtime_key_env else None
+    runtime_base_url = os.getenv(runtime_base_env) if runtime_base_env else None
     if normalized == "openai":
         return (
-            settings.openai_api_key or os.getenv("OPENAI_API_KEY"),
-            settings.openai_base_url or os.getenv("OPENAI_BASE_URL"),
+            settings.openai_api_key or os.getenv("OPENAI_API_KEY") or runtime_api_key,
+            settings.openai_base_url or os.getenv("OPENAI_BASE_URL") or runtime_base_url,
         )
     if normalized == "gemini":
         return (
-            settings.gemini_api_key or os.getenv("GEMINI_API_KEY"),
-            settings.gemini_base_url or os.getenv("GEMINI_BASE_URL"),
+            settings.gemini_api_key or os.getenv("GEMINI_API_KEY") or runtime_api_key,
+            settings.gemini_base_url or os.getenv("GEMINI_BASE_URL") or runtime_base_url,
         )
     if normalized == "qwen":
         return (
-            settings.qwen_api_key or os.getenv("QWEN_API_KEY"),
-            settings.qwen_base_url or os.getenv("QWEN_BASE_URL"),
+            settings.qwen_api_key
+            or os.getenv("QWEN_API_KEY")
+            or os.getenv("DASHSCOPE_API_KEY")
+            or runtime_api_key,
+            settings.qwen_base_url
+            or os.getenv("QWEN_BASE_URL")
+            or os.getenv("DASHSCOPE_BASE_URL")
+            or runtime_base_url,
         )
     if normalized == "deepseek":
         return (
-            settings.deepseek_api_key or os.getenv("DEEPSEEK_API_KEY"),
-            settings.deepseek_base_url or os.getenv("DEEPSEEK_BASE_URL"),
+            settings.deepseek_api_key or os.getenv("DEEPSEEK_API_KEY") or runtime_api_key,
+            settings.deepseek_base_url or os.getenv("DEEPSEEK_BASE_URL") or runtime_base_url,
+        )
+    if normalized == "glm":
+        return (
+            os.getenv("GLM_API_KEY")
+            or os.getenv("ZHIPU_API_KEY")
+            or runtime_api_key,
+            os.getenv("GLM_BASE_URL")
+            or os.getenv("ZHIPU_BASE_URL")
+            or runtime_base_url,
+        )
+    if normalized == "kimi":
+        return (
+            os.getenv("KIMI_API_KEY") or runtime_api_key,
+            os.getenv("KIMI_BASE_URL") or runtime_base_url,
         )
     if normalized == "voyage":
         return (
-            settings.voyage_api_key or os.getenv("VOYAGE_API_KEY"),
-            settings.voyage_base_url or os.getenv("VOYAGE_BASE_URL"),
+            settings.voyage_api_key or os.getenv("VOYAGE_API_KEY") or runtime_api_key,
+            settings.voyage_base_url or os.getenv("VOYAGE_BASE_URL") or runtime_base_url,
         )
-    return None, None
+    return runtime_api_key, runtime_base_url
 
 
 def _default_profile(task_type: str) -> ResolvedProfile:
