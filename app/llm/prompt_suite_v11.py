@@ -32,6 +32,9 @@ def build_tender_parsing_prompt(tender_md: str) -> str:
         f"{GENERAL_RULES}\n\n"
         "你是招标规则拆解引擎。\n"
         "任务：抽取 mandatory_requirements、scoring_items、deliverables。\n"
+        "解析时必须覆盖四类领域：资审、商务、技术、评标。\n"
+        "必须显式提取废标条款、资格否决条款、扣分条款和加分条款。\n"
+        "废标/资格否决与扣分条款必须分开标注，不得混淆。\n"
         "必须输出合法 JSON。\n"
         f"输入：\n{tender_md}\n"
     )

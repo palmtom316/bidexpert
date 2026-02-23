@@ -17,6 +17,12 @@ def test_prompt_suite_contains_required_templates() -> None:
     parsing = build_tender_parsing_prompt("demo")
     assert "mandatory_requirements" in parsing
     assert "scoring_items" in parsing
+    assert "资审" in parsing
+    assert "商务" in parsing
+    assert "技术" in parsing
+    assert "评标" in parsing
+    assert "废标条款" in parsing
+    assert "资格否决" in parsing
 
     facts = build_global_facts_prompt("demo")
     assert "project_name" in facts

@@ -35,9 +35,10 @@ from app.extract.tender_parser import ANCHOR_PATTERN, SCORE_PATTERN, parse_tende
 _SENTENCE_SPLIT = re.compile(r"[。；;\n]+")
 _MUST_PATTERN = re.compile(r"(必须|应当|不得|须|需|符合|满足|提交|提供)")
 _SCORING_PATTERN = re.compile(r"(评分|分值|得分|评审|评分办法|评分标准|扣分)")
-_BONUS_PATTERN = re.compile(r"(加分|优先|奖励|额外分|附加分|同等条件优先)")
+_BONUS_PATTERN = re.compile(r"(加分|优先|奖励|额外分|附加分|同等条件优先|优先考虑)")
+_PENALTY_PATTERN = re.compile(r"(扣分|减分|每项扣|每处扣)")
 _BIDDING_PATTERN = re.compile(r"(投标|方案|技术|服务|实施|交付|工期|团队|资质|业绩|案例|保障)")
-_RISK_PATTERN = re.compile(r"(废标|无效标|不予受理|拒绝|保证金|罚则|违约|扣分|否决)")
+_RISK_PATTERN = re.compile(r"(废标|无效标|不予受理|拒绝|保证金|罚则|违约|否决|资格审查不通过|取消投标资格)")
 
 
 @dataclass
@@ -116,8 +117,9 @@ def _score_weight(text: str) -> float | None:
 def _classify_line(*, content: str, page_no: int, section_anchor: str | None) -> list[_LineInsight]:
     score = _score_weight(content)
     is_must = bool(_MUST_PATTERN.search(content))
-    is_scoring = bool(_SCORING_PATTERN.search(content)) or score is not None
     is_bonus = bool(_BONUS_PATTERN.search(content))
+    is_penalty = bool(_PENALTY_PATTERN.search(content))
+    is_scoring = bool(_SCORING_PATTERN.search(content)) or score is not None or is_bonus or is_penalty
     is_bidding = bool(_BIDDING_PATTERN.search(content)) or ("要求" in content and len(content) >= 10)
     is_risk = bool(_RISK_PATTERN.search(content))
 
@@ -197,10 +199,13 @@ def _insights_from_parsed_requirements(items: list[ParsedRequirement]) -> list[_
         score_weight = float(req.score_weight) if req.score_weight is not None else _score_weight(content)
         is_must = bool(req.is_must)
         format_required = bool((req.format_constraints or {}).get("format_required"))
-        is_scoring = score_weight is not None or bool(_SCORING_PATTERN.search(content))
-        is_bonus = bool(_BONUS_PATTERN.search(content))
+        disqualify_rule = bool((req.format_constraints or {}).get("disqualify_rule"))
+        scoring_rule_type = str((req.format_constraints or {}).get("scoring_rule_type") or "").lower()
+        is_bonus = scoring_rule_type == "bonus" or bool(_BONUS_PATTERN.search(content))
+        is_penalty = scoring_rule_type == "penalty" or bool(_PENALTY_PATTERN.search(content))
+        is_scoring = score_weight is not None or bool(_SCORING_PATTERN.search(content)) or is_bonus or is_penalty
         is_bidding = bool(_BIDDING_PATTERN.search(content)) or ("要求" in content and len(content) >= 10) or format_required
-        is_risk = bool(_RISK_PATTERN.search(content))
+        is_risk = disqualify_rule or bool(_RISK_PATTERN.search(content))
 
         if is_bidding:
             mapped.append(
