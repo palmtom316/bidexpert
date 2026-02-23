@@ -33,6 +33,15 @@ class Settings(BaseSettings):
     qdrant_hybrid_topk_max: int = 100
     qdrant_prompt_topn_min: int = 10
     qdrant_prompt_topn_max: int = 20
+    qdrant_sparse_bm25_k1: float = 1.2
+    qdrant_sparse_bm25_b: float = 0.75
+    qdrant_synonyms_enabled: bool = True
+    qdrant_synonym_expand_limit: int = 8
+    qdrant_rerank_ab_variant: str = "A"
+    qdrant_rerank_weight_profiles: dict[str, dict[str, float]] = {
+        "A": {"base": 0.55, "lexical": 0.40, "quality": 0.05},
+        "B": {"base": 0.45, "lexical": 0.45, "quality": 0.10},
+    }
     qdrant_cross_encoder_enabled: bool = False
     qdrant_cross_encoder_model: str = "BAAI/bge-reranker-base"
     qdrant_llm_rerank_enabled: bool = False

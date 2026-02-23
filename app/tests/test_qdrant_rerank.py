@@ -28,6 +28,40 @@ def test_rerank_hits_promotes_lexical_match() -> None:
     assert len(reranked) == 2
 
 
+def test_rerank_hits_supports_ab_weight_profiles(monkeypatch) -> None:
+    hits = [
+        RetrievedEvidence(
+            chunk_id="dense_win",
+            score=0.94,
+            text="与查询无直接词面重合，但语义相近。",
+            payload={"quality_score": 85.0},
+        ),
+        RetrievedEvidence(
+            chunk_id="lexical_win",
+            score=0.48,
+            text="资质证明、资信证明、资格证明均已提交。",
+            payload={"quality_score": 85.0},
+        ),
+    ]
+    monkeypatch.setattr(
+        qdrant_store.settings,
+        "qdrant_rerank_weight_profiles",
+        {
+            "A": {"base": 0.8, "lexical": 0.15, "quality": 0.05},
+            "B": {"base": 0.2, "lexical": 0.75, "quality": 0.05},
+        },
+        raising=False,
+    )
+
+    monkeypatch.setattr(qdrant_store.settings, "qdrant_rerank_ab_variant", "A", raising=False)
+    ranked_a = _rerank_hits(query="资质证明", items=hits, top_k=2)
+    monkeypatch.setattr(qdrant_store.settings, "qdrant_rerank_ab_variant", "B", raising=False)
+    ranked_b = _rerank_hits(query="资质证明", items=hits, top_k=2)
+
+    assert ranked_a[0].chunk_id == "dense_win"
+    assert ranked_b[0].chunk_id == "lexical_win"
+
+
 def test_build_query_filter_includes_project_id_for_isolation() -> None:
     store = object.__new__(qdrant_store.QdrantStore)
     query_filter = store._build_query_filter(industry_tag="政企", project_id="project-a")

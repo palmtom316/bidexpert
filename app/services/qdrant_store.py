@@ -3,7 +3,9 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import math
 import re
+import threading
 import uuid
 from collections import Counter
 from dataclasses import dataclass
@@ -17,6 +19,7 @@ from app.core.config import settings
 from app.schemas.contracts import EvidenceSearchHit, EvidenceUpsertItem
 from app.services.byok import resolve_profile_for_task
 from app.services.embedding import embed_text
+from app.services.retrieval_synonyms import expand_query_text
 
 logger = logging.getLogger(__name__)
 TOKEN_PATTERN = re.compile(r"[\w\u4e00-\u9fff]+", re.UNICODE)
@@ -24,6 +27,10 @@ NUMERIC_TOKEN_PATTERN = re.compile(r"\d+(?:\.\d+)?\s*(?:kV|KV|kv|V|A|kW|MW|Hz|MH
 MODEL_TOKEN_PATTERN = re.compile(r"\b[A-Za-z]{1,6}[-_ ]?\d{2,}[A-Za-z0-9-]*\b")
 
 SPARSE_VECTOR_NAME = "bm25_sparse"
+_SPARSE_STATS_LOCK = threading.Lock()
+_SPARSE_DOC_FREQ: Counter[str] = Counter()
+_SPARSE_DOC_COUNT = 0
+_SPARSE_TOKEN_TOTAL = 0
 
 
 @dataclass
@@ -38,18 +45,97 @@ def _tokenize(text: str) -> list[str]:
     return TOKEN_PATTERN.findall((text or "").lower())
 
 
-def _build_sparse_vector(text: str) -> dict[int, float]:
+def _clamp(value: float, *, minimum: float, maximum: float) -> float:
+    return max(minimum, min(maximum, value))
+
+
+def _register_sparse_documents(texts: list[str]) -> None:
+    global _SPARSE_DOC_COUNT, _SPARSE_TOKEN_TOTAL
+    with _SPARSE_STATS_LOCK:
+        for text in texts:
+            tokens = _tokenize(text)
+            if not tokens:
+                continue
+            _SPARSE_DOC_COUNT += 1
+            _SPARSE_TOKEN_TOTAL += len(tokens)
+            for token in set(tokens):
+                _SPARSE_DOC_FREQ[token] += 1
+
+
+def _sparse_stats_snapshot() -> tuple[int, int, dict[str, int]]:
+    with _SPARSE_STATS_LOCK:
+        return _SPARSE_DOC_COUNT, _SPARSE_TOKEN_TOTAL, dict(_SPARSE_DOC_FREQ)
+
+
+def _bm25_idf(token: str, *, doc_count: int, doc_freq: int) -> float:
+    numerator = max(0.0, float(doc_count - doc_freq) + 0.5)
+    denominator = float(doc_freq) + 0.5
+    return math.log((numerator / denominator) + 1.0)
+
+
+def _build_sparse_token_weights(text: str) -> dict[str, float]:
     tokens = _tokenize(text)
     if not tokens:
         return {}
+
+    doc_count, token_total, doc_freq_map = _sparse_stats_snapshot()
+    if doc_count <= 0:
+        doc_count = 1
+        token_total = len(tokens)
+
+    avg_doc_len = max(1.0, float(token_total) / float(doc_count))
+    doc_len = max(1.0, float(len(tokens)))
+    k1 = max(0.01, float(getattr(settings, "qdrant_sparse_bm25_k1", 1.2)))
+    b = _clamp(float(getattr(settings, "qdrant_sparse_bm25_b", 0.75)), minimum=0.0, maximum=1.0)
+
     tf = Counter(tokens)
-    total = len(tokens)
+    weights: dict[str, float] = {}
+    for token, term_freq in tf.items():
+        df = int(doc_freq_map.get(token, 0))
+        idf = _bm25_idf(token, doc_count=doc_count, doc_freq=df)
+        denominator = float(term_freq) + k1 * (1.0 - b + b * (doc_len / avg_doc_len))
+        tf_component = (float(term_freq) * (k1 + 1.0)) / max(1e-8, denominator)
+        weights[token] = idf * tf_component
+    return weights
+
+
+def _build_sparse_vector(text: str) -> dict[int, float]:
+    weights = _build_sparse_token_weights(text)
+    if not weights:
+        return {}
     indices_values: dict[int, float] = {}
-    for token, count in tf.items():
+    for token, weight in weights.items():
         digest = hashlib.blake2b(token.encode("utf-8"), digest_size=8).digest()
         idx = int.from_bytes(digest, byteorder="big", signed=False) % (2**31)
-        indices_values[idx] = count / total
+        indices_values[idx] = weight
     return indices_values
+
+
+def _reset_sparse_stats_for_tests() -> None:
+    global _SPARSE_DOC_COUNT, _SPARSE_TOKEN_TOTAL
+    with _SPARSE_STATS_LOCK:
+        _SPARSE_DOC_COUNT = 0
+        _SPARSE_TOKEN_TOTAL = 0
+        _SPARSE_DOC_FREQ.clear()
+
+
+def _register_sparse_documents_for_tests(texts: list[str]) -> None:
+    _register_sparse_documents(texts)
+
+
+def _resolve_rerank_weights() -> tuple[float, float, float]:
+    defaults = {"base": 0.55, "lexical": 0.40, "quality": 0.05}
+    profiles = getattr(settings, "qdrant_rerank_weight_profiles", {}) or {}
+    variant = str(getattr(settings, "qdrant_rerank_ab_variant", "A") or "A").strip().upper() or "A"
+
+    profile = profiles.get(variant) or profiles.get("A") or defaults
+    base = float(profile.get("base", defaults["base"]))
+    lexical = float(profile.get("lexical", defaults["lexical"]))
+    quality = float(profile.get("quality", defaults["quality"]))
+    total = base + lexical + quality
+    if total <= 0:
+        return defaults["base"], defaults["lexical"], defaults["quality"]
+    return base / total, lexical / total, quality / total
 
 
 def _rerank_hits(query: str, items: list[RetrievedEvidence], top_k: int) -> list[RetrievedEvidence]:
@@ -57,6 +143,7 @@ def _rerank_hits(query: str, items: list[RetrievedEvidence], top_k: int) -> list
     normalized_query = (query or "").strip().lower()
     if not query_tokens and not normalized_query:
         return items[:top_k]
+    base_weight, lexical_weight, quality_weight = _resolve_rerank_weights()
 
     def _lexical_relevance(text: str) -> float:
         normalized_text = (text or "").strip().lower()
@@ -87,7 +174,7 @@ def _rerank_hits(query: str, items: list[RetrievedEvidence], top_k: int) -> list
         overlap = _lexical_relevance(item.text)
         quality = float(item.payload.get("quality_score", 0.0) or 0.0) / 100.0
         quality = max(0.0, min(1.0, quality))
-        return base_score * 0.55 + overlap * 0.40 + quality * 0.05
+        return base_score * base_weight + overlap * lexical_weight + quality * quality_weight
 
     scored = [(item, _rerank_score(item)) for item in items]
     ranked = sorted(scored, key=lambda pair: pair[1], reverse=True)
@@ -403,6 +490,7 @@ class QdrantStore:
 
         normalized_project_id = (project_id or "").strip() or None
         embed_profile = resolve_profile_for_task(project_id=project_id, task_type="EMBED")
+        _register_sparse_documents([chunk.text for chunk in chunks if chunk.text])
         points: list[PointStruct] = []
         for chunk in chunks:
             source_locator = chunk.source_locator or {}
@@ -605,6 +693,12 @@ class QdrantStore:
         project_id: str | None = None,
     ) -> list[RetrievedEvidence]:
         embed_profile = resolve_profile_for_task(project_id=project_id, task_type="EMBED")
+        query_text = (query or "").strip()
+        if bool(getattr(settings, "qdrant_synonyms_enabled", True)):
+            query_text = expand_query_text(
+                query_text,
+                max_expansions=int(getattr(settings, "qdrant_synonym_expand_limit", 8)),
+            )
         query_filter = self._build_query_filter(industry_tag=industry_tag, project_id=project_id)
         prompt_top_n = max(
             int(settings.qdrant_prompt_topn_min),
@@ -619,7 +713,7 @@ class QdrantStore:
         )
 
         dense_query = embed_text(
-            query,
+            query_text,
             self.vector_size,
             model_id=embed_profile.model,
             provider=embed_profile.provider,
@@ -635,7 +729,7 @@ class QdrantStore:
 
         sparse_hits: list[object] = []
         if self._sparse_enabled:
-            sparse_query = _build_sparse_vector(query)
+            sparse_query = _build_sparse_vector(query_text)
             sparse_hits = self._sparse_search(
                 sparse_vector=sparse_query,
                 query_filter=query_filter,
@@ -657,14 +751,14 @@ class QdrantStore:
                     top_k=rerank_candidate_limit,
                 )
                 reranked = _rerank_hits_with_optional_llm(
-                    query=query,
+                    query=query_text,
                     items=fused,
                     top_k=prompt_top_n,
                     project_id=project_id,
                 )
-                return _apply_key_fact_filter(query=query, items=reranked)[:prompt_top_n]
+                return _apply_key_fact_filter(query=query_text, items=reranked)[:prompt_top_n]
             fused = self._fuse_hybrid(vector_hits=vector_hits, sparse_hits=sparse_hits, top_k=prompt_top_n)
-            return _apply_key_fact_filter(query=query, items=fused)[:prompt_top_n]
+            return _apply_key_fact_filter(query=query_text, items=fused)[:prompt_top_n]
 
         return []
 
