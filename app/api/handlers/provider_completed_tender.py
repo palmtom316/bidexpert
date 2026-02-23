@@ -60,7 +60,7 @@ def profile_to_item(profile) -> ProviderProfileItem:
 def completed_bid_to_item(record) -> CompletedBidItem:
     return CompletedBidItem(
         id=str(record.id),
-        project_id=record.project_id,
+        project_id=str(record.project_id) if record.project_id else None,
         project_name=record.project_name,
         engineering_category=record.engineering_category,
         tenderer=record.tenderer,

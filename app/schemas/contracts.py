@@ -4,6 +4,11 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field
 
+from app.llm.model_registry import default_model_for_role
+from app.llm.roles import ModelRole
+
+_DEFAULT_GENERATE_PROVIDER, _DEFAULT_GENERATE_MODEL = default_model_for_role(ModelRole.GENERATE)
+
 
 class ParseTenderRequest(BaseModel):
     text: str = Field(min_length=1)
@@ -247,8 +252,8 @@ class DraftGenerationResponse(BaseModel):
     generated_text: str
     evidence_ids: list[str]
     status: str
-    llm_provider: str = "gemini"
-    llm_model: str = "gemini-3-pro"
+    llm_provider: str = _DEFAULT_GENERATE_PROVIDER
+    llm_model: str = _DEFAULT_GENERATE_MODEL
     missing_sentences: list[str]
     coverage: float
     budget_remaining: int | None = None

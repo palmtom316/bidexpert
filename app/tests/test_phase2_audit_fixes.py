@@ -9,12 +9,14 @@ from sqlalchemy.orm import sessionmaker
 
 from app.core.config import Settings
 from app.db.base import Base
+from app.db.types import GUID
 from app.models import tables  # noqa: F401
-from app.models.tables import AuditLog, ExpertDoc, LLMCallLog
+from app.models.tables import AuditLog, CompletedBid, ExpertDoc, LLMCallLog
 from app.services.embedding import embed_text
 from app.services.adapters import GenerationResult
 from app.services.generation_pipeline import generate_draft_with_retrieval
 from app.services.qdrant_store import RetrievedEvidence
+from app.schemas.contracts import DraftGenerationResponse
 
 
 def test_sqlite_schema_supports_uuid_and_array_like_fields() -> None:
@@ -137,6 +139,77 @@ def test_runtime_baseline_rejects_production_alias(monkeypatch) -> None:
 
     with pytest.raises(RuntimeError, match="BIDEXPERT_APP_ENV=prod"):
         config.validate_runtime_baseline()
+
+
+def test_runtime_baseline_requires_master_key_in_prod(monkeypatch) -> None:
+    from app.core import config
+
+    monkeypatch.setattr(config.settings, "app_env", "prod", raising=False)
+    monkeypatch.setattr(config.settings, "vault_redis_fallback_enabled", False, raising=False)
+    monkeypatch.setattr(config.settings, "cors_origins", "https://bidexpert.example.com", raising=False)
+    monkeypatch.setattr(
+        config.settings,
+        "database_url",
+        "postgresql+psycopg://bidexpert:secure@db.example.com:5432/bidexpert",
+        raising=False,
+    )
+    monkeypatch.setattr(
+        config.settings,
+        "redis_url",
+        "redis://:secure-password@redis.example.com:6379/0",
+        raising=False,
+    )
+    monkeypatch.setattr(config.settings, "master_key_b64", None, raising=False)
+
+    with pytest.raises(RuntimeError, match="BIDEXPERT_MASTER_KEY_B64"):
+        config.validate_runtime_baseline()
+
+
+def test_runtime_baseline_rejects_unregistered_default_chain_model(monkeypatch) -> None:
+    from app.core import config
+
+    monkeypatch.setattr(config.settings, "app_env", "dev", raising=False)
+    monkeypatch.setattr(
+        config,
+        "list_registry_entries",
+        lambda: (SimpleNamespace(provider="qwen", model_name=config.settings.langextract_default_model),),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        config,
+        "get_fallback_chain",
+        lambda _role: [("ghost", "missing-model")],
+        raising=False,
+    )
+
+    with pytest.raises(RuntimeError, match="unregistered model"):
+        config.validate_runtime_baseline()
+
+
+def test_draft_generation_response_defaults_follow_registry_generate_default() -> None:
+    from app.llm.model_registry import default_model_for_role
+    from app.llm.roles import ModelRole
+
+    provider, model = default_model_for_role(ModelRole.GENERATE)
+    response = DraftGenerationResponse(
+        generated_text="已生成内容",
+        evidence_ids=[],
+        status="SUPPORTED",
+        missing_sentences=[],
+        coverage=1.0,
+    )
+
+    assert response.llm_provider == provider
+    assert response.llm_model == model
+
+
+def test_completed_bid_project_id_uses_uuid_foreign_key() -> None:
+    project_id_column = CompletedBid.__table__.c.project_id
+    assert isinstance(project_id_column.type, GUID)
+    assert any(
+        fk.column.table.name == "project" and fk.column.name == "id"
+        for fk in project_id_column.foreign_keys
+    )
 
 
 def test_audit_log_schema_roundtrip() -> None:

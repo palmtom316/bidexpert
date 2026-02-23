@@ -393,7 +393,9 @@ class CompletedBid(Base):
     __tablename__ = "completed_bid"
 
     id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
-    project_id: Mapped[str | None] = mapped_column(Text)
+    project_id: Mapped[uuid.UUID | None] = mapped_column(
+        GUID(), ForeignKey("project.id", ondelete="SET NULL")
+    )
     project_name: Mapped[str] = mapped_column(Text, nullable=False)
     engineering_category: Mapped[str | None] = mapped_column(Text)
     tenderer: Mapped[str | None] = mapped_column(Text)

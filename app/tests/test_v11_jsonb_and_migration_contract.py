@@ -66,3 +66,14 @@ def test_scoring_report_project_id_is_uuid_foreign_key_after_migrations() -> Non
 
     foreign_keys = _sqlite_foreign_keys(db_path, "scoring_report")
     assert any(row[3] == "project_id" and row[2] == "project" and row[4] == "id" for row in foreign_keys)
+
+
+def test_completed_bid_project_id_is_uuid_foreign_key_after_migrations() -> None:
+    db_path = Path("bidexpert.db")
+    assert db_path.exists(), "expected sqlite database at project root"
+
+    columns = _sqlite_column_types(db_path, "completed_bid")
+    assert columns.get("project_id") == "UUID"
+
+    foreign_keys = _sqlite_foreign_keys(db_path, "completed_bid")
+    assert any(row[3] == "project_id" and row[2] == "project" and row[4] == "id" for row in foreign_keys)

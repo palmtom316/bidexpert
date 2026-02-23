@@ -1,4 +1,10 @@
+import base64
+import binascii
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from app.llm.model_registry import get_fallback_chain, list_registry_entries
+from app.llm.roles import ModelRole
 
 
 class Settings(BaseSettings):
@@ -112,7 +118,7 @@ class Settings(BaseSettings):
     review_ensemble_size: int = 3
     rl_routing_enabled: bool = False
     rl_routing_exploration_rate: float = 0.1
-    langextract_default_model: str = "gemini-3-pro"
+    langextract_default_model: str = "qwen3.5"
     context_compression_use_llm: bool = True
     context_compression_max_items: int = 6
     context_compression_max_chars: int = 4000
@@ -135,6 +141,30 @@ def normalized_app_env() -> str:
     return (settings.app_env or "").strip().lower()
 
 
+def _validate_model_registry_defaults() -> None:
+    entries = list_registry_entries()
+    if not entries:
+        raise RuntimeError("Model registry must contain at least one model entry")
+
+    registered_keys = {(entry.provider, entry.model_name) for entry in entries}
+    registered_model_names = {entry.model_name for entry in entries}
+
+    default_extract_model = (settings.langextract_default_model or "").strip()
+    if not default_extract_model:
+        raise RuntimeError("BIDEXPERT_LANGEXTRACT_DEFAULT_MODEL must not be empty")
+    if default_extract_model not in registered_model_names:
+        raise RuntimeError(
+            f"BIDEXPERT_LANGEXTRACT_DEFAULT_MODEL={default_extract_model!r} is not registered"
+        )
+
+    for role in ModelRole:
+        for provider, model in get_fallback_chain(role):
+            if (provider, model) not in registered_keys:
+                raise RuntimeError(
+                    f"Model registry default chain for {role.value} contains unregistered model {provider}:{model}"
+                )
+
+
 def validate_runtime_baseline() -> None:
     normalized = normalized_app_env()
     if normalized in {"production", "prd"}:
@@ -143,6 +173,17 @@ def validate_runtime_baseline() -> None:
         raise RuntimeError(
             f"Unsupported BIDEXPERT_APP_ENV={settings.app_env!r}; allowed values: dev, test, prod"
         )
+    _validate_model_registry_defaults()
+    if normalized == "prod":
+        raw_master_key = (settings.master_key_b64 or "").strip()
+        if not raw_master_key:
+            raise RuntimeError("BIDEXPERT_MASTER_KEY_B64 is required when BIDEXPERT_APP_ENV=prod")
+        try:
+            decoded = base64.b64decode(raw_master_key, validate=True)
+        except (binascii.Error, ValueError) as exc:
+            raise RuntimeError("BIDEXPERT_MASTER_KEY_B64 must be valid base64") from exc
+        if len(decoded) != 32:
+            raise RuntimeError("BIDEXPERT_MASTER_KEY_B64 must decode to 32 bytes")
     if normalized == "prod" and settings.vault_redis_fallback_enabled:
         raise RuntimeError(
             "BIDEXPERT_VAULT_REDIS_FALLBACK_ENABLED must be false when BIDEXPERT_APP_ENV=prod"
