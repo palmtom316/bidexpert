@@ -45,6 +45,8 @@ def _pdf_payload(
         int(page.page_no): {
             "source": page.source or ("pypdf+ocr:tesseract" if page.ocr_used else "pypdf"),
             "ocr_used": bool(page.ocr_used),
+            "ocr_confidence": getattr(page, "ocr_confidence", None),
+            "needs_manual_review": bool(getattr(page, "needs_manual_review", False)),
         }
         for page in pages
     }

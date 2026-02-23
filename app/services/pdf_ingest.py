@@ -43,6 +43,8 @@ class PageExtract:
     image_count: int = 0
     text_len: int = 0
     non_whitespace_ratio: float = 0.0
+    ocr_confidence: float | None = None
+    needs_manual_review: bool = False
 
 
 def _non_whitespace_ratio(text: str) -> float:
@@ -108,6 +110,15 @@ def _resolve_effective_ocr_provider(ocr_provider: str | None) -> str:
     return normalized
 
 
+def _estimate_local_ocr_confidence(text: str) -> float:
+    normalized = str(text or "").strip()
+    if not normalized:
+        return 0.35
+    length_score = min(len(normalized) / 220.0, 1.0)
+    density_score = min(len(re.sub(r"\s+", "", normalized)) / 180.0, 1.0)
+    return max(0.35, min(0.9, 0.45 + 0.35 * length_score + 0.20 * density_score))
+
+
 def _ocr_page_with_configured_provider(
     pdf_bytes: bytes,
     page_no: int,
@@ -148,6 +159,7 @@ def extract_pages_v2(
 
     text_len_threshold = max(1, int(settings.pdf_ocr_textlen_threshold))
     non_ws_threshold = max(0.0, float(settings.pdf_ocr_min_non_whitespace_ratio))
+    confidence_threshold = max(0.0, min(1.0, float(settings.pdf_ocr_confidence_threshold)))
     render_dpi = max(96, int(dpi or settings.pdf_render_dpi))
     provider = _resolve_effective_ocr_provider(ocr_provider)
 
@@ -166,14 +178,18 @@ def extract_pages_v2(
                     image_count=page.image_count,
                     text_len=text_len,
                     non_whitespace_ratio=non_ws_ratio,
+                    ocr_confidence=None,
+                    needs_manual_review=False,
                 )
             )
             continue
 
         try:
             page_source = f"pypdf+ocr:{provider}"
+            ocr_confidence = 0.0
             if provider in {"tesseract", "local", ""}:
                 ocr_text = _ocr_page_with_fitz(pdf_bytes, page.page_no, render_dpi)
+                ocr_confidence = _estimate_local_ocr_confidence(ocr_text)
             else:
                 try:
                     remote_kwargs: dict[str, str] = {}
@@ -190,9 +206,12 @@ def extract_pages_v2(
                         ocr_provider=provider,
                         **remote_kwargs,
                     )
+                    ocr_confidence = min(0.98, _estimate_local_ocr_confidence(ocr_text) + 0.08)
                 except Exception:  # noqa: BLE001
                     ocr_text = _ocr_page_with_fitz(pdf_bytes, page.page_no, render_dpi)
+                    ocr_confidence = _estimate_local_ocr_confidence(ocr_text)
                     page_source = "pypdf+ocr:tesseract"
+            needs_manual_review = ocr_confidence < confidence_threshold
             extracted.append(
                 PageExtract(
                     page_no=page.page_no,
@@ -202,6 +221,8 @@ def extract_pages_v2(
                     image_count=page.image_count,
                     text_len=len(ocr_text),
                     non_whitespace_ratio=_non_whitespace_ratio(ocr_text),
+                    ocr_confidence=ocr_confidence,
+                    needs_manual_review=needs_manual_review,
                 )
             )
         except Exception:
@@ -214,6 +235,8 @@ def extract_pages_v2(
                     image_count=page.image_count,
                     text_len=text_len,
                     non_whitespace_ratio=non_ws_ratio,
+                    ocr_confidence=None,
+                    needs_manual_review=False,
                 )
             )
     return extracted

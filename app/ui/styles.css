@@ -607,6 +607,18 @@ textarea:focus {
   box-shadow: var(--shadow-glow);
 }
 
+.is-invalid {
+  border-color: var(--danger) !important;
+  box-shadow: 0 0 0 2px rgba(196, 55, 55, 0.12) !important;
+}
+
+.field-error {
+  min-height: 1rem;
+  margin-top: 0.28rem;
+  font-size: 0.78rem;
+  color: var(--danger);
+}
+
 /* Consistent Select Arrow using standard appearance for now, 
    but ensuring size matches inputs */
 select {

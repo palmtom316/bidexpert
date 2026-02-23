@@ -1,67 +1,36 @@
+import {
+  STORAGE_KEYS,
+  LEGACY_STORAGE_KEYS,
+  createUiState,
+  isValidUuid,
+  clearLegacyApiKeyStorage,
+} from "./modules/state.js";
+import {
+  clearAllFieldErrors,
+  clearFieldError,
+  setFieldError,
+  validateExpertUploadForm,
+  validateStructuredIngestForm,
+  validateOcrSettings,
+} from "./modules/validation.js";
+
 const API_BASE = "";
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const CONVERSION_HISTORY_STORAGE_KEY = "be_conversion_history";
-const OCR_PROVIDER_STORAGE_KEY = "be_ocr_provider";
-const OCR_API_KEY_STORAGE_KEY = "be_ocr_api_key";
-const OCR_BASE_URL_STORAGE_KEY = "be_ocr_base_url";
-const OCR_MODEL_STORAGE_KEY = "be_ocr_model";
-const LEGACY_GLM_OCR_API_KEY_STORAGE_KEY = "be_glm_ocr_api_key";
-const LEGACY_GLM_OCR_BASE_URL_STORAGE_KEY = "be_glm_ocr_base_url";
-const LEGACY_GLM_OCR_MODEL_STORAGE_KEY = "be_glm_ocr_model";
+const CONVERSION_HISTORY_STORAGE_KEY = STORAGE_KEYS.CONVERSION_HISTORY;
+const OCR_PROVIDER_STORAGE_KEY = STORAGE_KEYS.OCR_PROVIDER;
+const OCR_API_KEY_STORAGE_KEY = STORAGE_KEYS.OCR_API_KEY;
+const OCR_BASE_URL_STORAGE_KEY = STORAGE_KEYS.OCR_BASE_URL;
+const OCR_MODEL_STORAGE_KEY = STORAGE_KEYS.OCR_MODEL;
+const LEGACY_GLM_OCR_API_KEY_STORAGE_KEY = LEGACY_STORAGE_KEYS.GLM_OCR_API_KEY;
+const LEGACY_GLM_OCR_BASE_URL_STORAGE_KEY = LEGACY_STORAGE_KEYS.GLM_OCR_BASE_URL;
+const LEGACY_GLM_OCR_MODEL_STORAGE_KEY = LEGACY_STORAGE_KEYS.GLM_OCR_MODEL;
 const TEXTIN_OCR_DEFAULT_BASE_URL = "https://api.textin.com/ai/service/v2/recognize/document";
 
-function isValidUuid(value) {
-  return UUID_PATTERN.test(String(value || "").trim());
-}
-
-function normalizeStoredProjectId(value) {
-  const candidate = String(value || "").trim();
-  return isValidUuid(candidate) ? candidate : "";
-}
-
-function parseStoredArray(raw, fallback = []) {
-  if (!raw) return [...fallback];
-  try {
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [...fallback];
-  } catch {
-    return [...fallback];
-  }
-}
-
-const state = {
-  projectId: normalizeStoredProjectId(localStorage.getItem("be_project_id")),
-  industryTag: String(localStorage.getItem("be_industry_tag") || "").trim(),
-  industryTagHistory: parseStoredArray(localStorage.getItem("be_industry_tag_history")),
-  apiKey: String(localStorage.getItem("be_api_key") || "").trim(),
-  completedBids: [],
-  outlineId: "",
-  outlineConfirmed: false,
-  sections: [],
-  selectedSectionKey: "",
-  analysisRunId: "",
-  analysisDetail: null,
-  finalBidDraft: "",
-  finalCheck: null,
-  finalLocked: false,
-  coverTemplate: "none",
-  byokProfiles: [],
-  conversionHistory: parseStoredArray(localStorage.getItem(CONVERSION_HISTORY_STORAGE_KEY)),
-  ocrProvider: normalizeConfiguredOcrProvider(localStorage.getItem(OCR_PROVIDER_STORAGE_KEY) || "glm-ocr"),
-  ocrApiKey: String(
-    localStorage.getItem(OCR_API_KEY_STORAGE_KEY) || localStorage.getItem(LEGACY_GLM_OCR_API_KEY_STORAGE_KEY) || "",
-  ).trim(),
-  ocrBaseUrl: resolveOcrBaseUrl(
-    localStorage.getItem(OCR_PROVIDER_STORAGE_KEY) || "glm-ocr",
-    localStorage.getItem(OCR_BASE_URL_STORAGE_KEY) || localStorage.getItem(LEGACY_GLM_OCR_BASE_URL_STORAGE_KEY) || "",
-  ).trim(),
-  ocrModel: resolveOcrModel(
-    localStorage.getItem(OCR_PROVIDER_STORAGE_KEY) || "glm-ocr",
-    localStorage.getItem(OCR_MODEL_STORAGE_KEY) || localStorage.getItem(LEGACY_GLM_OCR_MODEL_STORAGE_KEY) || "",
-  ),
-  sidebarWidth: parseInt(localStorage.getItem("be_sidebar_width") || "280", 10),
-  sidebarCollapsed: localStorage.getItem("be_sidebar_collapsed") === "true",
-};
+clearLegacyApiKeyStorage();
+const state = createUiState({
+  normalizeConfiguredOcrProvider,
+  resolveOcrBaseUrl,
+  resolveOcrModel,
+});
 
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => document.querySelectorAll(selector);
@@ -458,10 +427,10 @@ const GlobalBar = {
         const raw = $("#apiKeyInput").value.trim();
         state.apiKey = raw;
         if (raw) {
-          localStorage.setItem("be_api_key", raw);
+          sessionStorage.setItem("be_api_key_session", raw);
           Toast.success("API Key 已设置 (X-API-Key)");
         } else {
-          localStorage.removeItem("be_api_key");
+          sessionStorage.removeItem("be_api_key_session");
           Toast.info("已清除 API Key");
         }
       });
@@ -597,8 +566,22 @@ const ExpertHub = {
 
   async ingestPdfFiles() {
     const files = Array.from($("#expertPdfFiles").files || []);
-    if (!files.length) {
-      Toast.error("请至少选择一个文件");
+    clearAllFieldErrors([
+      { inputId: "expertPdfFiles", errorId: "expertPdfFilesError" },
+      { inputId: "byokProjectId", errorId: "projectIdError" },
+    ]);
+    const validation = validateExpertUploadForm({
+      files,
+      projectId: state.projectId.trim(),
+    });
+    if (!validation.ok) {
+      if (validation.errors.expertPdfFiles) {
+        setFieldError("expertPdfFiles", "expertPdfFilesError", validation.errors.expertPdfFiles);
+      }
+      if (validation.errors.projectId) {
+        setFieldError("byokProjectId", "projectIdError", validation.errors.projectId);
+      }
+      Toast.error(Object.values(validation.errors)[0] || "输入校验失败");
       return;
     }
 
@@ -742,6 +725,7 @@ const ExpertHub = {
   },
 
   async ingestStructured() {
+    clearFieldError("structuredStandard", "structuredFormError");
     const payload = {
       project_id: state.projectId || null,
       industry_tag: effectiveIndustryTag(),
@@ -757,21 +741,10 @@ const ExpertHub = {
       award_honors_items: splitLines($("#structuredAwardHonors").value),
       service_commitment_items: splitLines($("#structuredServiceCommitment").value),
     };
-
-    const totalItems =
-      payload.standard_items.length +
-      payload.company_performance_items.length +
-      payload.company_qualification_items.length +
-      payload.pm_qualification_performance_items.length +
-      payload.safety_production_items.length +
-      payload.quality_management_items.length +
-      payload.equipment_capability_items.length +
-      payload.financial_credit_items.length +
-      payload.award_honors_items.length +
-      payload.service_commitment_items.length;
-
-    if (!totalItems) {
-      Toast.error("请至少填写一条结构化数据");
+    const validation = validateStructuredIngestForm(payload);
+    if (!validation.ok) {
+      setFieldError("structuredStandard", "structuredFormError", validation.errors.structuredForm || "结构化输入不合法");
+      Toast.error(validation.errors.structuredForm || "结构化输入不合法");
       return;
     }
 
@@ -2483,12 +2456,27 @@ const ByokSettings = {
   },
 
   saveOcrSettings() {
+    clearAllFieldErrors([
+      { inputId: "ocrApiKey", errorId: "ocrApiKeyError" },
+      { inputId: "ocrModel", errorId: "ocrModelError" },
+      { inputId: "ocrBaseUrl", errorId: "ocrBaseUrlError" },
+    ]);
     const provider = normalizeConfiguredOcrProvider($("#ocrProvider")?.value || state.ocrProvider);
     const apiKey = ($("#ocrApiKey")?.value || "").trim();
     const baseUrl = resolveOcrBaseUrl(provider, ($("#ocrBaseUrl")?.value || "").trim());
     const model = resolveOcrModel(provider, ($("#ocrModel")?.value || "").trim());
-    if (provider === "textin" && model === defaultOcrModelForProvider("textin")) {
-      Toast.error("请选择 textin 时，请将 OCR Model 填写为 TextIn App ID");
+    const validation = validateOcrSettings({
+      provider,
+      apiKey,
+      baseUrl,
+      model,
+      requireApiKey: true,
+    });
+    if (!validation.ok) {
+      if (validation.errors.ocrApiKey) setFieldError("ocrApiKey", "ocrApiKeyError", validation.errors.ocrApiKey);
+      if (validation.errors.ocrModel) setFieldError("ocrModel", "ocrModelError", validation.errors.ocrModel);
+      if (validation.errors.ocrBaseUrl) setFieldError("ocrBaseUrl", "ocrBaseUrlError", validation.errors.ocrBaseUrl);
+      Toast.error(Object.values(validation.errors)[0] || "OCR 配置不合法");
       return;
     }
     state.ocrProvider = provider;
@@ -2504,14 +2492,28 @@ const ByokSettings = {
   },
 
   async testOcrSettings() {
+    clearAllFieldErrors([
+      { inputId: "ocrApiKey", errorId: "ocrApiKeyError" },
+      { inputId: "ocrModel", errorId: "ocrModelError" },
+      { inputId: "ocrBaseUrl", errorId: "ocrBaseUrlError" },
+    ]);
     const provider = normalizeConfiguredOcrProvider($("#ocrProvider")?.value || state.ocrProvider);
     const apiKey = ($("#ocrApiKey")?.value || "").trim();
     const baseUrl = resolveOcrBaseUrl(provider, ($("#ocrBaseUrl")?.value || "").trim());
     const model = resolveOcrModel(provider, ($("#ocrModel")?.value || "").trim());
 
-    if (!apiKey) throw new Error("请填写 OCR API Key");
-    if (provider === "textin" && model === defaultOcrModelForProvider("textin")) {
-      throw new Error("请选择 textin 时，请将 OCR Model 填写为 TextIn App ID");
+    const validation = validateOcrSettings({
+      provider,
+      apiKey,
+      baseUrl,
+      model,
+      requireApiKey: true,
+    });
+    if (!validation.ok) {
+      if (validation.errors.ocrApiKey) setFieldError("ocrApiKey", "ocrApiKeyError", validation.errors.ocrApiKey);
+      if (validation.errors.ocrModel) setFieldError("ocrModel", "ocrModelError", validation.errors.ocrModel);
+      if (validation.errors.ocrBaseUrl) setFieldError("ocrBaseUrl", "ocrBaseUrlError", validation.errors.ocrBaseUrl);
+      throw new Error(Object.values(validation.errors)[0] || "OCR 配置不合法");
     }
 
     const payload = {

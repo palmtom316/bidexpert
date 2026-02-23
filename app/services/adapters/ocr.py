@@ -32,6 +32,14 @@ class OCRAdapter(ABC):
     def extract_image_bytes(self, image_bytes: bytes, page_no: int | None = None) -> str:
         raise NotImplementedError
 
+    def extract_image_bytes_with_confidence(
+        self,
+        image_bytes: bytes,
+        page_no: int | None = None,
+    ) -> tuple[str, float]:
+        text = self.extract_image_bytes(image_bytes, page_no=page_no)
+        return text, _estimate_text_confidence(text)
+
 
 @dataclass(frozen=True)
 class OCRRuntimeCredential:
@@ -47,6 +55,25 @@ def normalize_ocr_provider(provider: str | None, *, default: str | None = None) 
     if normalized not in OCR_PROVIDER_ALLOWLIST:
         raise ValueError(f"unsupported ocr provider: {normalized}")
     return normalized
+
+
+def _normalize_confidence(value: object, *, default: float = 0.75) -> float:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return max(0.0, min(1.0, default))
+    if parsed > 1.0:
+        parsed /= 100.0
+    return max(0.0, min(1.0, parsed))
+
+
+def _estimate_text_confidence(text: str) -> float:
+    normalized = str(text or "").strip()
+    if not normalized:
+        return 0.35
+    length_score = min(len(normalized) / 220.0, 1.0)
+    dense_score = min(len("".join(normalized.split())) / 180.0, 1.0)
+    return max(0.35, min(0.92, 0.45 + 0.35 * length_score + 0.20 * dense_score))
 
 
 class _RemoteOCRAdapter(OCRAdapter):
@@ -66,6 +93,14 @@ class _RemoteOCRAdapter(OCRAdapter):
         return {"text": text}
 
     def extract_image_bytes(self, image_bytes: bytes, page_no: int | None = None) -> str:
+        text, _confidence = self.extract_image_bytes_with_confidence(image_bytes, page_no=page_no)
+        return text
+
+    def extract_image_bytes_with_confidence(
+        self,
+        image_bytes: bytes,
+        page_no: int | None = None,
+    ) -> tuple[str, float]:
         self._require_credential()
         endpoint = f"{self.base_url.rstrip('/')}/ocr"
         files = {"file": ("page.png", image_bytes, "image/png")}
@@ -87,10 +122,17 @@ class _RemoteOCRAdapter(OCRAdapter):
         if isinstance(payload, dict):
             text = payload.get("text")
             if isinstance(text, str) and text.strip():
-                return text.strip()
+                confidence = payload.get("confidence")
+                if confidence is None:
+                    confidence = payload.get("score")
+                return text.strip(), _normalize_confidence(confidence, default=_estimate_text_confidence(text))
             result = payload.get("result")
             if isinstance(result, dict) and isinstance(result.get("text"), str):
-                return str(result["text"]).strip()
+                nested_text = str(result["text"]).strip()
+                confidence = result.get("confidence")
+                if confidence is None:
+                    confidence = result.get("score")
+                return nested_text, _normalize_confidence(confidence, default=_estimate_text_confidence(nested_text))
         raise OCRAdapterUnavailableError(f"{self.provider} ocr response is invalid")
 
 
@@ -181,6 +223,14 @@ class TextInOCRAdapter(OCRAdapter):
         return {"text": text}
 
     def extract_image_bytes(self, image_bytes: bytes, page_no: int | None = None) -> str:  # noqa: ARG002
+        text, _confidence = self.extract_image_bytes_with_confidence(image_bytes, page_no=page_no)
+        return text
+
+    def extract_image_bytes_with_confidence(
+        self,
+        image_bytes: bytes,
+        page_no: int | None = None,  # noqa: ARG002
+    ) -> tuple[str, float]:
         self._require_credential()
         timeout = httpx.Timeout(float(settings.llm_http_timeout_seconds))
         try:
@@ -201,7 +251,14 @@ class TextInOCRAdapter(OCRAdapter):
 
         text = _extract_textin_ocr_text(payload)
         if text:
-            return text
+            confidence = None
+            if isinstance(payload, dict):
+                confidence = payload.get("confidence")
+                if confidence is None:
+                    result = payload.get("result")
+                    if isinstance(result, dict):
+                        confidence = result.get("confidence") or result.get("score")
+            return text, _normalize_confidence(confidence, default=_estimate_text_confidence(text))
         raise OCRAdapterUnavailableError(f"{self.provider} ocr response is invalid")
 
 
@@ -253,6 +310,14 @@ class GLMOCRAdapter(OCRAdapter):
         return {"text": text}
 
     def extract_image_bytes(self, image_bytes: bytes, page_no: int | None = None) -> str:  # noqa: ARG002
+        text, _confidence = self.extract_image_bytes_with_confidence(image_bytes, page_no=page_no)
+        return text
+
+    def extract_image_bytes_with_confidence(
+        self,
+        image_bytes: bytes,
+        page_no: int | None = None,  # noqa: ARG002
+    ) -> tuple[str, float]:
         self._require_credential()
         timeout = httpx.Timeout(float(settings.llm_http_timeout_seconds))
         encoded = base64.b64encode(image_bytes).decode("ascii")
@@ -297,7 +362,12 @@ class GLMOCRAdapter(OCRAdapter):
                     if isinstance(message, dict):
                         text = _extract_chat_content_text(message.get("content"))
                         if text:
-                            return text
+                            confidence = first.get("confidence")
+                            if confidence is None:
+                                confidence = first.get("score")
+                            if confidence is None and isinstance(message, dict):
+                                confidence = message.get("confidence")
+                            return text, _normalize_confidence(confidence, default=_estimate_text_confidence(text))
         raise OCRAdapterUnavailableError(f"{self.provider} ocr response is invalid")
 
 

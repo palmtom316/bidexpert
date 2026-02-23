@@ -74,6 +74,7 @@ class Settings(BaseSettings):
     ocr_provider: str = "glm-ocr"
     pdf_ocr_textlen_threshold: int = 200
     pdf_ocr_min_non_whitespace_ratio: float = 0.01
+    pdf_ocr_confidence_threshold: float = 0.75
     pdf_render_dpi: int = 260
     glm_ocr_api_key: str | None = None
     glm_ocr_base_url: str | None = None
