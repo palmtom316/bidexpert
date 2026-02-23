@@ -260,6 +260,7 @@ def generate_draft_handler(
             requirement_text=payload.requirement_text,
             top_k=payload.top_k,
             project_id=payload.project_id,
+            section_type=payload.section_type,
             industry_tag=payload.industry_tag,
             tender_template_id=payload.tender_template_id,
         )
@@ -284,6 +285,7 @@ def enqueue_generate_draft_handler(
         payload.requirement_text,
         payload.top_k,
         payload.project_id,
+        payload.section_type,
         payload.industry_tag,
         payload.tender_template_id,
     )
@@ -335,6 +337,7 @@ def enqueue_section_workflow_handler(
                 req_text,
                 payload.industry_tag,
                 resume_from_step,
+                payload.section_title,
             ),
             section_generate_stage_task_obj.s(),
             section_validate_stage_task_obj.s(),

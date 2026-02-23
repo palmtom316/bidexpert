@@ -582,6 +582,7 @@ def qualify_provider_profile(
                 GenerationRequest(
                     model=profile.default_model,
                     requirement_text="验证模型基础生成能力",
+                    section_type=None,
                     evidence_texts=["证据片段 A"],
                     evidence_ids=["e-1"],
                     global_facts={},
@@ -615,6 +616,7 @@ def qualify_provider_profile(
                 ReviewRequest(
                     model=profile.default_model,
                     draft_text="本段用于验证 review contract。",
+                    section_type=None,
                     evidence_texts=["证据片段 A"],
                     api_key=effective_api_key,
                     base_url=effective_base_url,

@@ -242,6 +242,7 @@ class HistoricalExtractRequest(BaseModel):
 class DraftGenerationRequest(BaseModel):
     requirement_id: str
     requirement_text: str
+    section_type: str | None = None
     top_k: int = 5
     project_id: str | None = None
     industry_tag: str | None = None

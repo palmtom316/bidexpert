@@ -141,6 +141,7 @@ def generate_with_profile(
     requirement_text: str,
     evidence_texts: list[str],
     evidence_ids: list[str],
+    section_type: str | None = None,
     global_facts: dict | None = None,
     relevant_requirements: list[str] | None = None,
     relevant_scoring: list[str] | None = None,
@@ -150,6 +151,7 @@ def generate_with_profile(
     payload = GenerationRequest(
         model=model,
         requirement_text=requirement_text,
+        section_type=section_type,
         evidence_texts=evidence_texts,
         evidence_ids=evidence_ids,
         global_facts=global_facts,
@@ -173,6 +175,7 @@ def generate_with_fallback_chain(
     requirement_text: str,
     evidence_texts: list[str],
     evidence_ids: list[str],
+    section_type: str | None = None,
     global_facts: dict | None = None,
     relevant_requirements: list[str] | None = None,
     relevant_scoring: list[str] | None = None,
@@ -200,6 +203,7 @@ def generate_with_fallback_chain(
                 api_key=profile.api_key,
                 base_url=profile.base_url,
                 requirement_text=requirement_text,
+                section_type=section_type,
                 evidence_texts=evidence_texts,
                 evidence_ids=evidence_ids,
                 global_facts=global_facts,
@@ -249,11 +253,13 @@ def review_with_profile(
     base_url: str | None,
     draft_text: str,
     evidence_texts: list[str],
+    section_type: str | None = None,
 ) -> ReviewResult:
     adapter = _select_adapter(provider)
     payload = ReviewRequest(
         model=model,
         draft_text=draft_text,
+        section_type=section_type,
         evidence_texts=evidence_texts,
         api_key=api_key,
         base_url=base_url,
@@ -271,6 +277,7 @@ def review_with_fallback_chain(
     project_id: str | None,
     draft_text: str,
     evidence_texts: list[str],
+    section_type: str | None = None,
 ) -> tuple[ReviewResult, int]:
     """Try each profile in *profile_chain* for review until one succeeds."""
     last_exc: AdapterUnavailableError | None = None
@@ -289,6 +296,7 @@ def review_with_fallback_chain(
                 api_key=profile.api_key,
                 base_url=profile.base_url,
                 draft_text=draft_text,
+                section_type=section_type,
                 evidence_texts=evidence_texts,
             )
             _record_feedback(

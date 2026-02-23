@@ -19,6 +19,7 @@ class GenerationRequest:
     top_chunks: list[dict]
     api_key: str | None
     base_url: str | None
+    section_type: str | None = None
 
 
 @dataclass
@@ -36,6 +37,7 @@ class ReviewRequest:
     evidence_texts: list[str]
     api_key: str | None
     base_url: str | None
+    section_type: str | None = None
 
 
 @dataclass

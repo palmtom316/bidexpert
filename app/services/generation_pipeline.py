@@ -205,6 +205,7 @@ def _run_generation_step(
             profile_chain=gen_chain,
             project_id=project_id,
             requirement_text=requirement_text,
+            section_type=section_type,
             evidence_texts=generation_evidence_texts,
             evidence_ids=merged_evidence_ids,
             global_facts=global_facts,
@@ -276,6 +277,7 @@ def _run_review_step(
     review_chain: list[object],
     project_id: str | None,
     draft_text: str,
+    section_type: str | None,
     evidence_texts: list[str],
     merged_evidence_ids: list[str],
     begin: float,
@@ -303,6 +305,7 @@ def _run_review_step(
             profile_chain=review_chain,
             project_id=project_id,
             draft_text=draft_text,
+            section_type=section_type,
             evidence_texts=evidence_texts,
         )
         review_report = review_result.report
@@ -581,6 +584,7 @@ def generate_draft_with_retrieval(
         review_chain=review_chain,
         project_id=project_id,
         draft_text=sanitize.text or generation_step.generated_text,
+        section_type=section_type,
         evidence_texts=retrieval_ctx.generation_evidence_texts,
         merged_evidence_ids=retrieval_ctx.merged_evidence_ids,
         begin=begin,

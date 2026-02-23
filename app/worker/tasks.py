@@ -39,6 +39,7 @@ def _generate_stage(
     project_id: str,
     section_key: str,
     requirement_text: str,
+    section_type: str | None,
     industry_tag: str | None,
     global_facts: dict | None,
     retries: int,
@@ -48,6 +49,7 @@ def _generate_stage(
         requirement_text=requirement_text,
         top_k=settings.top_k_default,
         project_id=project_id,
+        section_type=section_type,
         industry_tag=industry_tag,
         global_facts=global_facts,
         retry_count=retries,
@@ -186,6 +188,7 @@ def section_generate_task(
     project_id: str,
     section_key: str,
     requirement_text: str,
+    section_type: str | None = None,
     industry_tag: str | None = None,
 ) -> dict:  # type: ignore[no-untyped-def]
     self.update_state(state="PROGRESS", meta={"stage": "SECTION_GENERATE"})
@@ -193,6 +196,7 @@ def section_generate_task(
         project_id=project_id,
         section_key=section_key,
         requirement_text=requirement_text,
+        section_type=section_type,
         industry_tag=industry_tag,
         retries=int(getattr(self.request, "retries", 0)),
     )
@@ -265,6 +269,7 @@ def generate_draft_task(
     requirement_text: str,
     top_k: int = 5,
     project_id: str | None = None,
+    section_type: str | None = None,
     industry_tag: str | None = None,
     tender_template_id: str | None = None,
 ) -> dict:  # type: ignore[no-untyped-def]
@@ -274,6 +279,7 @@ def generate_draft_task(
         requirement_text=requirement_text,
         top_k=top_k,
         project_id=project_id,
+        section_type=section_type,
         industry_tag=industry_tag,
         tender_template_id=tender_template_id,
         retry_count=int(getattr(self.request, "retries", 0)),
@@ -299,6 +305,7 @@ def section_extract_stage_task(
     requirement_text: str,
     industry_tag: str | None = None,
     resume_from_step: str = "G1",
+    section_title: str | None = None,
 ) -> dict:  # type: ignore[no-untyped-def]
     self.update_state(state="PROGRESS", meta={"stage": "REQUIREMENT_EXTRACT"})
     try:
@@ -331,6 +338,7 @@ def section_extract_stage_task(
             "outline_id": outline_id,
             "project_id": project_id,
             "section_key": section_key,
+            "section_type": str(section_title or section_key),
             "requirement_text": requirement_text,
             "industry_tag": industry_tag,
             "resume_from_step": resume_from_step,
@@ -375,6 +383,7 @@ def section_generate_stage_task(self, context: dict) -> dict:  # type: ignore[no
                 project_id=str(context["project_id"]),
                 section_key=section_key,
                 requirement_text=str(context["requirement_text"]),
+                section_type=str(context.get("section_type") or "").strip() or None,
                 industry_tag=context.get("industry_tag"),
                 global_facts=context.get("global_facts") if isinstance(context.get("global_facts"), dict) else None,
                 retries=int(getattr(self.request, "retries", 0)),
@@ -532,11 +541,20 @@ def section_pipeline_task(
     project_id: str,
     section_key: str,
     requirement_text: str,
+    section_type: str | None = None,
     industry_tag: str | None = None,
 ) -> dict:  # type: ignore[no-untyped-def]
     """Fallback single-task pipeline: extract -> generate -> validate -> render."""
     outline_id = f"pipeline-{project_id}-{section_key}"
-    context = section_extract_stage_task.run(outline_id, project_id, section_key, requirement_text, industry_tag, "G1")
+    context = section_extract_stage_task.run(
+        outline_id,
+        project_id,
+        section_key,
+        requirement_text,
+        industry_tag,
+        "G1",
+        section_type or section_key,
+    )
     context = section_generate_stage_task.run(context)
     context = section_validate_stage_task.run(context)
     return section_render_stage_task.run(context)

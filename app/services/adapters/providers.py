@@ -184,6 +184,7 @@ class OpenAICompatibleAdapter(LLMAdapter):
             relevant_requirements=payload.relevant_requirements or [payload.requirement_text],
             relevant_scoring=payload.relevant_scoring or [],
             top_chunks=top_chunks,
+            section_type=payload.section_type,
         )
         content = self._post_chat(
             model=payload.model,
@@ -207,7 +208,10 @@ class OpenAICompatibleAdapter(LLMAdapter):
         )
 
     def review(self, payload: ReviewRequest) -> ReviewResult:
-        prompt = build_review_prompt({"draft_text": payload.draft_text, "evidence": payload.evidence_texts[:20]})
+        prompt = build_review_prompt(
+            {"draft_text": payload.draft_text, "evidence": payload.evidence_texts[:20]},
+            section_type=payload.section_type,
+        )
         content = self._post_chat(
             model=payload.model,
             prompt=prompt,
