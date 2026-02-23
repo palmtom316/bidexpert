@@ -5,6 +5,7 @@ import re
 from typing import Iterable
 
 from app.schemas.contracts import EvidenceUpsertItem
+from app.services.knowledge_quality import score_knowledge_quality
 
 TOKEN_PATTERN = re.compile(r"[\w\u4e00-\u9fff]+", re.UNICODE)
 
@@ -145,8 +146,9 @@ def chunk_sections_for_rag(
         meta = section.get("meta", {}) or {}
         section_type = str(meta.get("section_type") or section_title)
         discipline = str(meta.get("discipline") or "GENERAL")
-        quality_score = float(meta.get("confidence", 0.8) or 0.8) * 100.0
-        quality_score = max(0.0, min(100.0, quality_score))
+        confidence = float(meta.get("confidence", 0.8) or 0.8)
+        confidence = max(0.0, min(1.0, confidence))
+        match_terms = [str(item).strip() for item in (meta.get("keywords") or []) if str(item).strip()]
 
         text_blocks: list[tuple[int, str]] = []
         table_blocks: list[tuple[int, str]] = []
@@ -172,6 +174,14 @@ def chunk_sections_for_rag(
             overlap_tokens=overlap_tokens,
         )
         for idx, (text, source_page) in enumerate(text_fragments, start=1):
+            quality = score_knowledge_quality(
+                text=text,
+                source="enterprise_extract",
+                industry_tag=industry_tag,
+                confidence=confidence,
+                category_key=section_type,
+                match_terms=match_terms,
+            )
             locator = _chunk_locator(
                 doc_id=doc_id,
                 section=section,
@@ -183,6 +193,13 @@ def chunk_sections_for_rag(
                 anchor_type="paragraph",
                 parent_context=section_parent_context,
             )
+            locator["quality_signals"] = {
+                "timeliness": quality.timeliness,
+                "completeness": quality.completeness,
+                "relevance": quality.relevance,
+                "source_reliability": quality.source_reliability,
+                "expiry_status": quality.expiry_status,
+            }
             chunks.append(
                 EvidenceUpsertItem(
                     chunk_id=_chunk_id(doc_id, section_id, "text", idx, text),
@@ -190,7 +207,8 @@ def chunk_sections_for_rag(
                     doc_type=doc_type,
                     section_type=section_type,
                     industry_tag=industry_tag,
-                    quality_score=quality_score,
+                    valid_to=quality.valid_to,
+                    quality_score=quality.score,
                     source_locator=locator,
                     parent_chunk_id=section_parent_chunk_id,
                     anchor_type="paragraph",
@@ -199,6 +217,14 @@ def chunk_sections_for_rag(
 
         for idx, (page, table_md) in enumerate(table_blocks, start=1):
             table_parent_chunk_id = f"{doc_id[:8]}-{section_id}-parent-table-{idx}"
+            quality = score_knowledge_quality(
+                text=table_md,
+                source="enterprise_table",
+                industry_tag=industry_tag,
+                confidence=confidence,
+                category_key=section_type,
+                match_terms=match_terms,
+            )
             locator = _chunk_locator(
                 doc_id=doc_id,
                 section=section,
@@ -210,6 +236,13 @@ def chunk_sections_for_rag(
                 anchor_type="table",
                 parent_context=table_md,
             )
+            locator["quality_signals"] = {
+                "timeliness": quality.timeliness,
+                "completeness": quality.completeness,
+                "relevance": quality.relevance,
+                "source_reliability": quality.source_reliability,
+                "expiry_status": quality.expiry_status,
+            }
             chunks.append(
                 EvidenceUpsertItem(
                     chunk_id=_chunk_id(doc_id, section_id, "table", idx, table_md),
@@ -217,7 +250,8 @@ def chunk_sections_for_rag(
                     doc_type=doc_type,
                     section_type=section_type,
                     industry_tag=industry_tag,
-                    quality_score=quality_score,
+                    valid_to=quality.valid_to,
+                    quality_score=quality.score,
                     source_locator=locator,
                     parent_chunk_id=table_parent_chunk_id,
                     anchor_type="table",

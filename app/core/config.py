@@ -135,6 +135,9 @@ class Settings(BaseSettings):
     expert_chunk_min_tokens: int = 800
     expert_chunk_max_tokens: int = 1200
     expert_chunk_overlap_tokens: int = 120
+    knowledge_quality_low_score_threshold: float = 70.0
+    knowledge_sampling_ratio: float = 0.1
+    knowledge_sampling_accuracy_threshold: float = 0.85
 
     model_config = SettingsConfigDict(
         env_prefix="BIDEXPERT_", 

@@ -44,7 +44,9 @@ from app.services.expert_workspace import (
     prepare_doc_workspace,
     sync_enterprise_config_assets,
 )
+from app.services.knowledge_quality import collect_expiry_warnings, score_knowledge_quality
 from app.services.pricing_guard import detect_pricing_content
+from app.services.quality_sampling import SamplingReport, evaluate_quality_sampling
 from app.services.qdrant_store import get_qdrant_store
 
 _STRUCTURED_CATEGORY_MAP = {
@@ -123,6 +125,57 @@ def _append_jsonl(path: Path, rows: list[dict]) -> None:
         for row in rows:
             f.write(json.dumps(row, ensure_ascii=False))
             f.write("\n")
+
+
+def _sampling_warnings(report: SamplingReport) -> list[str]:
+    warnings = [f"quality_sampling:{report.sampled_count}/{report.total_chunks}"]
+    if report.manual_review_required:
+        warnings.append("quality_sampling_manual_review_required:ALL")
+    return warnings
+
+
+def _sampling_log_rows(
+    *,
+    report: SamplingReport,
+    scope: str,
+    expert_doc_id: str,
+    category_key: str | None = None,
+) -> list[dict]:
+    now = datetime.now().isoformat(timespec="seconds")
+    rows = [
+        {
+            "event": "quality_sampling_summary",
+            "created_at": now,
+            "scope": scope,
+            "expert_doc_id": expert_doc_id,
+            "category_key": category_key,
+            "total_chunks": report.total_chunks,
+            "sampled_count": report.sampled_count,
+            "configured_ratio": report.configured_ratio,
+            "actual_ratio": report.actual_ratio,
+            "estimated_accuracy": report.estimated_accuracy,
+            "accuracy_threshold": report.accuracy_threshold,
+            "manual_review_required": report.manual_review_required,
+        }
+    ]
+    rows.extend(
+        {
+            "event": "quality_sampling_record",
+            "created_at": now,
+            "scope": scope,
+            "expert_doc_id": expert_doc_id,
+            "category_key": category_key,
+            "chunk_id": item.chunk_id,
+            "sampled": item.sampled,
+            "risk_level": item.risk_level,
+            "reason": item.reason,
+            "quality_score": item.quality_score,
+            "valid_to": item.valid_to,
+        }
+        for item in report.records
+        if item.sampled
+    )
+    return rows
 
 
 def _conversion_sessions_dir(layout) -> Path:
@@ -231,6 +284,8 @@ def _build_conversion_chunk_rows(chunks: list[EvidenceUpsertItem]) -> list[dict]
                 "section_path": str(locator.get("section_title") or locator.get("section_id") or ""),
                 "page_range": str(locator.get("source_page") or ""),
                 "text": chunk.text,
+                "quality_score": chunk.quality_score,
+                "valid_to": chunk.valid_to,
                 "payload": locator,
             }
         )
@@ -358,6 +413,12 @@ def _fallback_chunks_from_blocks(
         section_id = f"fb-sec-{idx:04d}"
         section_type = "TABLE" if str(getattr(block, "block_type", "")).upper() == "TABLE" else "PARA"
         digest = hashlib.sha1(text.encode("utf-8")).hexdigest()[:12]
+        quality = score_knowledge_quality(
+            text=text,
+            source="fallback_block",
+            industry_tag=industry_tag,
+            category_key=section_type,
+        )
         chunks.append(
             EvidenceUpsertItem(
                 chunk_id=f"fb-{idx}-{digest}",
@@ -366,6 +427,8 @@ def _fallback_chunks_from_blocks(
                 section_type=section_type,
                 industry_tag=industry_tag,
                 sensitivity_level="PUBLIC_OK",
+                valid_to=quality.valid_to,
+                quality_score=quality.score,
                 forbidden_tags=["PRICING_RELATED"] if pricing_related else [],
                 source_locator={
                     "doc_id": doc_id,
@@ -375,6 +438,13 @@ def _fallback_chunks_from_blocks(
                     "source_page": page_no,
                     "section_anchor": block.section_anchor,
                     "block_type": "table" if section_type == "TABLE" else "text",
+                    "quality_signals": {
+                        "timeliness": quality.timeliness,
+                        "completeness": quality.completeness,
+                        "relevance": quality.relevance,
+                        "source_reliability": quality.source_reliability,
+                        "expiry_status": quality.expiry_status,
+                    },
                 },
             )
         )
@@ -521,6 +591,7 @@ def _ingest_historical_with_blocks(
     source_document_id: uuid.UUID | None = None
     expert_doc_id: uuid.UUID
     chunks: list[EvidenceUpsertItem] = []
+    sampling_report: SamplingReport | None = None
 
     try:
         with session_scope() as db:
@@ -593,6 +664,14 @@ def _ingest_historical_with_blocks(
                     if "PRICING_RELATED" not in tags:
                         tags.append("PRICING_RELATED")
                     chunk.forbidden_tags = tags
+            warnings.extend(
+                collect_expiry_warnings(
+                    chunks,
+                    warning_days=settings.evidence_expiry_warning_days,
+                )
+            )
+            sampling_report = evaluate_quality_sampling(chunks)
+            warnings.extend(_sampling_warnings(sampling_report))
 
             expert_doc = ExpertDoc(
                 source_document_id=source_document_id,
@@ -639,6 +718,15 @@ def _ingest_historical_with_blocks(
 
     store = get_qdrant_store()
     upserted = store.upsert_chunks(str(expert_doc_id), chunks, project_id=parsed_project.project_raw)
+    if sampling_report:
+        _append_jsonl(
+            layout.stage_dirs["99_logs"] / "quality_sampling.jsonl",
+            _sampling_log_rows(
+                report=sampling_report,
+                scope="historical_ingest",
+                expert_doc_id=str(expert_doc_id),
+            ),
+        )
 
     if source_document_id and doc_workspace and structure and merged and markdown is not None:
         _save_json(doc_workspace.extracted_dir / "structure.v1.json", structure)
@@ -1034,9 +1122,17 @@ def _build_structured_chunks(
 ) -> list[EvidenceUpsertItem]:
     chunks: list[EvidenceUpsertItem] = []
     _, doc_type, section_type = _STRUCTURED_CATEGORY_MAP[category_key]
+    hint_terms = [section_type, category_key]
     for idx, text in enumerate(lines, start=1):
         digest = hashlib.sha1(f"{category_key}:{text}".encode("utf-8")).hexdigest()[:12]
         blocked, _ = detect_pricing_content(text)
+        quality = score_knowledge_quality(
+            text=text,
+            source="structured_form",
+            industry_tag=industry_tag,
+            category_key=category_key,
+            match_terms=hint_terms,
+        )
         chunks.append(
             EvidenceUpsertItem(
                 chunk_id=f"{category_key.lower()}-{idx}-{digest}",
@@ -1045,9 +1141,21 @@ def _build_structured_chunks(
                 section_type=section_type,
                 industry_tag=industry_tag,
                 sensitivity_level="PUBLIC_OK",
+                valid_to=quality.valid_to,
                 forbidden_tags=["PRICING_RELATED"] if blocked else [],
-                quality_score=88.0,
-                source_locator={"source": "structured_form", "category": category_key, "line": idx},
+                quality_score=quality.score,
+                source_locator={
+                    "source": "structured_form",
+                    "category": category_key,
+                    "line": idx,
+                    "quality_signals": {
+                        "timeliness": quality.timeliness,
+                        "completeness": quality.completeness,
+                        "relevance": quality.relevance,
+                        "source_reliability": quality.source_reliability,
+                        "expiry_status": quality.expiry_status,
+                    },
+                },
             )
         )
     return chunks
@@ -1068,6 +1176,12 @@ def _persist_structured_category(
     pricing_blocked, reasons = detect_pricing_content(text_blob)
     if pricing_blocked:
         warnings.extend([f"pricing_detected:{reason}" for reason in reasons])
+    warnings.extend(
+        collect_expiry_warnings(
+            chunks,
+            warning_days=settings.evidence_expiry_warning_days,
+        )
+    )
 
     try:
         with session_scope() as db:
@@ -1134,6 +1248,18 @@ def _persist_structured_category(
 
     store = get_qdrant_store()
     upserted = store.upsert_chunks(expert_doc_id, chunks, project_id=project_id)
+    sampling_report = evaluate_quality_sampling(chunks)
+    warnings.extend(_sampling_warnings(sampling_report))
+    layout = ensure_expert_library_layout()
+    _append_jsonl(
+        layout.stage_dirs["99_logs"] / "quality_sampling.jsonl",
+        _sampling_log_rows(
+            report=sampling_report,
+            scope="structured_ingest",
+            expert_doc_id=expert_doc_id,
+            category_key=category_key,
+        ),
+    )
     return ExpertLibraryStructuredIngestItem(
         category=category_key,
         expert_doc_id=expert_doc_id,
