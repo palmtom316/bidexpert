@@ -43,10 +43,22 @@ def build_tender_parsing_prompt(tender_md: str) -> str:
 def build_global_facts_prompt(confirmed_data: str) -> str:
     target = {
         "project_name": "",
+        "project_code": None,
+        "construction_unit": None,
+        "supervision_unit": None,
+        "tenderer": None,
         "total_duration_days": None,
+        "schedule_milestones": [],
+        "quality_standard": None,
+        "safety_civilization_level": None,
+        "subcontracting_limit": None,
+        "bid_bond_amount": None,
+        "performance_bond_amount": None,
+        "warranty_period_months": None,
         "project_manager": {"name": None, "certificate_no": None},
         "voltage_level": None,
         "contract_amount": None,
+        "tax_rate": None,
     }
     return (
         f"{GENERAL_RULES}\n\n"

@@ -27,6 +27,13 @@ def test_prompt_suite_contains_required_templates() -> None:
     facts = build_global_facts_prompt("demo")
     assert "project_name" in facts
     assert "contract_amount" in facts
+    assert "construction_unit" in facts
+    assert "supervision_unit" in facts
+    assert "quality_standard" in facts
+    assert "safety_civilization_level" in facts
+    assert "subcontracting_limit" in facts
+    assert "schedule_milestones" in facts
+    assert "bid_bond_amount" in facts
 
     section = build_section_generation_prompt(
         global_facts_json={"project_name": "x"},
