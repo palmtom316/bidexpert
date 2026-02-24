@@ -13,6 +13,13 @@ logger = logging.getLogger(__name__)
 
 SENTENCE_SPLIT = re.compile(r"[。；;\n]+")
 MUST_KEYWORDS = ["必须", "应当", "不得", "需", "必须满足"]
+DISQUALIFY_KEYWORDS = [
+    "废标", "否决投标", "不予通过", "取消投标资格", "取消中标资格",
+    "拒绝接收", "拒绝投标", "资格审查",
+]
+BONUS_PENALTY_KEYWORDS = [
+    "加分", "优先考虑", "优先", "扣减", "扣分", "罚款", "处罚",
+]
 SCORE_PATTERN = re.compile(r"(?:评分|分值|得分)\D{0,5}(\d+(?:\.\d+)?)")
 ANCHOR_PATTERN = re.compile(r"^\s*(?:第?[一二三四五六七八九十0-9]+[章节条款、.]|\d+(?:\.\d+)+)")
 
@@ -170,7 +177,13 @@ def _parse_with_regex(text: str) -> list[ParsedRequirement]:
             if ANCHOR_PATTERN.match(line):
                 current_anchor = line[:32]
 
-            is_candidate = any(k in line for k in MUST_KEYWORDS) or "评分" in line or "格式" in line
+            is_candidate = (
+                any(k in line for k in MUST_KEYWORDS)
+                or any(k in line for k in DISQUALIFY_KEYWORDS)
+                or any(k in line for k in BONUS_PENALTY_KEYWORDS)
+                or "评分" in line
+                or "格式" in line
+            )
             if not is_candidate:
                 continue
 
@@ -181,7 +194,10 @@ def _parse_with_regex(text: str) -> list[ParsedRequirement]:
                     original_text=line,
                     page_no=page_idx,
                     section_anchor=current_anchor,
-                    is_must=any(k in line for k in MUST_KEYWORDS),
+                    is_must=(
+                        any(k in line for k in MUST_KEYWORDS)
+                        or any(k in line for k in DISQUALIFY_KEYWORDS)
+                    ),
                     score_weight=float(score_match.group(1)) if score_match else None,
                     format_constraints={"format_required": "格式" in line},
                 )

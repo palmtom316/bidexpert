@@ -31,7 +31,13 @@ def build_tender_parsing_prompt(tender_md: str) -> str:
     return (
         f"{GENERAL_RULES}\n\n"
         "你是招标规则拆解引擎。\n"
-        "任务：抽取 mandatory_requirements、scoring_items、deliverables。\n"
+        "任务：抽取 mandatory_requirements、scoring_items、deliverables。\n\n"
+        "解析指引：\n"
+        "- 资格审查条款：识别资质要求、证书要求、业绩门槛等资审条件\n"
+        "- 商务条款：识别报价要求、付款条件、合同条款、保证金等商务条件\n"
+        "- 技术条款：识别技术参数、方案要求、工艺标准等技术条件\n"
+        "- 评标评分规则：识别评分标准、权重分配、评标方法等评分条件\n"
+        "- 废标与否决条款：识别废标条件、否决投标情形、取消资格条件\n\n"
         "必须输出合法 JSON。\n"
         f"输入：\n{tender_md}\n"
     )
