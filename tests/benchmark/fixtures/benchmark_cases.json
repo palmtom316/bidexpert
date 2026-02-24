@@ -1,0 +1,86 @@
+[
+  {
+    "id": "BM-001",
+    "name": "市政道路工程",
+    "tender_snippet": "投标人必须具备市政公用工程施工总承包二级及以上资质，未提供资质证书的将否决投标。投标保证金为人民币50万元整。工期要求：180日历天。",
+    "expected_disqualify_keywords": ["否决投标"],
+    "expected_facts": {"bid_bond_amount": "50万元", "project_duration": "180日历天"},
+    "section_type": "construction_plan"
+  },
+  {
+    "id": "BM-002",
+    "name": "学校教学楼建设",
+    "tender_snippet": "投标人须提供近三年类似工程业绩不少于2项，否则取消投标资格。项目经理须具备一级建造师资格。质量标准：合格。",
+    "expected_disqualify_keywords": ["取消投标资格"],
+    "expected_facts": {"quality_standard": "合格"},
+    "section_type": "technical_proposal"
+  },
+  {
+    "id": "BM-003",
+    "name": "污水处理厂升级改造",
+    "tender_snippet": "资格审查不通过的投标人不予通过。施工组织设计须包含安全文明施工方案。履约保证金比例为合同价的10%。",
+    "expected_disqualify_keywords": ["不予通过"],
+    "expected_facts": {"performance_bond_ratio": "10%"},
+    "section_type": "safety_plan"
+  },
+  {
+    "id": "BM-004",
+    "name": "高速公路路面维修",
+    "tender_snippet": "技术标评分占60%，商务标评分占40%。施工方案中须明确交通导行方案。加分项：具有ISO14001环境管理体系认证的投标人加2分。",
+    "expected_disqualify_keywords": [],
+    "expected_bonus_keywords": ["加分"],
+    "expected_facts": {},
+    "section_type": "construction_plan"
+  },
+  {
+    "id": "BM-005",
+    "name": "医院综合楼装修",
+    "tender_snippet": "废标条件：投标文件未按要求密封的；投标报价超过最高限价的。建设单位：某市卫生健康委员会。监理单位：某监理有限公司。",
+    "expected_disqualify_keywords": ["废标"],
+    "expected_facts": {"construction_unit": "某市卫生健康委员会", "supervision_unit": "某监理有限公司"},
+    "section_type": "commercial_proposal"
+  },
+  {
+    "id": "BM-006",
+    "name": "园林绿化工程",
+    "tender_snippet": "投标人须具备城市园林绿化三级及以上资质。拒绝接收联合体投标。安全生产许可证必须在有效期内。",
+    "expected_disqualify_keywords": ["拒绝接收"],
+    "expected_facts": {},
+    "section_type": "quality_plan"
+  },
+  {
+    "id": "BM-007",
+    "name": "桥梁加固工程",
+    "tender_snippet": "扣分项：工期每延误一天扣1分，最多扣10分。优先考虑具有桥梁加固专项施工经验的投标人。设计单位：某设计研究院。",
+    "expected_disqualify_keywords": [],
+    "expected_bonus_keywords": ["扣分", "优先考虑"],
+    "expected_facts": {"design_unit": "某设计研究院"},
+    "section_type": "schedule_plan"
+  },
+  {
+    "id": "BM-008",
+    "name": "地下管廊工程",
+    "tender_snippet": "拒绝投标的情形：投标人存在围标串标行为的。不得进行分包，违者取消中标资格。安全等级：一级。",
+    "expected_disqualify_keywords": ["拒绝投标", "取消中标资格"],
+    "expected_facts": {"safety_level": "一级", "subcontract_restriction": "不得进行分包"},
+    "section_type": "safety_plan"
+  },
+  {
+    "id": "BM-009",
+    "name": "智慧停车场建设",
+    "tender_snippet": "评标方法采用综合评估法。技术方案须包含系统架构设计、数据安全方案。罚款条款：未按期完工每日罚款合同价的0.5‰。",
+    "expected_disqualify_keywords": [],
+    "expected_bonus_keywords": ["罚款"],
+    "expected_facts": {},
+    "section_type": "technical_proposal"
+  },
+  {
+    "id": "BM-010",
+    "name": "河道治理工程",
+    "tender_snippet": "里程碑节点：2024年6月完成主体工程，2024年9月竣工验收。项目地点：某市某区。处罚措施：质量不合格返工费用由承包方承担。",
+    "expected_disqualify_keywords": [],
+    "expected_bonus_keywords": ["处罚"],
+    "expected_facts": {"project_location": "某市某区"},
+    "section_type": "environmental_plan"
+  }
+]
