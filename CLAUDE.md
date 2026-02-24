@@ -111,4 +111,8 @@ When executing implementation plans:
 | Multiple independent problems | Parallel agent dispatch |
 | Root cause unknown | Backward tracing |
 
-Full skill details: `~/.claude/skills/superpowers/`
+Full skill details: `~/.claude/skills/`
+
+Skills libraries:
+- `~/.claude/skills/superpowers/` — obra/superpowers: systematic development methodology (debugging, TDD, planning, code review, etc.)
+- `~/.claude/skills/` — ComposioHQ/awesome-claude-skills: content creation, design, dev tools, MCP builder, etc.

@@ -112,7 +112,7 @@ class Settings(BaseSettings):
     review_ensemble_size: int = 3
     rl_routing_enabled: bool = False
     rl_routing_exploration_rate: float = 0.1
-    langextract_default_model: str = "gemini-3-pro"
+    langextract_default_model: str = "qwen3.5"
     context_compression_use_llm: bool = True
     context_compression_max_items: int = 6
     context_compression_max_chars: int = 4000
@@ -155,3 +155,23 @@ def validate_runtime_baseline() -> None:
         raise RuntimeError("REDIS_URL must include a password in prod")
     if int(settings.secret_temp_key_ttl_seconds) <= 0:
         raise RuntimeError("BIDEXPERT_SECRET_TEMP_KEY_TTL_SECONDS must be greater than 0")
+    if normalized == "prod" and not settings.master_key_b64:
+        raise RuntimeError(
+            "BIDEXPERT_MASTER_KEY_B64 is required when BIDEXPERT_APP_ENV=prod (master_key not set)"
+        )
+    if normalized == "prod":
+        from app.llm.model_registry import get_registry_entry
+
+        model_name = settings.langextract_default_model
+        if ":" in model_name:
+            _provider, _model = model_name.split(":", maxsplit=1)
+            entry = get_registry_entry(_provider, _model)
+        else:
+            from app.llm.model_registry import list_registry_entries
+            entry = next(
+                (e for e in list_registry_entries() if e.model_name == model_name), None
+            )
+        if entry is None:
+            raise RuntimeError(
+                f"langextract_default_model={model_name!r} is not registered in model_registry.json"
+            )
