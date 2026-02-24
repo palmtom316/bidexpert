@@ -34,6 +34,13 @@ class OCRAdapter(ABC):
 
 
 @dataclass(frozen=True)
+class OCRPageResult:
+    page_no: int
+    text: str
+    confidence: float = 1.0
+
+
+@dataclass(frozen=True)
 class OCRRuntimeCredential:
     api_key: str | None = None
     base_url: str | None = None

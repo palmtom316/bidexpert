@@ -33,7 +33,7 @@ const state = {
   projectId: normalizeStoredProjectId(localStorage.getItem("be_project_id")),
   industryTag: String(localStorage.getItem("be_industry_tag") || "").trim(),
   industryTagHistory: parseStoredArray(localStorage.getItem("be_industry_tag_history")),
-  apiKey: String(localStorage.getItem("be_api_key") || "").trim(),
+  apiKey: String(sessionStorage.getItem("be_api_key") || "").trim(),
   completedBids: [],
   outlineId: "",
   outlineConfirmed: false,
@@ -458,7 +458,7 @@ const GlobalBar = {
         const raw = $("#apiKeyInput").value.trim();
         state.apiKey = raw;
         if (raw) {
-          localStorage.setItem("be_api_key", raw);
+          sessionStorage.setItem("be_api_key", raw);
           Toast.success("API Key 已设置 (X-API-Key)");
         } else {
           localStorage.removeItem("be_api_key");
@@ -2484,7 +2484,7 @@ const ByokSettings = {
     state.ocrBaseUrl = baseUrl;
     state.ocrModel = model;
     localStorage.setItem(OCR_PROVIDER_STORAGE_KEY, provider);
-    localStorage.setItem(OCR_API_KEY_STORAGE_KEY, apiKey);
+    sessionStorage.setItem(OCR_API_KEY_STORAGE_KEY, apiKey);
     localStorage.setItem(OCR_BASE_URL_STORAGE_KEY, baseUrl);
     localStorage.setItem(OCR_MODEL_STORAGE_KEY, model);
     $("#byokResult").textContent = `OCR 设置已保存\nprovider=${provider}\nbase_url=${baseUrl || "(未填写)"}\nmodel=${model}\napi_key=${apiKey ? "已填写" : "未填写"}`;

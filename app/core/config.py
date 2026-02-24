@@ -59,6 +59,7 @@ class Settings(BaseSettings):
     workflow_artifact_dir: str = "data/workflow-runs"
     enable_ocr_fallback: bool = True
     ocr_provider: str = "glm-ocr"
+    ocr_confidence_threshold: float = 0.7
     pdf_ocr_textlen_threshold: int = 200
     pdf_ocr_min_non_whitespace_ratio: float = 0.01
     pdf_render_dpi: int = 260
