@@ -6,6 +6,7 @@ from datetime import datetime
 from types import SimpleNamespace
 from typing import Any, Iterable
 
+from app.core.config import settings
 from app.schemas.contracts import EvidenceUpsertItem
 from app.services.expert_chunking import chunk_sections_for_rag
 from app.services.expert_markdown import render_enhanced_markdown
@@ -367,11 +368,11 @@ def enrich_sections_v1(structure: dict, table_summaries: list[dict] | None = Non
         if compliance_risk_level not in _RISK_LEVEL_OPTIONS:
             compliance_risk_level = "none"
         summary = str(base.get("summary", "") or "").strip()
-        if len(text.strip()) < 24:
+        if len(text.strip()) < settings.chunk_min_char_length:
             summary = f"{summary} 信息不足".strip()
         summary = summary[:600]
         confidence = float(base.get("confidence", 0.6) or 0.6)
-        if len(text.strip()) < 24:
+        if len(text.strip()) < settings.chunk_min_char_length:
             confidence = min(confidence, 0.5)
         confidence = max(0.0, min(confidence, 1.0))
         keywords = _keywords(f"{title}\n{text}\n{table_hint}", [section_type, discipline, project_phase])

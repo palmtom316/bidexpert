@@ -122,6 +122,7 @@ class Settings(BaseSettings):
     expert_chunk_min_tokens: int = 800
     expert_chunk_max_tokens: int = 1200
     expert_chunk_overlap_tokens: int = 120
+    chunk_min_char_length: int = 80
 
     section_output_tokens_map: dict = {
         "construction_plan": 12000,
