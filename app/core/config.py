@@ -32,6 +32,8 @@ class Settings(BaseSettings):
     qdrant_llm_rerank_enabled: bool = False
     qdrant_llm_rerank_candidate_limit: int = 30
     qdrant_llm_rerank_top_k: int = 12
+    qdrant_rerank_dense_weight: float = 0.6
+    qdrant_rerank_sparse_weight: float = 0.4
 
     llm_http_timeout_seconds: int = 120
     log_level: str = "INFO"

@@ -38,7 +38,11 @@ def _tokenize(text: str) -> list[str]:
     return TOKEN_PATTERN.findall((text or "").lower())
 
 
-def _build_sparse_vector(text: str) -> dict[int, float]:
+def _build_sparse_vector(
+    text: str,
+    *,
+    idf_weights: dict[str, float] | None = None,
+) -> dict[int, float]:
     tokens = _tokenize(text)
     if not tokens:
         return {}
@@ -48,7 +52,10 @@ def _build_sparse_vector(text: str) -> dict[int, float]:
     for token, count in tf.items():
         digest = hashlib.blake2b(token.encode("utf-8"), digest_size=8).digest()
         idx = int.from_bytes(digest, byteorder="big", signed=False) % (2**31)
-        indices_values[idx] = count / total
+        tf_score = count / total
+        if idf_weights and token in idf_weights:
+            tf_score *= idf_weights[token]
+        indices_values[idx] = tf_score
     return indices_values
 
 
