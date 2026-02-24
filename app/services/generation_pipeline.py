@@ -40,13 +40,20 @@ def _schema_evidence_ids(evidence_ids: list[str]) -> list[str]:
     return evidence_ids or ["NEED_EVIDENCE"]
 
 
-def _compose_draft(requirement_text: str, evidence_texts: list[str]) -> str:
-    if not evidence_texts:
-        return ""
-    snippets = [text.strip().split("。", maxsplit=1)[0] for text in evidence_texts if text.strip()]
-    if not snippets:
-        return ""
-    return f"针对要求“{requirement_text}”，我们具备以下能力：" + "；".join(snippets[:3]) + "。"
+def _compose_draft(
+    requirement_text: str,
+    evidence_texts: list[str],
+    section_type: str | None = None,
+) -> str:
+    from app.services.fallback_templates import render_fallback_template
+
+    effective_type = section_type if section_type else "generic"
+    return render_fallback_template(
+        section_type=effective_type,
+        requirement_text=requirement_text,
+        project_name=None,
+        evidence_texts=evidence_texts,
+    )
 
 
 def _expiry_warnings(payloads: list[dict]) -> list[str]:

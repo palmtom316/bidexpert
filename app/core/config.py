@@ -121,6 +121,18 @@ class Settings(BaseSettings):
     expert_chunk_max_tokens: int = 1200
     expert_chunk_overlap_tokens: int = 120
 
+    section_output_tokens_map: dict = {
+        "construction_plan": 12000,
+        "technical_proposal": 10000,
+        "safety_plan": 8000,
+        "quality_plan": 8000,
+        "schedule_plan": 8000,
+        "environmental_plan": 6000,
+        "resource_plan": 6000,
+        "commercial_proposal": 6000,
+        "default": 4000,
+    }
+
     model_config = SettingsConfigDict(
         env_prefix="BIDEXPERT_", 
         extra="ignore",
@@ -129,6 +141,13 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+
+def get_section_max_output_tokens(section_type: str | None = None) -> int:
+    token_map = settings.section_output_tokens_map
+    if section_type and section_type in token_map:
+        return int(token_map[section_type])
+    return int(token_map.get("default", settings.section_max_output_tokens))
 
 
 def normalized_app_env() -> str:
