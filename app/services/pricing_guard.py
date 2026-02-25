@@ -28,7 +28,21 @@ AMOUNT_PATTERN = re.compile(
 CONTEXT_WINDOW = 20
 
 # Pricing-specific context keywords that distinguish real pricing from technical text
-PRICING_CONTEXT_KEYWORDS = {"单价", "合计", "总价", "金额", "报价", "费用", "造价", "预算", "结算"}
+PRICING_CONTEXT_KEYWORDS = {
+    "单价", "合计", "总价", "金额", "报价", "费用", "造价", "预算", "结算",
+    "措施费", "安措费", "调试费", "检测费", "监理费",
+    "设计费", "勘察费", "临时用电费", "大型机具费",
+}
+
+POWER_UNIT_WHITELIST = {
+    "kV", "KV", "kv", "MVA", "MW", "kW", "kVA",
+    "kA", "A", "V", "Hz", "mm²", "mm2",
+    "m/s", "℃", "Ω", "MΩ",
+}
+
+POWER_TECH_PATTERN = re.compile(
+    r"\d+(?:\.\d+)?\s*(?:kV|KV|kv|MVA|MW|kW|kVA|kA|Hz|mm²|mm2|m/s|℃|Ω|MΩ)"
+)
 
 # Pattern matching actual monetary amounts (not bare technical numbers)
 MONETARY_NUMBER_PATTERN = re.compile(
@@ -45,6 +59,11 @@ def _has_amount_context(text: str, start: int, end: int) -> bool:
     right = min(len(text), end + CONTEXT_WINDOW)
     context = text[left:right]
     return bool(MONETARY_NUMBER_PATTERN.search(context))
+
+
+def _strip_power_tech_numbers(text: str) -> str:
+    """Remove power engineering technical parameter numbers before digit density calculation."""
+    return POWER_TECH_PATTERN.sub("", text)
 
 
 def _estimate_token_count(text: str) -> int:
@@ -97,7 +116,9 @@ def detect_pricing_content(text: str) -> tuple[bool, list[str]]:
         reasons.append("发现货币符号/货币代码与金额数字")
 
     # Signal 4 (fixed): use CJK-aware token count instead of text.split()
-    numbers = NUMBER_PATTERN.findall(text)
+    # Exclude power engineering technical parameters from digit density
+    stripped_text = _strip_power_tech_numbers(text)
+    numbers = NUMBER_PATTERN.findall(stripped_text)
     token_count = _estimate_token_count(text)
     digit_density = len(numbers) / token_count
     if len(numbers) >= 10 and digit_density > 0.3:

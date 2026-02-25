@@ -27,13 +27,32 @@ class GlobalFacts(BaseModel):
     milestone_nodes: str | None = None
     bid_bond_amount: float | None = Field(default=None, ge=0)
     performance_bond_ratio: float | None = Field(default=None, ge=0)
+    rated_capacity: str | None = None
+    line_length: str | None = None
+    conductor_type: str | None = None
+    tower_count: int | None = Field(default=None, ge=0)
+    substation_type: str | None = None
+    commissioning_deadline: str | None = None
+    grid_connection_point: str | None = None
+    seismic_fortification: str | None = None
+    pollution_level: str | None = None
+    altitude: str | None = None
+    design_wind_speed: str | None = None
+    annual_thunder_days: int | None = Field(default=None, ge=0)
+    owner_project_manager: str | None = None
+    construction_permit_no: str | None = None
+    epc_mode: str | None = None
 
 
 _PROJECT_NAME = re.compile(r"(?:项目名称|工程名称)[:：]\s*([^\n\r]+)")
 _DURATION = re.compile(r"(?:工期|总工期|计划工期)\s*[:：]?\s*(\d+)\s*天")
 _MANAGER = re.compile(r"(?:项目经理|项目负责人)[:：]\s*([\u4e00-\u9fa5A-Za-z·]{2,20})")
 _CERT = re.compile(r"(?:证书编号|证书号|执业证号)[:：]\s*([A-Za-z0-9\-]{3,40})")
-_VOLTAGE = re.compile(r"(\d+(?:\.\d+)?\s*(?:kV|KV|kv))")
+_VOLTAGE = re.compile(
+    r"(\d+(?:\.\d+)?\s*(?:kV|KV|kv)(?:\s*/\s*\d+(?:\.\d+)?\s*(?:kV|KV|kv))*"
+    r"|±?\d+(?:\.\d+)?\s*(?:kV|KV|kv)"
+    r"|\d+(?:\.\d+)?\s*千伏)"
+)
 _CONTRACT = re.compile(r"(?:合同金额|合同价|中标金额)[:：]?\s*([0-9]+(?:\.[0-9]+)?)")
 _LOCATION = re.compile(r"(?:工程地点|项目地点|建设地点)[:：]\s*([^\n\r]+)")
 _CONSTRUCTION_UNIT = re.compile(r"(?:建设单位|业主单位|发包人|招标人)[:：]\s*([^\n\r]+)")
@@ -45,6 +64,21 @@ _SUBCONTRACT = re.compile(r"(?:分包限制|分包要求|禁止分包)[:：]\s*(
 _MILESTONE = re.compile(r"(?:关键节点|里程碑|工期节点)[:：]\s*([^\n\r]+)")
 _BID_BOND = re.compile(r"(?:投标保证金|保证金金额)[:：]?\s*([0-9]+(?:\.[0-9]+)?)\s*(?:万元|万)?")
 _PERF_BOND = re.compile(r"(?:履约保证金|履约担保)[:：]?\s*([0-9]+(?:\.[0-9]+)?)\s*%")
+_RATED_CAPACITY = re.compile(r"(?:额定容量|主变容量|装机容量)[:：]?\s*(\d+(?:\.\d+)?\s*(?:MVA|MW|kVA|kW|万千瓦))")
+_LINE_LENGTH = re.compile(r"(?:线路长度|全长|路径长度)[:：]?\s*(\d+(?:\.\d+)?\s*(?:km|公里|千米|m|米))")
+_CONDUCTOR_TYPE = re.compile(r"(?:导线型号|导线规格|导线截面|导线类型)[:：]\s*([^\n\r]+)")
+_TOWER_COUNT = re.compile(r"(?:杆塔数量|铁塔数量|杆塔总数|基数)[:：]?\s*(\d+)\s*(?:基|座)?")
+_SUBSTATION_TYPE = re.compile(r"(?:变电站类型|站型|变电站形式)[:：]\s*([^\n\r]+)")
+_COMMISSIONING_DEADLINE = re.compile(r"(?:投运日期|投产日期|送电日期|并网日期)[:：]\s*([^\n\r]+)")
+_GRID_CONNECTION = re.compile(r"(?:接入点|并网点|接入系统|接入电网)[:：]\s*([^\n\r]+)")
+_SEISMIC = re.compile(r"(?:抗震设防|地震烈度|抗震等级)[:：]?\s*([^\n\r]+)")
+_POLLUTION_LEVEL = re.compile(r"(?:污秽等级|污区等级|外绝缘爬距|污染等级)[:：]?\s*([^\n\r]+)")
+_ALTITUDE = re.compile(r"(?:海拔高度|海拔|平均海拔)[:：]?\s*(\d+(?:\.\d+)?\s*(?:m|米))")
+_DESIGN_WIND = re.compile(r"(?:设计风速|基本风速|最大风速)[:：]?\s*(\d+(?:\.\d+)?\s*(?:m/s|米/秒))")
+_THUNDER_DAYS = re.compile(r"(?:雷暴日|年平均雷暴日|雷电日数)[:：]?\s*(\d+)\s*(?:天|日|d)?")
+_OWNER_PM = re.compile(r"(?:业主项目经理|甲方项目经理|建设单位项目经理)[:：]\s*([\u4e00-\u9fa5A-Za-z·]{2,20})")
+_CONSTRUCTION_PERMIT = re.compile(r"(?:施工许可证号|施工许可证编号|建设工程施工许可证)[:：]\s*([A-Za-z0-9\-]+)")
+_EPC_MODE = re.compile(r"(?:建设模式|承包模式|工程模式|EPC|总承包)[:：]\s*([^\n\r]+)")
 
 
 def _extract_with_rules(text: str) -> dict[str, Any]:
@@ -65,6 +99,21 @@ def _extract_with_rules(text: str) -> dict[str, Any]:
     milestone = _MILESTONE.search(scope)
     bid_bond = _BID_BOND.search(scope)
     perf_bond = _PERF_BOND.search(scope)
+    rated_capacity = _RATED_CAPACITY.search(scope)
+    line_length = _LINE_LENGTH.search(scope)
+    conductor_type = _CONDUCTOR_TYPE.search(scope)
+    tower_count = _TOWER_COUNT.search(scope)
+    substation_type = _SUBSTATION_TYPE.search(scope)
+    commissioning_deadline = _COMMISSIONING_DEADLINE.search(scope)
+    grid_connection = _GRID_CONNECTION.search(scope)
+    seismic = _SEISMIC.search(scope)
+    pollution = _POLLUTION_LEVEL.search(scope)
+    altitude_match = _ALTITUDE.search(scope)
+    design_wind = _DESIGN_WIND.search(scope)
+    thunder_days = _THUNDER_DAYS.search(scope)
+    owner_pm = _OWNER_PM.search(scope)
+    construction_permit = _CONSTRUCTION_PERMIT.search(scope)
+    epc_mode = _EPC_MODE.search(scope)
 
     facts = {
         "project_name": project_name.group(1).strip() if project_name else None,
@@ -85,6 +134,21 @@ def _extract_with_rules(text: str) -> dict[str, Any]:
         "milestone_nodes": milestone.group(1).strip() if milestone else None,
         "bid_bond_amount": float(bid_bond.group(1)) * 10000 if bid_bond else None,
         "performance_bond_ratio": float(perf_bond.group(1)) if perf_bond else None,
+        "rated_capacity": rated_capacity.group(1).strip() if rated_capacity else None,
+        "line_length": line_length.group(1).strip() if line_length else None,
+        "conductor_type": conductor_type.group(1).strip() if conductor_type else None,
+        "tower_count": int(tower_count.group(1)) if tower_count else None,
+        "substation_type": substation_type.group(1).strip() if substation_type else None,
+        "commissioning_deadline": commissioning_deadline.group(1).strip() if commissioning_deadline else None,
+        "grid_connection_point": grid_connection.group(1).strip() if grid_connection else None,
+        "seismic_fortification": seismic.group(1).strip() if seismic else None,
+        "pollution_level": pollution.group(1).strip() if pollution else None,
+        "altitude": altitude_match.group(1).strip() if altitude_match else None,
+        "design_wind_speed": design_wind.group(1).strip() if design_wind else None,
+        "annual_thunder_days": int(thunder_days.group(1)) if thunder_days else None,
+        "owner_project_manager": owner_pm.group(1).strip() if owner_pm else None,
+        "construction_permit_no": construction_permit.group(1).strip() if construction_permit else None,
+        "epc_mode": epc_mode.group(1).strip() if epc_mode else None,
     }
     return facts
 
@@ -134,6 +198,11 @@ def detect_global_fact_conflicts(base_facts: dict[str, Any], candidate_facts: di
         "design_unit", "total_duration_days", "voltage_level", "contract_amount",
         "quality_standard", "safety_level", "subcontract_restriction",
         "milestone_nodes", "bid_bond_amount", "performance_bond_ratio",
+        "rated_capacity", "line_length", "conductor_type", "tower_count",
+        "substation_type", "commissioning_deadline", "grid_connection_point",
+        "seismic_fortification", "pollution_level", "altitude",
+        "design_wind_speed", "annual_thunder_days", "owner_project_manager",
+        "construction_permit_no", "epc_mode",
     ):
         base_value = base_facts.get(field)
         candidate_value = candidate_facts.get(field)

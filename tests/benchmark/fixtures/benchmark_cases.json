@@ -82,5 +82,97 @@
     "expected_bonus_keywords": ["处罚"],
     "expected_facts": {"project_location": "某市某区"},
     "section_type": "environmental_plan"
+  },
+  {
+    "id": "BM-011",
+    "name": "110kV变电站新建工程",
+    "tender_snippet": "投标人须具备电力工程施工总承包一级及以上资质和承装修试二级及以上资质，无承装修试资质的否决投标。额定容量：2×50MVA主变压器。电压等级：110kV/35kV/10kV。工期：365日历天。",
+    "expected_disqualify_keywords": ["否决投标"],
+    "expected_facts": {"rated_capacity": "2×50MVA", "voltage_level": "110kV/35kV/10kV", "project_duration": "365日历天"},
+    "section_type": "commissioning_plan",
+    "power_section_type": "SUBSTATION"
+  },
+  {
+    "id": "BM-012",
+    "name": "220kV输电线路工程",
+    "tender_snippet": "未提供安全生产许可证的取消投标资格。线路长度约85km，导线型号LGJ-400/50，铁塔基数约210基。设计风速：30m/s。年雷暴日：45天。",
+    "expected_disqualify_keywords": ["取消投标资格"],
+    "expected_facts": {"line_length": "85km", "conductor_type": "LGJ-400/50", "tower_count": "210基", "design_wind_speed": "30m/s", "annual_thunder_days": "45天"},
+    "section_type": "construction_plan",
+    "power_section_type": "TRANSMISSION_LINE"
+  },
+  {
+    "id": "BM-013",
+    "name": "GIS设备安装工程",
+    "tender_snippet": "投标人须具备承装修试一级资质，资质不符的投标无效。GIS设备型号ZF12-126，额定电流2000A。须提供GIS安装调试方案和交接试验方案。",
+    "expected_disqualify_keywords": ["投标无效"],
+    "expected_facts": {"substation_type": "GIS"},
+    "section_type": "gis_installation_plan",
+    "power_section_type": "GIS_EQUIPMENT"
+  },
+  {
+    "id": "BM-014",
+    "name": "电缆隧道敷设工程",
+    "tender_snippet": "废标条件：未提交调试方案的；未附带电作业方案的。电缆规格：YJLW03-64/110kV-1×800mm²。敷设长度约12.5km。污秽等级：d级。",
+    "expected_disqualify_keywords": ["废标"],
+    "expected_facts": {"pollution_level": "d级"},
+    "section_type": "cable_laying_plan",
+    "power_section_type": "CABLE"
+  },
+  {
+    "id": "BM-015",
+    "name": "继电保护改造工程",
+    "tender_snippet": "投标人须具备电力工程施工总承包二级及以上资质。未提供施工组织设计的将否决投标。继电保护装置须满足DL/T 5218-2012标准要求。SCADA系统须与现有调度自动化系统兼容。",
+    "expected_disqualify_keywords": ["否决投标"],
+    "expected_facts": {},
+    "section_type": "commissioning_plan",
+    "power_section_type": "RELAY_PROTECTION"
+  },
+  {
+    "id": "BM-016",
+    "name": "35kV配电工程",
+    "tender_snippet": "技术标评分占55%，商务标评分占45%。加分项：具有同类35kV配电工程业绩的加3分。扣分项：项目经理无注册电气工程师资格扣5分。接地电阻不大于4Ω。",
+    "expected_disqualify_keywords": [],
+    "expected_bonus_keywords": ["加分", "扣分"],
+    "expected_facts": {"voltage_level": "35kV"},
+    "section_type": "grounding_plan",
+    "power_section_type": "DISTRIBUTION"
+  },
+  {
+    "id": "BM-017",
+    "name": "架空线路跨越施工",
+    "tender_snippet": "施工方案须包含带电跨越方案和安全防护措施。未提供高处作业方案的不予通过。缺少带电作业安全措施的取消中标资格。张力放线须采用牵张设备。",
+    "expected_disqualify_keywords": ["不予通过", "取消中标资格"],
+    "expected_facts": {},
+    "section_type": "stringing_plan",
+    "power_section_type": "TRANSMISSION_LINE"
+  },
+  {
+    "id": "BM-018",
+    "name": "变压器大修工程",
+    "tender_snippet": "投标人须具备承装修试二级及以上资质，许可证失效的不予受理。变压器型号SFPSZ-120000/220，须提供完整的交接试验方案。抗震设防烈度：7度。海拔高度：1200m。",
+    "expected_disqualify_keywords": ["许可证失效"],
+    "expected_facts": {"seismic_fortification": "7度", "altitude": "1200m"},
+    "section_type": "commissioning_plan",
+    "power_section_type": "TRANSFORMER"
+  },
+  {
+    "id": "BM-019",
+    "name": "光伏电站接入工程",
+    "tender_snippet": "并网点：某110kV变电站35kV母线。逆变器须满足GB/T 19964-2012标准。EPC模式：设计-采购-施工总承包。建设许可证号须在投标文件中提供。电子签章无效的废标。",
+    "expected_disqualify_keywords": ["废标"],
+    "expected_facts": {"grid_connection_point": "某110kV变电站35kV母线", "epc_mode": "设计-采购-施工总承包"},
+    "section_type": "construction_plan",
+    "power_section_type": "SOLAR"
+  },
+  {
+    "id": "BM-020",
+    "name": "铁塔基础施工工程",
+    "tender_snippet": "罚款条款：安全方案缺失每次罚款5万元。优先考虑具有特高压基础施工经验的投标人。基础形式：灌注桩基础。处罚措施：混凝土强度不达标全部返工。",
+    "expected_disqualify_keywords": [],
+    "expected_bonus_keywords": ["罚款", "优先考虑", "处罚"],
+    "expected_facts": {},
+    "section_type": "tower_foundation_plan",
+    "power_section_type": "TOWER_FOUNDATION"
   }
 ]

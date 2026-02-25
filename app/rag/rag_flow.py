@@ -8,6 +8,12 @@ from app.services.byok import resolve_profile_for_task
 from app.services.llm_gateway import rewrite_query_with_profile
 from app.services.qdrant_store import RetrievedEvidence, get_qdrant_store
 
+_POWER_BOOST_TERMS = {
+    "变电站", "输电线路", "配电网", "GIS", "变压器",
+    "继电保护", "带电作业", "调试", "架线", "铁塔",
+    "接地", "电缆", "开关柜", "互感器", "避雷器",
+}
+
 
 @dataclass
 class SubRequirement:
@@ -27,14 +33,39 @@ class RetrievalLogItem:
     warning: str | None = None
 
 
+def _classify_sub_requirement(text: str) -> str:
+    if re.search(r"资质|资格|许可证|承装修试|等级", text):
+        return "QUALIFICATION"
+    if re.search(r"业绩|案例|类似工程|合同", text):
+        return "PERFORMANCE"
+    if re.search(r"参数|容量|电压|截面|型号|规格|kV|MVA|MW", text):
+        return "TECH_PARAM"
+    if re.search(r"人员|项目经理|建造师|工程师|持证", text):
+        return "PERSONNEL"
+    if re.search(r"必须|应当|不得|须|严禁", text):
+        return "MUST"
+    return "GENERAL"
+
+
+_CONTINUATION_WORDS = {"且", "并", "及", "以及", "同时", "另外"}
+
+
 def decompose_requirement(requirement_text: str) -> list[SubRequirement]:
-    parts = [p.strip() for p in re.split(r"[，,；;。]+", requirement_text) if p.strip()]
-    if not parts:
+    raw_parts = [p.strip() for p in re.split(r"[，,；;。]+", requirement_text) if p.strip()]
+    if not raw_parts:
         return [SubRequirement(sub_id="sub-1", description=requirement_text, category="GENERAL")]
 
+    # Merge short fragments and those starting with continuation words
+    merged: list[str] = []
+    for part in raw_parts:
+        if merged and (len(part) < 8 or any(part.startswith(w) for w in _CONTINUATION_WORDS)):
+            merged[-1] = merged[-1] + "，" + part
+        else:
+            merged.append(part)
+
     result: list[SubRequirement] = []
-    for idx, part in enumerate(parts, start=1):
-        category = "MUST" if "必须" in part or "须" in part else "GENERAL"
+    for idx, part in enumerate(merged, start=1):
+        category = _classify_sub_requirement(part)
         result.append(SubRequirement(sub_id=f"sub-{idx}", description=part, category=category))
     return result
 

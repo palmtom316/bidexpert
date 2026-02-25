@@ -162,11 +162,47 @@ def _keywords(text: str, limit: int = 8) -> list[str]:
 
 def _discipline(text: str) -> str:
     lowered = text.lower()
-    if any(k in lowered for k in ("电力", "电气", "变电", "输电", "配电")):
+    if any(k in lowered for k in (
+        "电力", "电气", "变电", "输电", "配电",
+        "继电保护", "自动化", "调度", "scada", "直流",
+        "gis", "开关柜", "变压器", "互感器", "断路器",
+        "隔离开关", "避雷器", "电缆", "架空线", "导线",
+        "接地", "绝缘", "耐压", "kv", "mva",
+    )):
         return "ELECTRICAL"
     if any(k in lowered for k in ("土建", "结构", "建筑", "房建", "基坑")):
         return "CIVIL"
     return "GENERAL"
+
+
+def _electrical_section_subtype(text: str) -> str | None:
+    """Classify electrical sections into finer subtypes."""
+    lowered = text.lower()
+    if any(k in lowered for k in (
+        "变压器", "gis", "开关柜", "断路器", "隔离开关",
+        "互感器", "避雷器", "电抗器", "电容器", "母线",
+    )):
+        return "PRIMARY_SYSTEM"
+    if any(k in lowered for k in (
+        "继电保护", "自动化", "调度", "scada", "通信",
+        "远动", "计量", "直流系统", "ups", "蓄电池",
+    )):
+        return "SECONDARY_SYSTEM"
+    if any(k in lowered for k in (
+        "土建", "基础", "建筑", "结构", "暖通", "给排水",
+        "消防", "道路", "围墙", "排水",
+    )):
+        return "CIVIL_WORKS"
+    if any(k in lowered for k in (
+        "安装", "吊装", "电缆敷设", "架线", "铁塔",
+        "杆塔", "金具", "绝缘子", "接地",
+    )):
+        return "ELECTRICAL_INSTALLATION"
+    if any(k in lowered for k in (
+        "调试", "试验", "验收", "交接", "投运", "送电",
+    )):
+        return "COMMISSIONING"
+    return None
 
 
 def _section_type(title: str, text: str) -> str:
@@ -222,6 +258,7 @@ def enhance_section_metadata(section_id: str, section_title: str, section_text: 
         "section_title": section_title,
         "section_type": section_type,
         "discipline": discipline,
+        "electrical_subtype": _electrical_section_subtype(f"{section_title}\n{section_text}") if discipline == "ELECTRICAL" else None,
         "project_phase": project_phase,
         "reusability": _reusability(section_type, contains_score_items),
         "contains_score_items": contains_score_items,

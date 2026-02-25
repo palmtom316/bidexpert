@@ -22,14 +22,82 @@ _HAS_MARKDOWN = re.compile(r"\*\*|__|`")
 _HAS_STYLE_CODE = re.compile(r"\{\\[^}]+\}|w:(?:pPr|rPr|sectPr|br)")
 
 
+_SIGNATURE_SECTIONS = {
+    "法定代表人签章",
+    "项目经理签章",
+    "技术负责人签章",
+    "投标人盖章",
+    "授权代表签字",
+    "日期",
+}
+
+
+def _add_signature_placeholder(doc: Document, label: str) -> None:
+    """Add a signature placeholder line to the document."""
+    paragraph = doc.add_paragraph(f"{label}：__________________")
+    paragraph.paragraph_format.space_before = Cm(0.5)
+
+
 def ensure_default_template(path: Path) -> None:
     if path.exists():
         return
     doc = Document()
-    doc.add_heading("投标文件", level=1)
+
+    # Cover page
+    doc.add_heading("投标文件", level=0)
+    doc.add_paragraph("")
     doc.add_paragraph("项目名称：{{project_name}}")
-    doc.add_paragraph("技术方案：{{technical_plan}}")
-    doc.add_paragraph("实施计划：{{implementation_plan}}")
+    doc.add_paragraph("投标人：{{bidder_name}}")
+    doc.add_paragraph("编制日期：{{compile_date}}")
+    doc.add_paragraph("")
+
+    # Standard sections
+    doc.add_heading("目录", level=1)
+    doc.add_paragraph("（由 Word 自动生成）")
+
+    doc.add_heading("第一章 投标函", level=1)
+    doc.add_paragraph("{{bid_letter}}")
+
+    doc.add_heading("第二章 法定代表人身份证明", level=1)
+    doc.add_paragraph("{{legal_representative}}")
+
+    doc.add_heading("第三章 授权委托书", level=1)
+    doc.add_paragraph("{{authorization}}")
+
+    doc.add_heading("第四章 投标保证金", level=1)
+    doc.add_paragraph("{{bid_bond}}")
+
+    doc.add_heading("第五章 技术方案", level=1)
+    doc.add_paragraph("{{technical_plan}}")
+
+    doc.add_heading("第六章 施工组织设计", level=1)
+    doc.add_paragraph("{{construction_plan}}")
+
+    doc.add_heading("第七章 质量保证方案", level=1)
+    doc.add_paragraph("{{quality_plan}}")
+
+    doc.add_heading("第八章 安全生产方案", level=1)
+    doc.add_paragraph("{{safety_plan}}")
+
+    doc.add_heading("第九章 施工进度计划", level=1)
+    doc.add_paragraph("{{schedule_plan}}")
+
+    doc.add_heading("第十章 资源配置方案", level=1)
+    doc.add_paragraph("{{resource_plan}}")
+
+    doc.add_heading("第十一章 商务部分", level=1)
+    doc.add_paragraph("{{commercial_proposal}}")
+
+    # Headers and footers
+    for section in doc.sections:
+        header = section.header
+        header_para = header.paragraphs[0] if header.paragraphs else header.add_paragraph()
+        header_para.text = "{{project_name}} 投标文件"
+
+        footer = section.footer
+        footer_para = footer.paragraphs[0] if footer.paragraphs else footer.add_paragraph()
+        footer_para.text = "{{bidder_name}} | 机密"
+
     path.parent.mkdir(parents=True, exist_ok=True)
     doc.save(str(path))
 
@@ -359,6 +427,10 @@ def render_word_sections(
         content = section.get("content") or ""
         doc.add_heading(heading, level=2)
         doc.add_paragraph(content)
+        # Auto-insert signature placeholders for sections that need signing
+        if any(sig_key in heading for sig_key in ("投标函", "授权委托书", "承诺函")):
+            for label in ("授权代表签字", "投标人盖章", "日期"):
+                _add_signature_placeholder(doc, label)
 
     doc.save(str(out))
     return str(out)

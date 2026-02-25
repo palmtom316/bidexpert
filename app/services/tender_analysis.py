@@ -37,7 +37,20 @@ _MUST_PATTERN = re.compile(r"(必须|应当|不得|须|需|符合|满足|提交|
 _SCORING_PATTERN = re.compile(r"(评分|分值|得分|评审|评分办法|评分标准|扣分)")
 _BONUS_PATTERN = re.compile(r"(加分|优先|奖励|额外分|附加分|同等条件优先)")
 _BIDDING_PATTERN = re.compile(r"(投标|方案|技术|服务|实施|交付|工期|团队|资质|业绩|案例|保障)")
-_RISK_PATTERN = re.compile(r"(废标|无效标|不予受理|拒绝|保证金|罚则|违约|扣分|否决)")
+_RISK_PATTERN = re.compile(
+    r"(废标|无效标|不予受理|拒绝|保证金|罚则|违约|扣分|否决"
+    r"|实质性偏离|重大偏差|取消资格|围标|串标|低于成本"
+    r"|安全事故|停工|返工|索赔|终止合同|解除合同"
+    r"|带电作业违规|误操作|越级跳闸|设备损坏)"
+)
+_POWER_ENG_PATTERN = re.compile(
+    r"(变电站|输电线路|配电网|换流站|GIS|开关柜|变压器|互感器"
+    r"|断路器|隔离开关|避雷器|电缆|架空线|导线"
+    r"|继电保护|自动化|调度|SCADA|直流系统"
+    r"|接地装置|绝缘|耐压试验|交接试验|带电作业"
+    r"|铁塔|基础|杆塔|拉线|金具|绝缘子"
+    r"|电压等级|kV|kv|KV|额定容量|MVA|MW)"
+)
 
 
 @dataclass
@@ -120,6 +133,8 @@ def _classify_line(*, content: str, page_no: int, section_anchor: str | None) ->
     is_bonus = bool(_BONUS_PATTERN.search(content))
     is_bidding = bool(_BIDDING_PATTERN.search(content)) or ("要求" in content and len(content) >= 10)
     is_risk = bool(_RISK_PATTERN.search(content))
+    is_power_eng = bool(_POWER_ENG_PATTERN.search(content))
+    power_boost = 10 if is_power_eng else 0
 
     items: list[_LineInsight] = []
     if is_bidding:
@@ -131,7 +146,7 @@ def _classify_line(*, content: str, page_no: int, section_anchor: str | None) ->
                 section_anchor=section_anchor,
                 score_weight=score,
                 is_must=is_must,
-                importance=55 + (15 if is_must else 0),
+                importance=55 + (15 if is_must else 0) + power_boost,
             )
         )
     if is_scoring:
@@ -143,7 +158,7 @@ def _classify_line(*, content: str, page_no: int, section_anchor: str | None) ->
                 section_anchor=section_anchor,
                 score_weight=score,
                 is_must=is_must,
-                importance=60 + min(int(score or 0), 30),
+                importance=60 + min(int(score or 0), 30) + power_boost,
             )
         )
     if is_must:
@@ -155,7 +170,7 @@ def _classify_line(*, content: str, page_no: int, section_anchor: str | None) ->
                 section_anchor=section_anchor,
                 score_weight=score,
                 is_must=True,
-                importance=75,
+                importance=75 + power_boost,
             )
         )
     if is_bonus:
@@ -167,7 +182,7 @@ def _classify_line(*, content: str, page_no: int, section_anchor: str | None) ->
                 section_anchor=section_anchor,
                 score_weight=score,
                 is_must=False,
-                importance=70,
+                importance=70 + power_boost,
             )
         )
     if is_risk:
@@ -179,7 +194,7 @@ def _classify_line(*, content: str, page_no: int, section_anchor: str | None) ->
                 section_anchor=section_anchor,
                 score_weight=score,
                 is_must=is_must,
-                importance=80,
+                importance=80 + power_boost,
             )
         )
     return items

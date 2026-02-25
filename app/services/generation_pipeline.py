@@ -21,6 +21,10 @@ from app.services.context_compressor import compress_evidence_context
 from app.services.evidence_validator import run_three_gates
 from app.services.governance import estimate_tokens
 from app.services.global_facts import detect_global_fact_conflicts, extract_global_facts_from_text
+from app.services.disqualification_matrix import (
+    build_matrix_from_requirements,
+    check_section_against_matrix,
+)
 from app.services.llm_audit import log_llm_call, reserve_budget_persistent
 from app.services.llm_gateway import generate_with_fallback_chain, review_with_fallback_chain
 from app.services.pii_policy import sanitize_inbound_text, sanitize_outbound_text
@@ -861,6 +865,25 @@ def generate_draft_with_retrieval(
     status = gate_result.status
     global_fact_warnings = _global_fact_conflict_warnings(global_facts, effective_generated_text)
     generation_warnings = generation_step.warnings + [route_warning] + enhance_step.warnings + global_fact_warnings
+
+    # ── Disqualification matrix soft gate (Task 18) ──
+    disqualify_warnings: list[str] = []
+    try:
+        dq_matrix = build_matrix_from_requirements([requirement_text])
+        if dq_matrix.conditions:
+            dq_matrix = check_section_against_matrix(effective_generated_text, dq_matrix)
+            coverage = dq_matrix.coverage_rate()
+            if coverage < 1.0:
+                disqualify_warnings.append(f"disqualify_matrix_coverage={coverage:.2f}")
+            dq_fatal = dq_matrix.disqualify_level_missing()
+            if dq_fatal:
+                missing_ids = ",".join(c.condition_id for c in dq_fatal)
+                disqualify_warnings.append(f"disqualify_fatal_uncovered={missing_ids}")
+                status = "NEED_HUMAN_INPUT"
+    except Exception:
+        logger.debug("disqualification matrix check skipped due to error", exc_info=True)
+    generation_warnings.extend(disqualify_warnings)
+
     if section_plan.is_critical and not review_enabled:
         generation_warnings.append("review_forced_by_section_routing")
     if "generate_evidence_binding_invalid" in generation_warnings:

@@ -49,6 +49,25 @@ _DEFAULT_CRITICAL_KEYWORDS = (
     "报价",
     "清单",
     "计价",
+    "调试方案",
+    "带电作业",
+    "架线施工",
+    "铁塔基础",
+    "接地工程",
+    "电缆敷设",
+    "GIS安装",
+    "设备吊装",
+    "防污闪",
+    "继电保护",
+    "变压器安装",
+    "高压试验",
+    "电气一次",
+    "电气二次",
+    "输电线路",
+    "变电站",
+    "配电网",
+    "新能源并网",
+    "充电桩",
 )
 
 
@@ -180,9 +199,41 @@ def select_generation_plan(section: Any, env_mode: str) -> SectionGenerationPlan
     )
 
 
+_POWER_SECTION_TYPE_MAP: dict[str, str] = {
+    "变电站": "SUBSTATION",
+    "输电线路": "TRANSMISSION_LINE",
+    "配电网": "DISTRIBUTION",
+    "换流站": "CONVERTER_STATION",
+    "新能源": "RENEWABLE",
+    "风电": "WIND_POWER",
+    "光伏": "SOLAR",
+    "充电桩": "EV_CHARGING",
+    "储能": "ENERGY_STORAGE",
+    "电缆": "CABLE",
+    "GIS": "GIS_EQUIPMENT",
+    "调试": "COMMISSIONING",
+    "带电作业": "LIVE_WORK",
+    "继电保护": "RELAY_PROTECTION",
+    "架线": "STRINGING",
+}
+
+
+def detect_power_section_type(section: Any) -> str | None:
+    """Detect power engineering section type from section title/content."""
+    title = _safe_title(section)
+    if not title:
+        return None
+    for keyword, section_type in _POWER_SECTION_TYPE_MAP.items():
+        if keyword in title:
+            return section_type
+    return None
+
+
 __all__ = [
     "SectionGenerationPlan",
     "SectionRoutingConfig",
+    "_POWER_SECTION_TYPE_MAP",
+    "detect_power_section_type",
     "is_critical_section",
     "load_section_routing_config",
     "select_generation_plan",

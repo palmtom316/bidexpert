@@ -60,6 +60,21 @@ def build_global_facts_prompt(confirmed_data: str) -> str:
         "milestone_nodes": None,
         "bid_bond_amount": None,
         "performance_bond_ratio": None,
+        "rated_capacity": None,
+        "line_length": None,
+        "conductor_type": None,
+        "tower_count": None,
+        "substation_type": None,
+        "commissioning_deadline": None,
+        "grid_connection_point": None,
+        "seismic_fortification": None,
+        "pollution_level": None,
+        "altitude": None,
+        "design_wind_speed": None,
+        "annual_thunder_days": None,
+        "owner_project_manager": None,
+        "construction_permit_no": None,
+        "epc_mode": None,
     }
     return (
         f"{GENERAL_RULES}\n\n"
@@ -113,6 +128,63 @@ _SECTION_GENERATION_GUIDANCE: dict[str, str] = {
         "- 必须包含：报价说明、付款计划、合同条款响应\n"
         "- 金额须与 Global Facts 中 contract_amount 一致\n"
     ),
+    "commissioning_plan": (
+        "【章节约束：调试方案】\n"
+        "- 必须包含：调试范围与内容、调试组织与人员、调试程序与方法、调试计划与进度\n"
+        "- 须明确一次设备调试、二次系统调试、整组试验的顺序与依赖关系\n"
+        "- 调试标准须引用 DL/T 5218、GB 50150 等现行规程\n"
+        "- 电压等级须与 Global Facts 中 voltage_level 一致\n"
+    ),
+    "live_work_plan": (
+        "【章节约束：带电作业方案】\n"
+        "- 必须包含：作业范围、安全距离计算、工器具清单、人员资质要求\n"
+        "- 须明确等电位/地电位/中间电位作业方式及选择依据\n"
+        "- 安全措施须符合 DL/T 878《带电作业技术导则》\n"
+        "- 必须包含停电预案和应急处置流程\n"
+    ),
+    "heavy_equipment_plan": (
+        "【章节约束：大型设备吊装运输方案】\n"
+        "- 必须包含：设备清单与重量参数、吊装方案、运输路线、地基处理\n"
+        "- 主变压器吊装须明确吊车选型计算、站内行走路线\n"
+        "- 须明确超限运输许可办理及交通疏导方案\n"
+    ),
+    "cable_laying_plan": (
+        "【章节约束：电缆敷设方案】\n"
+        "- 必须包含：电缆清册、敷设路径、敷设方式、弯曲半径控制\n"
+        "- 须明确电缆沟/排管/桥架/直埋的选择依据\n"
+        "- 高压电缆须包含交叉互联接地方案和护层保护\n"
+        "- 电缆防火封堵须符合 GB 50217\n"
+    ),
+    "gis_installation_plan": (
+        "【章节约束：GIS 安装方案】\n"
+        "- 必须包含：安装环境控制（温湿度/洁净度）、SF6气体管理、对接安装工艺\n"
+        "- 须明确现场交接试验项目及标准\n"
+        "- 设备型号须与 Global Facts 中 substation_type 一致\n"
+    ),
+    "stringing_plan": (
+        "【章节约束：架线施工方案】\n"
+        "- 必须包含：张力放线方案、弧垂观测、压接工艺、跨越架搭设\n"
+        "- 导线型号须与 Global Facts 中 conductor_type 一致\n"
+        "- 跨越施工须明确被跨越物保护措施和停电协调\n"
+    ),
+    "tower_foundation_plan": (
+        "【章节约束：铁塔基础施工方案】\n"
+        "- 必须包含：基础类型选择依据、地基处理、混凝土浇筑、养护要求\n"
+        "- 须明确不同地质条件下的基础设计方案\n"
+        "- 杆塔数量须与 Global Facts 中 tower_count 一致\n"
+    ),
+    "grounding_plan": (
+        "【章节约束：接地工程方案】\n"
+        "- 必须包含：接地网设计参数、接地电阻要求、材料选择、施工方法\n"
+        "- 须明确接地电阻测量方法和季节修正系数\n"
+        "- 接地标准须符合 DL/T 621\n"
+    ),
+    "anti_pollution_plan": (
+        "【章节约束：防污闪方案】\n"
+        "- 必须包含：污区划分、爬距选择、防污措施（涂料/增爬裙/复合绝缘子）\n"
+        "- 污秽等级须与 Global Facts 中 pollution_level 一致\n"
+        "- 须明确清扫周期和带电水冲洗方案\n"
+    ),
 }
 
 _REVIEW_CHECKLIST: dict[str, str] = {
@@ -122,6 +194,7 @@ _REVIEW_CHECKLIST: dict[str, str] = {
         "2. 证书一致性：项目经理资质是否与 Global Facts 一致\n"
         "3. 废标条款覆盖：是否遗漏招标文件中的废标/否决条件\n"
         "4. 参数一致性：技术参数是否与招标要求逐项对应\n"
+        "5. 电压等级一致性：施工方案中电压等级是否与 Global Facts 一致\n"
     ),
     "technical_proposal": (
         "审查要点：\n"
@@ -129,6 +202,7 @@ _REVIEW_CHECKLIST: dict[str, str] = {
         "2. 标准有效性：引用的技术标准是否为现行版本\n"
         "3. 废标条款覆盖：是否遗漏技术类废标条件\n"
         "4. 一致性：技术方案与施工组织设计是否矛盾\n"
+        "5. 电力设备参数：变压器容量、导线截面等参数是否与招标要求一致\n"
     ),
     "safety_plan": (
         "审查要点：\n"
@@ -136,6 +210,7 @@ _REVIEW_CHECKLIST: dict[str, str] = {
         "2. 风险覆盖：是否覆盖各工序安全风险点\n"
         "3. 废标条款覆盖：是否遗漏安全类否决条件\n"
         "4. 应急预案完整性：是否包含必要的应急响应流程\n"
+        "5. 带电作业安全：是否覆盖带电作业、高处作业等电力特有安全风险\n"
     ),
     "quality_plan": (
         "审查要点：\n"
@@ -143,6 +218,70 @@ _REVIEW_CHECKLIST: dict[str, str] = {
         "2. 检验计划完整性：检验批划分是否合理\n"
         "3. 废标条款覆盖：是否遗漏质量类否决条件\n"
         "4. 参数一致性：质量指标是否与技术方案一致\n"
+        "5. 电气试验：交接试验和预防性试验项目是否完整覆盖\n"
+    ),
+    "commissioning_plan": (
+        "审查要点：\n"
+        "1. 调试程序：是否覆盖一次设备、二次系统、整组试验全流程\n"
+        "2. 标准引用：调试标准是否为现行有效版本（DL/T 5218、GB 50150）\n"
+        "3. 电压等级一致性：调试方案电压等级是否与 Global Facts 一致\n"
+        "4. 人员资质：调试负责人是否具备相应资质证书\n"
+    ),
+    "live_work_plan": (
+        "审查要点：\n"
+        "1. 安全距离：带电作业安全距离计算是否正确\n"
+        "2. 工器具：是否列明经试验合格的带电作业工器具清单\n"
+        "3. 作业方式：等电位/地电位选择是否有依据\n"
+        "4. 应急预案：是否包含触电/坠落等应急处置流程\n"
+    ),
+    "heavy_equipment_plan": (
+        "审查要点：\n"
+        "1. 吊装计算：吊车选型是否经过计算校核\n"
+        "2. 运输方案：超限运输路线是否经过勘查确认\n"
+        "3. 地基承载力：吊装点地基处理是否充分\n"
+        "4. 安全措施：大件吊装安全专项方案是否完整\n"
+    ),
+    "cable_laying_plan": (
+        "审查要点：\n"
+        "1. 电缆选型：电缆截面及型号是否与设计一致\n"
+        "2. 弯曲半径：敷设弯曲半径是否满足规范要求\n"
+        "3. 防火封堵：电缆防火措施是否符合 GB 50217\n"
+        "4. 接地方案：高压电缆交叉互联接地是否正确\n"
+    ),
+    "gis_installation_plan": (
+        "审查要点：\n"
+        "1. 环境控制：安装环境温湿度和洁净度是否达标\n"
+        "2. SF6管理：SF6气体回收和检漏措施是否完善\n"
+        "3. 交接试验：现场试验项目是否覆盖完整\n"
+        "4. 型号一致性：GIS 设备型号是否与招标要求一致\n"
+    ),
+    "stringing_plan": (
+        "审查要点：\n"
+        "1. 张力计算：张力放线张力是否经过计算\n"
+        "2. 弧垂观测：弧垂观测方法和精度是否满足要求\n"
+        "3. 跨越方案：跨越架搭设是否安全可靠\n"
+        "4. 导线型号：导线型号是否与 Global Facts 一致\n"
+    ),
+    "tower_foundation_plan": (
+        "审查要点：\n"
+        "1. 基础选型：基础类型是否与地质条件匹配\n"
+        "2. 混凝土质量：混凝土配合比及养护是否符合规范\n"
+        "3. 杆塔数量：杆塔数量是否与 Global Facts 一致\n"
+        "4. 地基处理：特殊地基处理方案是否合理\n"
+    ),
+    "grounding_plan": (
+        "审查要点：\n"
+        "1. 接地电阻：设计接地电阻值是否满足规程要求\n"
+        "2. 材料选择：接地材料是否耐腐蚀并满足热稳定要求\n"
+        "3. 施工方法：接地网施工焊接工艺是否规范\n"
+        "4. 标准引用：接地标准是否引用 DL/T 621\n"
+    ),
+    "anti_pollution_plan": (
+        "审查要点：\n"
+        "1. 污区划分：污秽等级划分是否与 Global Facts 一致\n"
+        "2. 爬距选择：爬距是否满足对应污秽等级要求\n"
+        "3. 防污措施：防污措施选择是否有技术经济比较\n"
+        "4. 维护方案：清扫周期和水冲洗方案是否合理\n"
     ),
 }
 

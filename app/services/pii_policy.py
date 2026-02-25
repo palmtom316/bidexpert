@@ -8,10 +8,31 @@ from app.services.pricing_guard import detect_pricing_content
 EMAIL_PATTERN = re.compile(
     r"(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}(?![A-Za-z0-9._%+-])"
 )
-PHONE_PATTERN = re.compile(r"\b1[3-9]\d{9}\b")
+PHONE_PATTERN = re.compile(r"(?<!\d)1[3-9]\d{9}(?!\d)")
 ID_CARD_PATTERN = re.compile(r"\b\d{17}[\dXx]\b")
 TECH_PARAM_PATTERN = re.compile(
     r"([A-Za-z\u4e00-\u9fff]{1,12}\s*[:：]?\s*\d+(?:\.\d+)?\s*(?:ms|s|GB|TB|MB/s|Gbps|%|QPS|TPS|MHz|kW|℃)?)"
+)
+
+# Bid document personnel context — these names/certs should NOT be masked
+_BID_PERSONNEL_CONTEXT = re.compile(
+    r"(?:项目经理|项目负责人|技术负责人|安全员|质量员|施工员|"
+    r"总工程师|副总工程师|专职安全员|总监理工程师|"
+    r"注册建造师|注册监理工程师|注册造价工程师|注册电气工程师)"
+)
+
+# Enterprise credential patterns — should NOT be masked
+_ENTERPRISE_CREDENTIAL = re.compile(
+    r"(?:统一社会信用代码|营业执照编号|资质证书编号|"
+    r"安全生产许可证编号|承装修试许可证编号|"
+    r"电力业务许可证编号|施工许可证号)"
+)
+
+_CREDENTIAL_NUMBER = re.compile(
+    r"(?:统一社会信用代码|营业执照编号|资质证书编号|"
+    r"安全生产许可证编号|承装修试许可证编号|"
+    r"电力业务许可证编号|施工许可证号)"
+    r"[:：]\s*([A-Za-z0-9\-]{6,30})"
 )
 
 
@@ -42,9 +63,35 @@ def _mask_id_cards(text: str) -> str:
     return ID_CARD_PATTERN.sub(replace, text)
 
 
+def _is_bid_personnel_context(text: str, match_start: int, window: int = 60) -> bool:
+    """Check if a PII match is within a bid personnel context (should be preserved)."""
+    left = max(0, match_start - window)
+    context = text[left:match_start + window]
+    return bool(_BID_PERSONNEL_CONTEXT.search(context))
+
+
+def _is_enterprise_credential(text: str, match_start: int, window: int = 60) -> bool:
+    """Check if a number match is an enterprise credential (should be preserved)."""
+    left = max(0, match_start - window)
+    context = text[left:match_start + window]
+    return bool(_ENTERPRISE_CREDENTIAL.search(context))
+
+
 def _mask_pii(text: str) -> str:
-    masked = EMAIL_PATTERN.sub("***@***", text)
-    masked = PHONE_PATTERN.sub("***********", masked)
+    # Preserve emails in bid personnel context
+    def _email_replace(match: re.Match[str]) -> str:
+        if _is_bid_personnel_context(text, match.start()):
+            return match.group(0)
+        return "***@***"
+
+    # Preserve phones in bid personnel context
+    def _phone_replace(match: re.Match[str]) -> str:
+        if _is_bid_personnel_context(text, match.start()):
+            return match.group(0)
+        return "***********"
+
+    masked = EMAIL_PATTERN.sub(_email_replace, text)
+    masked = PHONE_PATTERN.sub(_phone_replace, masked)
     masked = _mask_id_cards(masked)
     return masked
 

@@ -18,6 +18,26 @@ logger = logging.getLogger(__name__)
 
 _INCONSISTENCY_PATTERN = re.compile(r"(矛盾|冲突|不一致)", re.IGNORECASE)
 
+_STANDARD_PATTERN = re.compile(
+    r"(GB\s*/?T?\s*\d{4,5}(?:[.-]\d{1,4})?|DL\s*/?T?\s*\d{3,5}(?:[.-]\d{1,4})?|"
+    r"IEC\s*\d{4,5}|IEEE\s*\d{3,4}|NB\s*/?T?\s*\d{4,5})"
+)
+
+_KNOWN_CURRENT_STANDARDS: dict[str, str] = {
+    "GB 50150": "电气装置安装工程电气设备交接试验标准",
+    "GB 50168": "电气装置安装工程电缆线路施工及验收标准",
+    "GB 50169": "电气装置安装工程接地装置施工及验收规范",
+    "GB 50170": "电气装置安装工程旋转电机施工及验收标准",
+    "GB 50171": "电气装置安装工程盘柜及二次回路接线施工及验收标准",
+    "GB 50217": "电力工程电缆设计标准",
+    "GB 50233": "110kV~750kV架空输电线路施工及验收规范",
+    "DL/T 5218": "220kV~750kV变电站设计技术规程",
+    "DL/T 5220": "10kV及以下架空配电线路设计技术规程",
+    "DL/T 621": "交流电气装置的接地设计规范",
+    "DL/T 878": "带电作业技术导则",
+    "DL/T 5161": "电气装置安装工程质量检验及评定规程",
+}
+
 
 def _as_requirement_code_set(requirements: list[Requirement]) -> set[str]:
     return {str(item.requirement_code).strip() for item in requirements if str(item.requirement_code).strip()}
@@ -84,6 +104,49 @@ def _section_coverage_map(
     return result
 
 
+def _check_standard_references(text: str) -> list[dict[str, Any]]:
+    """Find standard references and validate against known current standards."""
+    issues: list[dict[str, Any]] = []
+    for match in _STANDARD_PATTERN.finditer(text):
+        ref = match.group(1).strip()
+        normalized = re.sub(r"\s+", " ", ref)
+        known = False
+        for std_key in _KNOWN_CURRENT_STANDARDS:
+            if std_key.replace(" ", "").replace("/", "") in normalized.replace(" ", "").replace("/", ""):
+                known = True
+                break
+        if not known:
+            issues.append({
+                "issue_type": "STANDARD_UNVERIFIED",
+                "severity": "medium",
+                "description": f"标准引用 '{normalized}' 未在已知现行标准库中确认，请核实有效性",
+                "location": normalized,
+            })
+    return issues
+
+
+def _check_numerical_consistency(text: str, global_facts: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    """Check for numerical inconsistencies in generated text against global facts."""
+    issues: list[dict[str, Any]] = []
+    if not global_facts:
+        return issues
+    voltage = global_facts.get("voltage_level")
+    if voltage and isinstance(voltage, str):
+        voltage_num = re.search(r"(\d+(?:\.\d+)?)", voltage)
+        if voltage_num:
+            v_str = voltage_num.group(1)
+            voltage_mentions = re.findall(r"(\d+(?:\.\d+)?)\s*(?:kV|KV|kv|千伏)", text)
+            for mention in voltage_mentions:
+                if mention != v_str and float(mention) > float(v_str):
+                    issues.append({
+                        "issue_type": "NUMERICAL_INCONSISTENT",
+                        "severity": "high",
+                        "description": f"文中提及电压 {mention}kV 高于 Global Facts 中的 {voltage}",
+                        "location": f"{mention}kV",
+                    })
+    return issues
+
+
 def _build_full_review_report_payload(
     *,
     status: str,
@@ -117,6 +180,11 @@ def _build_full_review_report_payload(
             missing_requirements=missing_requirements,
         ),
     }
+    sections_text = " ".join(
+        str(getattr(section, "content_md", "") or "") for section in sections
+    )
+    payload["standard_issues"] = _check_standard_references(sections_text)
+    payload["numerical_issues"] = _check_numerical_consistency(sections_text)
     if "error" in source_report:
         payload["error"] = source_report["error"]
     return payload
