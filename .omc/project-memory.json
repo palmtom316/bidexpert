@@ -1,0 +1,496 @@
+{
+  "version": "1.0.0",
+  "lastScanned": 1771911922466,
+  "projectRoot": "/home/palmtom/projects/bidexpert",
+  "techStack": {
+    "languages": [
+      {
+        "name": "Python",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "pyproject.toml"
+        ]
+      }
+    ],
+    "frameworks": [
+      {
+        "name": "fastapi",
+        "version": null,
+        "category": "backend"
+      },
+      {
+        "name": "pytest",
+        "version": null,
+        "category": "testing"
+      }
+    ],
+    "packageManager": null,
+    "runtime": null
+  },
+  "build": {
+    "buildCommand": null,
+    "testCommand": "pytest",
+    "lintCommand": "ruff check",
+    "devCommand": null,
+    "scripts": {}
+  },
+  "conventions": {
+    "namingStyle": null,
+    "importStyle": null,
+    "testPattern": null,
+    "fileOrganization": null
+  },
+  "structure": {
+    "isMonorepo": false,
+    "workspaces": [],
+    "mainDirectories": [
+      "app",
+      "docs",
+      "scripts",
+      "tests"
+    ],
+    "gitBranches": {
+      "defaultBranch": "main",
+      "branchingStrategy": null
+    }
+  },
+  "customNotes": [],
+  "directoryMap": {
+    "app": {
+      "path": "app",
+      "purpose": "Application code",
+      "fileCount": 2,
+      "lastAccessed": 1771911922460,
+      "keyFiles": [
+        "__init__.py",
+        "main.py"
+      ]
+    },
+    "backups": {
+      "path": "backups",
+      "purpose": null,
+      "fileCount": 1,
+      "lastAccessed": 1771911922462,
+      "keyFiles": []
+    },
+    "bidexpert.egg-info": {
+      "path": "bidexpert.egg-info",
+      "purpose": null,
+      "fileCount": 5,
+      "lastAccessed": 1771911922462,
+      "keyFiles": [
+        "PKG-INFO",
+        "SOURCES.txt",
+        "dependency_links.txt",
+        "requires.txt",
+        "top_level.txt"
+      ]
+    },
+    "data": {
+      "path": "data",
+      "purpose": "Data files",
+      "fileCount": 1,
+      "lastAccessed": 1771911922463,
+      "keyFiles": [
+        "bidexpert.db"
+      ]
+    },
+    "deploy": {
+      "path": "deploy",
+      "purpose": null,
+      "fileCount": 0,
+      "lastAccessed": 1771911922463,
+      "keyFiles": []
+    },
+    "docs": {
+      "path": "docs",
+      "purpose": "Documentation",
+      "fileCount": 25,
+      "lastAccessed": 1771911922463,
+      "keyFiles": [
+        "AI_Programming_Prompt_v3.7_Quality_Maximized.md",
+        "AI_Tender_System_Technical_Whitepaper_v3.2_Enterprise.md",
+        "AI_Tender_System_Technical_Whitepaper_v3.6_Bring_Your_Own_Key.md",
+        "AI_Tender_System_Technical_Whitepaper_v3.7_Quality_Maximized.md",
+        "AI_Tender_System_v2.2_Enhanced_Development_Spec_with_SQL.md"
+      ]
+    },
+    "migrations": {
+      "path": "migrations",
+      "purpose": "Database migrations",
+      "fileCount": 3,
+      "lastAccessed": 1771911922464,
+      "keyFiles": [
+        "README",
+        "env.py",
+        "script.py.mako"
+      ]
+    },
+    "scripts": {
+      "path": "scripts",
+      "purpose": "Build/utility scripts",
+      "fileCount": 1,
+      "lastAccessed": 1771911922464,
+      "keyFiles": [
+        "quality_benchmark_report.py"
+      ]
+    },
+    "sql": {
+      "path": "sql",
+      "purpose": null,
+      "fileCount": 1,
+      "lastAccessed": 1771911922464,
+      "keyFiles": [
+        "schema.sql"
+      ]
+    },
+    "tests": {
+      "path": "tests",
+      "purpose": "Test files",
+      "fileCount": 10,
+      "lastAccessed": 1771911922464,
+      "keyFiles": [
+        "__init__.py",
+        "test_app_starts.py",
+        "test_ci_pipeline_contract.py",
+        "test_docx_ingest.py",
+        "test_e2e_flow.py"
+      ]
+    },
+    "app/api": {
+      "path": "app/api",
+      "purpose": "API routes",
+      "fileCount": 2,
+      "lastAccessed": 1771911922465,
+      "keyFiles": [
+        "__init__.py",
+        "routes.py"
+      ]
+    },
+    "app/config": {
+      "path": "app/config",
+      "purpose": "Configuration files",
+      "fileCount": 5,
+      "lastAccessed": 1771911922465,
+      "keyFiles": [
+        "__init__.py",
+        "model_registry.cn.debug.json",
+        "model_registry.cn.prod.json"
+      ]
+    },
+    "app/models": {
+      "path": "app/models",
+      "purpose": "Data models",
+      "fileCount": 2,
+      "lastAccessed": 1771911922465,
+      "keyFiles": [
+        "__init__.py",
+        "tables.py"
+      ]
+    }
+  },
+  "hotPaths": [
+    {
+      "path": "app/services/tender_analysis.py",
+      "accessCount": 16,
+      "lastAccessed": 1771916589043,
+      "type": "file"
+    },
+    {
+      "path": "app/llm/prompt_suite_v11.py",
+      "accessCount": 16,
+      "lastAccessed": 1771917869534,
+      "type": "file"
+    },
+    {
+      "path": "app/extract/tender_parser.py",
+      "accessCount": 13,
+      "lastAccessed": 1771924072675,
+      "type": "file"
+    },
+    {
+      "path": "app/services/global_facts.py",
+      "accessCount": 12,
+      "lastAccessed": 1771916780645,
+      "type": "file"
+    },
+    {
+      "path": "",
+      "accessCount": 12,
+      "lastAccessed": 1771923097132,
+      "type": "directory"
+    },
+    {
+      "path": "app/services/section_enhancement.py",
+      "accessCount": 12,
+      "lastAccessed": 1771923563249,
+      "type": "file"
+    },
+    {
+      "path": "app/services/review_engine.py",
+      "accessCount": 11,
+      "lastAccessed": 1771921049987,
+      "type": "file"
+    },
+    {
+      "path": "app/services/pricing_guard.py",
+      "accessCount": 10,
+      "lastAccessed": 1771919847187,
+      "type": "file"
+    },
+    {
+      "path": "app/services/evidence_validator.py",
+      "accessCount": 10,
+      "lastAccessed": 1771921568320,
+      "type": "file"
+    },
+    {
+      "path": "app/core/section_router.py",
+      "accessCount": 10,
+      "lastAccessed": 1771922468355,
+      "type": "file"
+    },
+    {
+      "path": "app/services/pii_policy.py",
+      "accessCount": 10,
+      "lastAccessed": 1771923923709,
+      "type": "file"
+    },
+    {
+      "path": "app/config/section_routing.cn.json",
+      "accessCount": 9,
+      "lastAccessed": 1771917870104,
+      "type": "file"
+    },
+    {
+      "path": "app/services/word_renderer.py",
+      "accessCount": 9,
+      "lastAccessed": 1771921546785,
+      "type": "file"
+    },
+    {
+      "path": "app/services/generation_pipeline.py",
+      "accessCount": 9,
+      "lastAccessed": 1771924444141,
+      "type": "file"
+    },
+    {
+      "path": "app/rag/rag_flow.py",
+      "accessCount": 8,
+      "lastAccessed": 1771919787942,
+      "type": "file"
+    },
+    {
+      "path": "app/services/fallback_templates.py",
+      "accessCount": 8,
+      "lastAccessed": 1771921521858,
+      "type": "file"
+    },
+    {
+      "path": "tests/benchmark/fixtures/benchmark_cases.json",
+      "accessCount": 8,
+      "lastAccessed": 1771924614838,
+      "type": "file"
+    },
+    {
+      "path": "tests/benchmark/test_bid_quality_benchmark.py",
+      "accessCount": 6,
+      "lastAccessed": 1771924346826,
+      "type": "file"
+    },
+    {
+      "path": "app/schemas/contracts.py",
+      "accessCount": 5,
+      "lastAccessed": 1771914636271,
+      "type": "file"
+    },
+    {
+      "path": "app",
+      "accessCount": 5,
+      "lastAccessed": 1771914674328,
+      "type": "directory"
+    },
+    {
+      "path": "docs/电力工程评标专家质量评审报告_V1.0.md",
+      "accessCount": 3,
+      "lastAccessed": 1771914589309,
+      "type": "file"
+    },
+    {
+      "path": "app/tests/test_tender_parser_disqualify_rules.py",
+      "accessCount": 3,
+      "lastAccessed": 1771914655440,
+      "type": "file"
+    },
+    {
+      "path": "docs/BidExpert_生产上线评估报告_V1.1.md",
+      "accessCount": 2,
+      "lastAccessed": 1771913074820,
+      "type": "file"
+    },
+    {
+      "path": "pyproject.toml",
+      "accessCount": 2,
+      "lastAccessed": 1771914171391,
+      "type": "file"
+    },
+    {
+      "path": "app/services/tender_parser.py",
+      "accessCount": 2,
+      "lastAccessed": 1771914172021,
+      "type": "file"
+    },
+    {
+      "path": "app/config/model_registry.json",
+      "accessCount": 2,
+      "lastAccessed": 1771914181514,
+      "type": "file"
+    },
+    {
+      "path": "app/services/llm_gateway.py",
+      "accessCount": 2,
+      "lastAccessed": 1771914181537,
+      "type": "file"
+    },
+    {
+      "path": ".env.example",
+      "accessCount": 2,
+      "lastAccessed": 1771914181889,
+      "type": "file"
+    },
+    {
+      "path": "app/models/tables.py",
+      "accessCount": 2,
+      "lastAccessed": 1771914182079,
+      "type": "file"
+    },
+    {
+      "path": "app/tests/test_evidence_validator.py",
+      "accessCount": 2,
+      "lastAccessed": 1771914248406,
+      "type": "file"
+    },
+    {
+      "path": "app/tests/test_section_typed_prompt_and_review_checklist.py",
+      "accessCount": 2,
+      "lastAccessed": 1771914655798,
+      "type": "file"
+    },
+    {
+      "path": "app/tests/test_generation_pipeline_conflict_and_disqualify.py",
+      "accessCount": 2,
+      "lastAccessed": 1771914657494,
+      "type": "file"
+    },
+    {
+      "path": "app/prompts",
+      "accessCount": 2,
+      "lastAccessed": 1771914708334,
+      "type": "directory"
+    },
+    {
+      "path": "docs/README.md",
+      "accessCount": 1,
+      "lastAccessed": 1771912927975,
+      "type": "file"
+    },
+    {
+      "path": "docs/AI_Tender_System_Technical_Whitepaper_v3.2_Enterprise.md",
+      "accessCount": 1,
+      "lastAccessed": 1771912935969,
+      "type": "file"
+    },
+    {
+      "path": "app/main.py",
+      "accessCount": 1,
+      "lastAccessed": 1771912944851,
+      "type": "file"
+    },
+    {
+      "path": "app/prompts/section_enhance_r1_cn.md",
+      "accessCount": 1,
+      "lastAccessed": 1771913095492,
+      "type": "file"
+    },
+    {
+      "path": "app/prompts/final_review_r1_cn.md",
+      "accessCount": 1,
+      "lastAccessed": 1771913096610,
+      "type": "file"
+    },
+    {
+      "path": "app/renderer/__init__.py",
+      "accessCount": 1,
+      "lastAccessed": 1771913107447,
+      "type": "file"
+    },
+    {
+      "path": "app/tests/test_review_triage_gate.py",
+      "accessCount": 1,
+      "lastAccessed": 1771914181442,
+      "type": "file"
+    },
+    {
+      "path": "app/tests/test_enterprise_expert_pipeline.py",
+      "accessCount": 1,
+      "lastAccessed": 1771914181476,
+      "type": "file"
+    },
+    {
+      "path": "app/config/model_registry.cn.prod.json",
+      "accessCount": 1,
+      "lastAccessed": 1771914181519,
+      "type": "file"
+    },
+    {
+      "path": "app/core/config.py",
+      "accessCount": 1,
+      "lastAccessed": 1771914182066,
+      "type": "file"
+    },
+    {
+      "path": "tests/test_review_flow.py",
+      "accessCount": 1,
+      "lastAccessed": 1771914191266,
+      "type": "file"
+    },
+    {
+      "path": "tests/test_e2e_flow.py",
+      "accessCount": 1,
+      "lastAccessed": 1771914191270,
+      "type": "file"
+    },
+    {
+      "path": "tests/test_scoring_flow.py",
+      "accessCount": 1,
+      "lastAccessed": 1771914191431,
+      "type": "file"
+    },
+    {
+      "path": "tests/test_app_starts.py",
+      "accessCount": 1,
+      "lastAccessed": 1771914191437,
+      "type": "file"
+    },
+    {
+      "path": "app/config/model_registry.cn.debug.json",
+      "accessCount": 1,
+      "lastAccessed": 1771914204848,
+      "type": "file"
+    },
+    {
+      "path": "app/tests/test_compliance_engine.py",
+      "accessCount": 1,
+      "lastAccessed": 1771914211392,
+      "type": "file"
+    },
+    {
+      "path": "app/tests/test_scoring_engine.py",
+      "accessCount": 1,
+      "lastAccessed": 1771914211403,
+      "type": "file"
+    }
+  ],
+  "userDirectives": []
+}

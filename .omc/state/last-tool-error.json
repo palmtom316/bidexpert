@@ -1,0 +1,7 @@
+{
+  "tool_name": "Bash",
+  "tool_input_preview": "{\"command\":\"gh auth status 2>&1\",\"description\":\"Check GitHub CLI auth\"}",
+  "error": "Exit code 127\n/bin/bash: line 1: gh: command not found\n\n/bin/bash: line 1: gh: command not found",
+  "timestamp": "2026-02-25T03:12:25.490Z",
+  "retry_count": 1
+}
