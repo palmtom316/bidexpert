@@ -15,7 +15,7 @@ celery_app = Celery(
     "bidexpert",
     broker=settings.celery_broker_url,
     backend=settings.celery_result_backend,
-    include=["app.worker.tasks"],
+    include=["app.worker.tasks", "app.worker.tender_tasks"],
 )
 
 celery_app.conf.update(

@@ -203,6 +203,19 @@ class EvidenceUpsertItem(BaseModel):
     source_locator: dict | None = None
     parent_chunk_id: str | None = None
     anchor_type: Literal["clause", "table", "paragraph"] | None = None
+    # v1.4 — Lifecycle fields
+    standard_code: str | None = None
+    standard_status: str = "active"
+    expiration_date: str | None = None
+    # v1.4 — Metadata fields
+    voltage_level_kv: int | None = None
+    project_type: str | None = None
+    core_equipment: list[str] = Field(default_factory=list)
+    region: str | None = None
+    # v1.4 — Table-aware chunking fields
+    chunk_kind: str | None = None
+    table_header: list[str] | None = None
+    is_parameter_table: bool | None = None
 
 
 class EvidenceUpsertRequest(BaseModel):
@@ -214,6 +227,10 @@ class EvidenceSearchRequest(BaseModel):
     query: str
     top_k: int = 5
     industry_tag: str | None = None
+    # v1.4 — Metadata search filters
+    voltage_level_kv: int | None = None
+    project_type: str | None = None
+    region: str | None = None
 
 
 class EvidenceSearchHit(BaseModel):
@@ -550,6 +567,16 @@ class ExpertLibraryDocItem(BaseModel):
     doc_type: str
     created_at: str
     chunk_count: int
+    # v1.4 — Lifecycle fields
+    standard_code: str | None = None
+    version_year: int | None = None
+    standard_status: str = "active"
+    expiration_date: str | None = None
+    # v1.4 — Metadata fields
+    voltage_level_kv: int | None = None
+    project_type: str | None = None
+    core_equipment: list[str] = Field(default_factory=list)
+    region: str | None = None
 
 
 class ExpertLibraryDocListResponse(BaseModel):
@@ -681,3 +708,32 @@ class ScoringReportResponse(BaseModel):
     score_total: float
     details_json: dict
     created_at: str
+
+
+# ── Tender v1.1 Import ────────────────────────────────────────
+
+class TenderImportZipResponse(BaseModel):
+    run_id: str
+    tender_id: str
+    filename: str
+    status: str
+
+
+class TenderImportRunItem(BaseModel):
+    run_id: str
+    project_id: str | None = None
+    tender_id: str
+    filename: str
+    current_step: str
+    fatal_blocked_reason: dict | None = None
+    error_detail: str | None = None
+    created_at: str
+
+
+class TenderImportRunListResponse(BaseModel):
+    items: list[TenderImportRunItem]
+
+
+class TenderImportRunDetailResponse(BaseModel):
+    run: TenderImportRunItem
+    derived_files: list[str] = Field(default_factory=list)

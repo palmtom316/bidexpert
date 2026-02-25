@@ -365,6 +365,16 @@ def _is_payload_allowed(payload: dict) -> bool:
     if valid_to and valid_to < date.today().isoformat():
         return False
 
+    # v1.4 — Lifecycle: reject deprecated standards
+    standard_status = payload.get("standard_status")
+    if standard_status and standard_status == "deprecated":
+        return False
+
+    # v1.4 — Lifecycle: reject expired assets
+    expiration_date = payload.get("expiration_date")
+    if expiration_date and expiration_date < date.today().isoformat():
+        return False
+
     return True
 
 
@@ -435,6 +445,19 @@ class QdrantStore:
                 "parent_chunk_id": chunk.parent_chunk_id or source_locator.get("parent_chunk_id"),
                 "anchor_type": chunk.anchor_type or source_locator.get("anchor_type"),
                 "parent_context": source_locator.get("parent_context"),
+                # v1.4 — Lifecycle fields
+                "standard_code": chunk.standard_code,
+                "standard_status": chunk.standard_status,
+                "expiration_date": chunk.expiration_date,
+                # v1.4 — Metadata fields
+                "voltage_level_kv": chunk.voltage_level_kv,
+                "project_type": chunk.project_type,
+                "core_equipment": chunk.core_equipment,
+                "region": chunk.region,
+                # v1.4 — Table-aware chunking fields
+                "chunk_kind": chunk.chunk_kind,
+                "table_header": chunk.table_header,
+                "is_parameter_table": chunk.is_parameter_table,
             }
 
             dense_vector = embed_text(
@@ -470,7 +493,15 @@ class QdrantStore:
             self.client.upsert(collection_name=self.collection, points=points, wait=True)
         return len(points)
 
-    def _build_query_filter(self, industry_tag: str | None = None, project_id: str | None = None):
+    def _build_query_filter(
+        self,
+        industry_tag: str | None = None,
+        project_id: str | None = None,
+        *,
+        voltage_level_kv: int | None = None,
+        project_type: str | None = None,
+        region: str | None = None,
+    ):
         from qdrant_client.http.models import Condition, FieldCondition, Filter, MatchValue
 
         must_conditions: list[Condition] = [FieldCondition(key="sensitivity_level", match=MatchValue(value="PUBLIC_OK"))]
@@ -479,7 +510,18 @@ class QdrantStore:
             must_conditions.append(FieldCondition(key="project_id", match=MatchValue(value=normalized_project_id)))
         if industry_tag:
             must_conditions.append(FieldCondition(key="industry_tag", match=MatchValue(value=industry_tag)))
-        must_not_conditions: list[Condition] = [FieldCondition(key="forbidden_tags", match=MatchValue(value="PRICING_RELATED"))]
+        # v1.4 — Metadata mandatory hard filters
+        if voltage_level_kv is not None:
+            must_conditions.append(FieldCondition(key="voltage_level_kv", match=MatchValue(value=voltage_level_kv)))
+        if project_type:
+            must_conditions.append(FieldCondition(key="project_type", match=MatchValue(value=project_type)))
+        if region:
+            must_conditions.append(FieldCondition(key="region", match=MatchValue(value=region)))
+        must_not_conditions: list[Condition] = [
+            FieldCondition(key="forbidden_tags", match=MatchValue(value="PRICING_RELATED")),
+            # v1.4 — Lifecycle: exclude deprecated standards at query level
+            FieldCondition(key="standard_status", match=MatchValue(value="deprecated")),
+        ]
         return Filter(must=cast(list[Condition], must_conditions), must_not=cast(list[Condition], must_not_conditions))
 
     def _vector_search(self, query_vector: list[float], query_filter, limit: int):
@@ -610,9 +652,19 @@ class QdrantStore:
         top_k: int = 5,
         industry_tag: str | None = None,
         project_id: str | None = None,
+        *,
+        voltage_level_kv: int | None = None,
+        project_type: str | None = None,
+        region: str | None = None,
     ) -> list[RetrievedEvidence]:
         embed_profile = resolve_profile_for_task(project_id=project_id, task_type="EMBED")
-        query_filter = self._build_query_filter(industry_tag=industry_tag, project_id=project_id)
+        query_filter = self._build_query_filter(
+            industry_tag=industry_tag,
+            project_id=project_id,
+            voltage_level_kv=voltage_level_kv,
+            project_type=project_type,
+            region=region,
+        )
         prompt_top_n = max(
             int(settings.qdrant_prompt_topn_min),
             min(int(top_k), int(settings.qdrant_prompt_topn_max)),

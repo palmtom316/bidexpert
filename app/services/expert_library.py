@@ -14,7 +14,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.config import settings
 from app.db.session import session_scope
-from app.models.tables import DocKind, Document, EvidenceChunk, ExpertDoc, Project, SensitivityLevel
+from app.models.tables import DocKind, Document, EvidenceChunk, ExpertDoc, KBIngestRun, KBIngestStep, Project, SensitivityLevel
 from app.schemas.contracts import (
     DocBlockItem,
     ExpertLibraryConvertResponse,
@@ -509,6 +509,31 @@ def _ingest_historical_with_blocks(
         warnings.extend([f"pricing_detected:{reason}" for reason in pricing_reasons])
         warnings.append("section_enhancement_chunking_with_pricing_redaction_flags")
 
+    # v1.4 — Metadata extraction
+    from app.services.metadata_extractor import extract_metadata
+    doc_metadata = extract_metadata(full_text, use_llm_fallback=True)
+
+    # v1.4 — Lifecycle detection + validation
+    from app.services.lifecycle_manager import (
+        auto_deprecate_old_versions,
+        detect_standard_info,
+        validate_asset_lifecycle,
+        validate_standard_version,
+    )
+    detected_std_code, detected_version_year = detect_standard_info(full_text)
+    standard_status = "active"
+    expiration_date_val: date | None = None
+
+    if detected_std_code and detected_version_year:
+        std_check = validate_standard_version(detected_std_code, detected_version_year)
+        if not std_check.is_latest:
+            standard_status = "deprecated"
+            warnings.append(f"standard_deprecated:{detected_std_code}-{detected_version_year}")
+        elif settings.lifecycle_auto_deprecate:
+            deprecated_count = auto_deprecate_old_versions(detected_std_code, detected_version_year)
+            if deprecated_count > 0:
+                warnings.append(f"auto_deprecated_{deprecated_count}_older_versions:{detected_std_code}")
+
     doc_workspace: ExpertDocWorkspace | None = None
     structure: dict[str, Any] | None = None
     table_summaries: list[dict] = []
@@ -521,6 +546,7 @@ def _ingest_historical_with_blocks(
     source_document_id: uuid.UUID | None = None
     expert_doc_id: uuid.UUID
     chunks: list[EvidenceUpsertItem] = []
+    kb_run: KBIngestRun | None = None
 
     try:
         with session_scope() as db:
@@ -594,6 +620,16 @@ def _ingest_historical_with_blocks(
                         tags.append("PRICING_RELATED")
                     chunk.forbidden_tags = tags
 
+            # v1.4 — Propagate metadata + lifecycle to chunk payloads for Qdrant
+            for chunk in chunks:
+                chunk.standard_code = detected_std_code
+                chunk.standard_status = standard_status
+                chunk.expiration_date = expiration_date_val.isoformat() if expiration_date_val else None
+                chunk.voltage_level_kv = doc_metadata.voltage_level_kv
+                chunk.project_type = doc_metadata.project_type
+                chunk.core_equipment = doc_metadata.core_equipment
+                chunk.region = doc_metadata.region
+
             expert_doc = ExpertDoc(
                 source_document_id=source_document_id,
                 doc_type=doc_type,
@@ -603,10 +639,29 @@ def _ingest_historical_with_blocks(
                 sensitivity=SensitivityLevel.PUBLIC_OK,
                 valid_from=date.today(),
                 created_by=created_by,
+                # v1.4 — Lifecycle fields
+                standard_code=detected_std_code,
+                version_year=detected_version_year,
+                standard_status=standard_status,
+                expiration_date=expiration_date_val,
+                # v1.4 — Metadata fields
+                voltage_level_kv=doc_metadata.voltage_level_kv,
+                project_type=doc_metadata.project_type,
+                core_equipment=doc_metadata.core_equipment,
+                region=doc_metadata.region,
             )
             db.add(expert_doc)
             db.flush()
             expert_doc_id = expert_doc.id
+
+            # v1.4 — Create KBIngestRun for state tracking
+            kb_run = KBIngestRun(
+                expert_doc_id=expert_doc_id,
+                filename=filename,
+                current_step=KBIngestStep.CHUNKED,
+                metadata_json=doc_metadata.to_dict(),
+            )
+            db.add(kb_run)
 
             for idx, chunk in enumerate(chunks, start=1):
                 source_locator = chunk.source_locator or {}
@@ -630,15 +685,53 @@ def _ingest_historical_with_blocks(
                         qdrant_point_id=str(uuid.uuid5(uuid.NAMESPACE_URL, f"{expert_doc_id}:{chunk.chunk_id}")),
                         parent_chunk_id=chunk.parent_chunk_id or source_locator.get("parent_chunk_id"),
                         anchor_type=chunk.anchor_type or source_locator.get("anchor_type"),
+                        # v1.4 — Lifecycle fields
+                        standard_code=detected_std_code,
+                        standard_status=standard_status,
+                        expiration_date=expiration_date_val,
+                        # v1.4 — Metadata fields
+                        voltage_level_kv=doc_metadata.voltage_level_kv,
+                        project_type=doc_metadata.project_type,
+                        region=doc_metadata.region,
+                        # v1.4 — Table-aware chunking fields
+                        chunk_kind=chunk.chunk_kind,
+                        table_header=chunk.table_header or [],
+                        is_parameter_table=chunk.is_parameter_table,
                     )
                 )
 
             db.commit()
     except SQLAlchemyError as exc:
+        # v1.4 — Mark KB ingest as FAILED
+        if kb_run is not None:
+            try:
+                with session_scope() as err_db:
+                    err_db.execute(
+                        __import__("sqlalchemy").update(KBIngestRun)
+                        .where(KBIngestRun.id == kb_run.id)
+                        .values(current_step=KBIngestStep.FAILED, error_detail=str(exc))
+                    )
+                    err_db.commit()
+            except Exception:
+                pass
         raise RuntimeError(f"failed to persist expert library records: {exc}") from exc
 
     store = get_qdrant_store()
     upserted = store.upsert_chunks(str(expert_doc_id), chunks, project_id=parsed_project.project_raw)
+
+    # v1.4 — Update KBIngestRun to KB_READY
+    if kb_run is not None:
+        try:
+            from sqlalchemy import update as sa_update
+            with session_scope() as step_db:
+                step_db.execute(
+                    sa_update(KBIngestRun)
+                    .where(KBIngestRun.id == kb_run.id)
+                    .values(current_step=KBIngestStep.KB_READY)
+                )
+                step_db.commit()
+        except Exception:
+            pass
 
     if source_document_id and doc_workspace and structure and merged and markdown is not None:
         _save_json(doc_workspace.extracted_dir / "structure.v1.json", structure)
@@ -965,6 +1058,14 @@ def list_expert_docs(project_id: str | None, industry_tag: str | None, limit: in
                 ExpertDoc.doc_type,
                 ExpertDoc.created_at,
                 func.count(EvidenceChunk.id),
+                ExpertDoc.standard_code,
+                ExpertDoc.version_year,
+                ExpertDoc.standard_status,
+                ExpertDoc.expiration_date,
+                ExpertDoc.voltage_level_kv,
+                ExpertDoc.project_type,
+                ExpertDoc.core_equipment,
+                ExpertDoc.region,
             )
             .outerjoin(EvidenceChunk, EvidenceChunk.expert_doc_id == ExpertDoc.id)
             .group_by(ExpertDoc.id)
@@ -987,6 +1088,14 @@ def list_expert_docs(project_id: str | None, industry_tag: str | None, limit: in
                 doc_type=row[3],
                 created_at=row[4].isoformat() if isinstance(row[4], datetime) else str(row[4]),
                 chunk_count=int(row[5] or 0),
+                standard_code=row[6],
+                version_year=row[7],
+                standard_status=row[8] or "active",
+                expiration_date=str(row[9]) if row[9] else None,
+                voltage_level_kv=row[10],
+                project_type=row[11],
+                core_equipment=row[12] if row[12] else [],
+                region=row[13],
             )
             for row in rows
         ]

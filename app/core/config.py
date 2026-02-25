@@ -57,6 +57,7 @@ class Settings(BaseSettings):
     render_output_dir: str = "data/exports"
     render_template_dir: str = "templates"
     workflow_artifact_dir: str = "data/workflow-runs"
+    tender_workspace_dir: str = "data/tender-workspaces"
     enable_ocr_fallback: bool = True
     ocr_provider: str = "glm-ocr"
     ocr_confidence_threshold: float = 0.7
@@ -124,6 +125,18 @@ class Settings(BaseSettings):
     expert_chunk_max_tokens: int = 1200
     expert_chunk_overlap_tokens: int = 120
     chunk_min_char_length: int = 80
+
+    # v1.4 — Metadata auto-tagging
+    metadata_llm_fallback_enabled: bool = True
+    metadata_llm_model: str = "qwen-turbo"
+
+    # v1.4 — Lifecycle red-line control
+    lifecycle_auto_deprecate: bool = True
+    lifecycle_expiry_reject_ingest: bool = False  # warn only by default
+
+    # v1.4 — Table-aware chunking
+    table_chunk_max_tokens: int = 1200
+    table_chunk_header_prepend: bool = True
 
     section_output_tokens_map: dict = {
         "construction_plan": 12000,

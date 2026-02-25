@@ -367,7 +367,14 @@ def evidence_search_handler(
 ) -> EvidenceSearchResponse:
     try:
         store = get_qdrant_store_fn()
-        hits = store.search(query=payload.query, top_k=payload.top_k, industry_tag=payload.industry_tag)
+        hits = store.search(
+            query=payload.query,
+            top_k=payload.top_k,
+            industry_tag=payload.industry_tag,
+            voltage_level_kv=payload.voltage_level_kv,
+            project_type=payload.project_type,
+            region=payload.region,
+        )
         return EvidenceSearchResponse(hits=to_search_hits_fn(hits))
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

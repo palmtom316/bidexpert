@@ -72,6 +72,36 @@ class TenderKeyCategory(str, enum.Enum):
     RISK_ALERTS = "RISK_ALERTS"
 
 
+class KBIngestStep(str, enum.Enum):
+    RECEIVED = "RECEIVED"
+    PARSE_READY = "PARSE_READY"
+    METADATA_EXTRACTED = "METADATA_EXTRACTED"
+    LIFECYCLE_VALIDATED = "LIFECYCLE_VALIDATED"
+    TABLE_CHUNKED = "TABLE_CHUNKED"
+    CHUNKED = "CHUNKED"
+    EMBEDDING_DONE = "EMBEDDING_DONE"
+    UPSERTED = "UPSERTED"
+    KB_READY = "KB_READY"
+    FAILED = "FAILED"
+
+
+class TenderRunStep(str, enum.Enum):
+    RECEIVED = "RECEIVED"
+    UNPACKED = "UNPACKED"
+    VALIDATED = "VALIDATED"
+    SECTIONIZED = "SECTIONIZED"
+    PRELIM_EXTRACTED = "PRELIM_EXTRACTED"
+    FATAL_GATE_CHECKED = "FATAL_GATE_CHECKED"
+    SCORING_EXTRACTED = "SCORING_EXTRACTED"
+    TECH_EXTRACTED = "TECH_EXTRACTED"
+    DEVIATION_BUILT = "DEVIATION_BUILT"
+    FORMAT_SIGNATURE_EXTRACTED = "FORMAT_SIGNATURE_EXTRACTED"
+    BLUEPRINT_BUILT = "BLUEPRINT_BUILT"
+    READY_FOR_WRITING = "READY_FOR_WRITING"
+    FATAL_BLOCKED = "FATAL_BLOCKED"
+    FAILED = "FAILED"
+
+
 class WorkflowRun(Base):
     __tablename__ = "workflow_run"
 
@@ -186,6 +216,16 @@ class ExpertDoc(Base):
     valid_from: Mapped[Date | None] = mapped_column(Date)
     valid_to: Mapped[Date | None] = mapped_column(Date)
     forbidden_tags: Mapped[list[str]] = mapped_column(StringListType(), default=list)
+    # v1.4 — Lifecycle red-line fields
+    standard_code: Mapped[str | None] = mapped_column(Text)
+    version_year: Mapped[int | None] = mapped_column(Integer)
+    standard_status: Mapped[str] = mapped_column(Text, default="active")
+    expiration_date: Mapped[Date | None] = mapped_column(Date)
+    # v1.4 — Metadata auto-tagging fields
+    voltage_level_kv: Mapped[int | None] = mapped_column(Integer)
+    project_type: Mapped[str | None] = mapped_column(Text)
+    core_equipment: Mapped[list[str]] = mapped_column(StringListType(), default=list)
+    region: Mapped[str | None] = mapped_column(Text)
     created_by: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
@@ -211,6 +251,18 @@ class EvidenceChunk(Base):
     qdrant_point_id: Mapped[str | None] = mapped_column(Text)
     parent_chunk_id: Mapped[str | None] = mapped_column(Text)
     anchor_type: Mapped[str | None] = mapped_column(Text)
+    # v1.4 — Lifecycle red-line fields
+    standard_code: Mapped[str | None] = mapped_column(Text)
+    standard_status: Mapped[str] = mapped_column(Text, default="active")
+    expiration_date: Mapped[Date | None] = mapped_column(Date)
+    # v1.4 — Metadata auto-tagging fields
+    voltage_level_kv: Mapped[int | None] = mapped_column(Integer)
+    project_type: Mapped[str | None] = mapped_column(Text)
+    region: Mapped[str | None] = mapped_column(Text)
+    # v1.4 — Table-aware chunking fields
+    chunk_kind: Mapped[str | None] = mapped_column(Text)
+    table_header: Mapped[list[str]] = mapped_column(StringListType(), default=list)
+    is_parameter_table: Mapped[bool | None] = mapped_column(default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
@@ -509,3 +561,44 @@ class ScoringReport(Base):
     score_total: Mapped[float] = mapped_column(Numeric(6, 2))
     details_json: Mapped[dict] = mapped_column(JSONDictType(), default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class TenderImportRun(Base):
+    __tablename__ = "tender_import_run"
+    __table_args__ = (Index("idx_tender_import_run_project_id", "project_id"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID | None] = mapped_column(
+        GUID(), ForeignKey("project.id", ondelete="SET NULL")
+    )
+    tender_id: Mapped[str] = mapped_column(Text, nullable=False)
+    filename: Mapped[str] = mapped_column(Text, nullable=False)
+    workspace_path: Mapped[str] = mapped_column(Text, nullable=False)
+    current_step: Mapped[TenderRunStep] = mapped_column(
+        Enum(TenderRunStep, name="tender_run_step"), default=TenderRunStep.RECEIVED
+    )
+    fatal_blocked_reason: Mapped[dict | None] = mapped_column(JSONDictType())
+    error_detail: Mapped[str | None] = mapped_column(Text)
+    created_by: Mapped[str] = mapped_column(Text, nullable=False, default="system")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class KBIngestRun(Base):
+    __tablename__ = "kb_ingest_run"
+    __table_args__ = (
+        Index("idx_kb_ingest_run_expert_doc_id", "expert_doc_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
+    expert_doc_id: Mapped[uuid.UUID] = mapped_column(
+        GUID(), ForeignKey("expert_doc.id", ondelete="CASCADE"), nullable=False
+    )
+    filename: Mapped[str] = mapped_column(Text, nullable=False)
+    current_step: Mapped[KBIngestStep] = mapped_column(
+        Enum(KBIngestStep, name="kb_ingest_step"), default=KBIngestStep.RECEIVED
+    )
+    metadata_json: Mapped[dict] = mapped_column(JSONDictType(), default=dict)
+    error_detail: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)

@@ -319,8 +319,73 @@
         </header>
 
         <div class="office-grid cols-2">
+          <!-- ── v1.1: MinerU Zip 导入 ── -->
           <article class="card">
-            <h3><i class="ri-upload-2-line"></i> 招标文件拆解</h3>
+            <h3><i class="ri-folder-zip-line"></i> 招标文件导入 (v1.1)</h3>
+            <p class="hint">上传经 MinerU 预处理的 <code>.tender.zip</code> 包，系统将自动执行 12 步分析流水线。</p>
+            <div class="form-group">
+              <label>招标 Zip 包</label>
+              <input id="tenderZipFile" type="file" accept=".zip" />
+            </div>
+            <div class="form-actions">
+              <button id="btnTenderImportZip" class="btn btn-ai">
+                <i class="ri-rocket-line"></i> 导入并分析
+              </button>
+              <button id="btnRefreshImportRuns" class="btn btn-outline btn-sm">
+                <i class="ri-history-line"></i> 刷新记录
+              </button>
+            </div>
+            <div class="form-group">
+              <label>导入记录</label>
+              <select id="importRunSelect"></select>
+            </div>
+            <button id="btnLoadImportDetail" class="btn btn-outline btn-sm" style="margin-bottom:0.5rem">
+              <i class="ri-eye-line"></i> 查看详情
+            </button>
+
+            <!-- 12-step pipeline progress -->
+            <div id="pipelineProgress" class="pipeline-progress" style="display:none">
+              <h4 style="margin:0.5rem 0">分析流水线进度</h4>
+              <div class="pipeline-steps">
+                <span class="step-chip" data-step="RECEIVED">接收</span>
+                <span class="step-chip" data-step="UNPACKED">解压</span>
+                <span class="step-chip" data-step="VALIDATED">校验</span>
+                <span class="step-chip" data-step="SECTIONIZED">分节</span>
+                <span class="step-chip" data-step="PRELIM_EXTRACTED">初审提取</span>
+                <span class="step-chip" data-step="FATAL_GATE_CHECKED">闸门检查</span>
+                <span class="step-chip" data-step="SCORING_EXTRACTED">评分提取</span>
+                <span class="step-chip" data-step="TECH_EXTRACTED">技术提取</span>
+                <span class="step-chip" data-step="DEVIATION_BUILT">偏离表</span>
+                <span class="step-chip" data-step="FORMAT_SIGNATURE_EXTRACTED">签章格式</span>
+                <span class="step-chip" data-step="BLUEPRINT_BUILT">蓝图生成</span>
+                <span class="step-chip" data-step="READY_FOR_WRITING">就绪</span>
+              </div>
+            </div>
+
+            <!-- FATAL BLOCKED alert -->
+            <div id="fatalBlockedAlert" class="fatal-alert" style="display:none">
+              <h4><i class="ri-alarm-warning-line"></i> 废标风险 — 初审不通过</h4>
+              <ul id="fatalReasonList"></ul>
+            </div>
+
+            <!-- READY FOR WRITING banner -->
+            <div id="readyForWritingBanner" class="ready-banner" style="display:none">
+              <h4><i class="ri-checkbox-circle-line"></i> 分析完成，可进入投标文件编制</h4>
+              <button id="btnGoToWriting" class="btn btn-secondary btn-sm">
+                <i class="ri-send-plane-line"></i> 跳转到"投标文件编制"
+              </button>
+            </div>
+
+            <!-- Derived files -->
+            <div id="derivedFilesPanel" style="display:none">
+              <h4 style="margin:0.5rem 0">派生文件</h4>
+              <ul id="derivedFileList" class="derived-file-list"></ul>
+            </div>
+          </article>
+
+          <!-- ── v1.0: PDF 上传（保留兼容） ── -->
+          <article class="card">
+            <h3><i class="ri-upload-2-line"></i> 招标文件拆解 (PDF)</h3>
             <div class="form-group">
               <label>招标文件 PDF</label>
               <input id="analysisPdfFile" type="file" accept=".pdf" />
