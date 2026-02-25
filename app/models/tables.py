@@ -579,6 +579,7 @@ class TenderImportRun(Base):
     )
     fatal_blocked_reason: Mapped[dict | None] = mapped_column(JSONDictType())
     error_detail: Mapped[str | None] = mapped_column(Text)
+    global_facts: Mapped[dict | None] = mapped_column(JSONDictType())
     created_by: Mapped[str] = mapped_column(Text, nullable=False, default="system")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)

@@ -330,6 +330,18 @@ def _section_output_limit(section_context: dict | None) -> int:
     return get_section_max_output_tokens(section_type or None)
 
 
+def _effective_section_output_limit(section_context: dict | None) -> int:
+    """Compute the hard output limit with overflow factor applied.
+
+    The base limit is the per-section-type token cap. The overflow factor
+    allows the LLM to exceed it by a controlled margin (e.g. 1.5x) before
+    the pipeline hard-fails. Output between base and effective limit gets
+    a warning but is still accepted.
+    """
+    base = _section_output_limit(section_context)
+    return int(base * settings.section_output_overflow_factor)
+
+
 def _route_warning(plan: SectionGenerationPlan) -> str:
     enhance = (
         f"{plan.post_enhance_model[0]}:{plan.post_enhance_model[1]}"
@@ -679,6 +691,7 @@ def generate_draft_with_retrieval(
     section_plan = select_generation_plan(section_context or {}, env_mode=env_mode)
     route_warning = _route_warning(section_plan)
     section_output_limit = _section_output_limit(section_context)
+    effective_hard_limit = _effective_section_output_limit(section_context)
 
     logger.info(
         "section routing resolved mode=%s section_key=%s section_title=%s critical=%s base=%s:%s enhance=%s review=%s:%s",
@@ -793,7 +806,7 @@ def generate_draft_with_retrieval(
 
     if (
         generation_step.input_tokens > settings.section_max_input_tokens
-        or effective_output_tokens > section_output_limit
+        or effective_output_tokens > effective_hard_limit
     ):
         return DraftGenerationResponse(
             generated_text="NEED_HUMAN_INPUT",
@@ -812,10 +825,19 @@ def generate_draft_with_retrieval(
                 f"input_tokens={generation_step.input_tokens}",
                 f"output_tokens={effective_output_tokens}",
                 f"section_output_limit={section_output_limit}",
+                f"effective_hard_limit={effective_hard_limit}",
             ],
             coverage_map=retrieval_ctx.coverage_map,
             retrieval_log=retrieval_ctx.retrieval_log,
             generation_json=_safe_generation_json(generation_step.generation_payload),
+        )
+
+    # Soft warning: output exceeds base limit but within overflow tolerance
+    overflow_warning = None
+    if effective_output_tokens > section_output_limit:
+        overflow_warning = (
+            f"section_output_overflow: {effective_output_tokens}/{section_output_limit} "
+            f"(within {settings.section_output_overflow_factor}x tolerance)"
         )
 
     ok, budget_remaining = reserve_budget_persistent(
@@ -941,7 +963,7 @@ def generate_draft_with_retrieval(
         coverage=gate_result.coverage,
         budget_remaining=budget_remaining,
         cache_hit=False,
-        warnings=review_step.warnings + sanitize.warnings + ([budget_warning] if budget_warning else []),
+        warnings=review_step.warnings + sanitize.warnings + ([budget_warning] if budget_warning else []) + ([overflow_warning] if overflow_warning else []),
         coverage_map=retrieval_ctx.coverage_map,
         retrieval_log=retrieval_ctx.retrieval_log,
         generation_json=_safe_generation_json(generation_step.generation_payload),

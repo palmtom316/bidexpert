@@ -1262,6 +1262,12 @@ def ingest_structured_expert_knowledge(
     company_performance_items: list[str],
     company_qualification_items: list[str],
     pm_qualification_performance_items: list[str],
+    safety_production_items: list[str] | None = None,
+    quality_management_items: list[str] | None = None,
+    environmental_protection_items: list[str] | None = None,
+    construction_method_items: list[str] | None = None,
+    equipment_material_items: list[str] | None = None,
+    financial_credit_items: list[str] | None = None,
 ) -> ExpertLibraryStructuredIngestResponse:
     parsed_project = _parse_project_id(project_id)
     _ensure_project_exists(parsed_project.project_uuid)
@@ -1271,6 +1277,12 @@ def ingest_structured_expert_knowledge(
         "COMPANY_PERFORMANCE": _clean_lines(company_performance_items),
         "COMPANY_QUALIFICATION": _clean_lines(company_qualification_items),
         "PM_QUALIFICATION_PERFORMANCE": _clean_lines(pm_qualification_performance_items),
+        "SAFETY_PRODUCTION": _clean_lines(safety_production_items or []),
+        "QUALITY_MANAGEMENT": _clean_lines(quality_management_items or []),
+        "ENVIRONMENTAL_PROTECTION": _clean_lines(environmental_protection_items or []),
+        "CONSTRUCTION_METHOD": _clean_lines(construction_method_items or []),
+        "EQUIPMENT_MATERIAL": _clean_lines(equipment_material_items or []),
+        "FINANCIAL_CREDIT": _clean_lines(financial_credit_items or []),
     }
     if not any(grouped.values()):
         raise ValueError("at least one structured item is required")

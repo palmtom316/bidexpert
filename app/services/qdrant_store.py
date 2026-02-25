@@ -17,6 +17,7 @@ from app.core.config import settings
 from app.schemas.contracts import EvidenceSearchHit, EvidenceUpsertItem
 from app.services.byok import resolve_profile_for_task
 from app.services.embedding import embed_text
+from app.services.retrieval_synonyms import expand_synonyms
 
 logger = logging.getLogger(__name__)
 TOKEN_PATTERN = re.compile(r"[\w\u4e00-\u9fff]+", re.UNICODE)
@@ -57,6 +58,21 @@ def _build_sparse_vector(
             tf_score *= idf_weights[token]
         indices_values[idx] = tf_score
     return indices_values
+
+
+def _expand_query_with_synonyms(query: str) -> str:
+    """Expand query text by appending synonym terms found in the query."""
+    from app.services.retrieval_synonyms import SYNONYM_DICT
+
+    added: set[str] = set()
+    for term, aliases in SYNONYM_DICT.items():
+        if term in query:
+            for alias in aliases:
+                if alias not in query and alias not in added:
+                    added.add(alias)
+    if added:
+        return query + " " + " ".join(sorted(added))
+    return query
 
 
 def _rerank_hits(query: str, items: list[RetrievedEvidence], top_k: int) -> list[RetrievedEvidence]:
@@ -501,6 +517,7 @@ class QdrantStore:
         voltage_level_kv: int | None = None,
         project_type: str | None = None,
         region: str | None = None,
+        doc_type: str | None = None,
     ):
         from qdrant_client.http.models import Condition, FieldCondition, Filter, MatchValue
 
@@ -517,6 +534,8 @@ class QdrantStore:
             must_conditions.append(FieldCondition(key="project_type", match=MatchValue(value=project_type)))
         if region:
             must_conditions.append(FieldCondition(key="region", match=MatchValue(value=region)))
+        if doc_type:
+            must_conditions.append(FieldCondition(key="doc_type", match=MatchValue(value=doc_type)))
         must_not_conditions: list[Condition] = [
             FieldCondition(key="forbidden_tags", match=MatchValue(value="PRICING_RELATED")),
             # v1.4 — Lifecycle: exclude deprecated standards at query level
@@ -656,6 +675,7 @@ class QdrantStore:
         voltage_level_kv: int | None = None,
         project_type: str | None = None,
         region: str | None = None,
+        doc_type: str | None = None,
     ) -> list[RetrievedEvidence]:
         embed_profile = resolve_profile_for_task(project_id=project_id, task_type="EMBED")
         query_filter = self._build_query_filter(
@@ -664,6 +684,7 @@ class QdrantStore:
             voltage_level_kv=voltage_level_kv,
             project_type=project_type,
             region=region,
+            doc_type=doc_type,
         )
         prompt_top_n = max(
             int(settings.qdrant_prompt_topn_min),

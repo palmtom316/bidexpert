@@ -1665,6 +1665,112 @@ select {
   display: none !important;
 }
 
-.hidden {
-  display: none !important;
+/* ── W2-3: Loading spinner for async buttons ──────────────── */
+.is-loading {
+  position: relative;
+  pointer-events: none;
+  opacity: 0.7;
+}
+
+.is-loading::after {
+  content: "";
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  margin-top: -7px;
+  border: 2px solid transparent;
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: btn-spin 0.6s linear infinite;
+}
+
+@keyframes btn-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Toast warn style */
+.toast.warn {
+  background: #fff3cd;
+  color: #856404;
+  border-left: 4px solid #ffc107;
+}
+
+/* ── W2-3: Responsive breakpoints ─────────────────────────── */
+@media (max-width: 768px) {
+  :root {
+    --sidebar-width: 0px;
+  }
+
+  .sidebar {
+    display: none;
+  }
+
+  .main-content {
+    margin-left: 0;
+  }
+
+  .office-grid.cols-2,
+  .office-grid.cols-3 {
+    grid-template-columns: 1fr;
+  }
+
+  .generation-config-row {
+    grid-template-columns: 1fr;
+  }
+
+  .typeset-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .global-bar {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .global-bar input,
+  .global-bar select {
+    min-width: 0;
+    flex: 1 1 120px;
+  }
+}
+
+@media (max-width: 480px) {
+  .flow-bar {
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .flow-item {
+    font-size: 12px;
+    padding: 4px 8px;
+  }
+
+  .card {
+    padding: 12px;
+  }
+
+  .toast-container {
+    left: 8px;
+    right: 8px;
+    bottom: 8px;
+  }
+}
+
+/* ── W2-4: Keyboard focus visibility ──────────────────────── */
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }

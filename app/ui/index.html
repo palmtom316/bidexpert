@@ -10,7 +10,7 @@
 </head>
 
 <body>
-  <header class="ribbon">
+  <header class="ribbon" role="banner">
     <div class="brand">
       <div class="brand-mark">
         <img src="/ui/assets/app-logo.png?v=release/V1.1" alt="BidExpert Logo" class="brand-logo" />
@@ -23,8 +23,8 @@
       </div>
     </div>
     <div class="ribbon-controls">
-      <button id="btnHealth" class="btn btn-outline btn-sm">
-        <i class="ri-pulse-line"></i>
+      <button id="btnHealth" class="btn btn-outline btn-sm" aria-label="系统健康检测">
+        <i class="ri-pulse-line" aria-hidden="true"></i>
         <span id="healthBadge">未检测</span>
       </button>
     </div>
@@ -32,15 +32,15 @@
   </header>
 
   <main class="layout">
-    <aside class="flow-nav" id="sidebarNav">
+    <aside class="flow-nav" id="sidebarNav" role="navigation" aria-label="操作流程导航">
       <div class="sidebar-resizer" id="sidebarResizer"></div>
       <div class="nav-header">
         <div class="flow-title">操作流程</div>
-        <button id="btnToggleSidebar" class="nav-toggle-btn" title="收起/展开菜单">
-          <i class="ri-menu-fold-line"></i>
+        <button id="btnToggleSidebar" class="nav-toggle-btn" title="收起/展开菜单" aria-expanded="true" aria-controls="sidebarNav" aria-label="收起/展开菜单">
+          <i class="ri-menu-fold-line" aria-hidden="true"></i>
         </button>
       </div>
-      <ul class="flow-list">
+      <ul class="flow-list" role="list">
         <li class="flow-list-item">
           <button type="button" class="flow-item active" data-target="panel-expert-hub">
             <i class="ri-database-2-line"></i>
@@ -1099,14 +1099,14 @@
     <div class="status-left">
       <span><i class="ri-cloud-line"></i> AI辅助投标系统</span>
       <span class="divider">|</span>
-      <span id="taskStatusText">无后台任务</span>
+      <span id="taskStatusText" role="status" aria-live="polite">无后台任务</span>
     </div>
     <div class="status-right">
       <span id="clock">--:--:--</span>
     </div>
   </footer>
 
-  <div id="toastContainer" class="toast-container"></div>
+  <div id="toastContainer" class="toast-container" role="log" aria-live="assertive" aria-label="通知消息"></div>
 
   <script src="/ui/app.js?v=release/V1.1"></script>
 </body>

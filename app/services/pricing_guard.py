@@ -90,38 +90,82 @@ def _estimate_token_count(text: str) -> int:
     return max(cjk_count + latin_tokens, 1)
 
 
-def detect_pricing_content(text: str) -> tuple[bool, list[str]]:
-    reasons: list[str] = []
+# Non-pricing Chinese words containing 元 — used to avoid false positives
+_YUAN_FALSE_POSITIVE_WORDS = {"元件", "元素", "单元", "元旦", "元器件", "元年", "多元", "元数据"}
 
+# Section title keywords that indicate technical (non-pricing) content
+_TECHNICAL_SECTION_KEYWORDS = (
+    "施工方案", "施工组织", "安全施工", "安全方案", "安全管理", "安全生产",
+    "质量保证", "质量管理", "质量控制", "质量体系",
+    "环境保护", "环保方案", "水土保持",
+    "进度计划", "工期保证", "资源配置",
+    "技术方案", "技术路线", "调试方案", "带电作业",
+    "应急预案", "文明施工", "职业健康",
+)
+
+
+def _is_technical_context(text: str) -> bool:
+    """Check if text appears to be a technical section (not pricing)."""
+    first_200 = text[:200]
+    return any(kw in first_200 for kw in _TECHNICAL_SECTION_KEYWORDS)
+
+
+def _filter_yuan_false_positives(text: str, keyword: str) -> bool:
+    """Return True if keyword '元' is actually part of a non-monetary word."""
+    if keyword != "元":
+        return False
+    for word in _YUAN_FALSE_POSITIVE_WORDS:
+        if word in text:
+            return True
+    return False
+
+
+def detect_pricing_content(text: str) -> tuple[bool, list[str]]:
+    signals: list[str] = []
+    is_technical = _is_technical_context(text)
+
+    # Signal 1: hard keyword match (always blocks alone)
     hard_hits = sorted([kw for kw in ALWAYS_BLOCK_KEYWORDS if kw in text])
     if hard_hits:
-        reasons.append(f"关键词命中(高风险): {', '.join(hard_hits)}")
+        signals.append(f"关键词命中(高风险): {', '.join(hard_hits)}")
+        # Hard keywords block immediately — no 2-signal requirement
+        return (True, signals)
 
+    # Signal 2: context keyword + monetary amount nearby
     matched_keywords: list[str] = []
     for kw in CONTEXT_KEYWORDS:
         if kw not in text:
+            continue
+        if _filter_yuan_false_positives(text, kw):
             continue
         for match in re.finditer(re.escape(kw), text):
             if _has_amount_context(text, match.start(), match.end()):
                 matched_keywords.append(kw)
                 break
     if matched_keywords:
-        reasons.append(f"关键词命中(含金额上下文): {', '.join(sorted(set(matched_keywords)))}")
+        signals.append(f"关键词命中(含金额上下文): {', '.join(sorted(set(matched_keywords)))}")
 
-    # Signal 3 (fixed): require currency symbol adjacent to actual amount patterns
-    # AND at least one pricing-context keyword nearby
+    # Signal 3: currency amount + pricing context keyword
     amount_hits = AMOUNT_PATTERN.findall(text)
     has_pricing_context = any(kw in text for kw in PRICING_CONTEXT_KEYWORDS)
     if amount_hits and has_pricing_context:
-        reasons.append("发现货币符号/货币代码与金额数字")
+        signals.append("发现货币符号/货币代码与金额数字")
 
-    # Signal 4 (fixed): use CJK-aware token count instead of text.split()
-    # Exclude power engineering technical parameters from digit density
+    # Signal 4: high digit density
     stripped_text = _strip_power_tech_numbers(text)
     numbers = NUMBER_PATTERN.findall(stripped_text)
     token_count = _estimate_token_count(text)
     digit_density = len(numbers) / token_count
     if len(numbers) >= 10 and digit_density > 0.3:
-        reasons.append("疑似金额/报价表结构（高数字密度）")
+        signals.append("疑似金额/报价表结构（高数字密度）")
 
-    return (len(reasons) > 0, reasons)
+    # Require 2+ signals to block (reduced to 1+ if NOT technical context
+    # and signal is strong — i.e. Signal 2 with multiple keywords)
+    if is_technical:
+        # Technical sections need 3+ signals to block
+        blocked = len(signals) >= 3
+    else:
+        # Non-technical: 2+ signals required
+        blocked = len(signals) >= 2
+
+    return (blocked, signals)

@@ -49,7 +49,8 @@ def _step_index(step: TenderRunStep) -> int:
 
 
 def _update_step(run_id: uuid.UUID, step: TenderRunStep, error: str | None = None,
-                 fatal_reason: dict | None = None) -> None:
+                 fatal_reason: dict | None = None,
+                 global_facts: dict | None = None) -> None:
     with session_scope() as db:
         run = db.get(TenderImportRun, run_id)
         if not run:
@@ -59,6 +60,8 @@ def _update_step(run_id: uuid.UUID, step: TenderRunStep, error: str | None = Non
             run.error_detail = error[:2000]
         if fatal_reason:
             run.fatal_blocked_reason = fatal_reason
+        if global_facts is not None:
+            run.global_facts = global_facts
         db.commit()
 
 
@@ -148,11 +151,16 @@ def run_pipeline(run_id: str) -> dict:
             personnel = extract_key_personnel(md_text)
             _save_derived(workspace, "key_personnel_constraints.json", personnel.model_dump(mode="json"))
 
-            _update_step(rid, TenderRunStep.PRELIM_EXTRACTED)
+            # Extract global facts from tender text
+            from app.tender.global_facts_extractor import extract_global_facts
+            global_facts = extract_global_facts(md_text)
+            _save_derived(workspace, "global_facts.json", global_facts)
+
+            _update_step(rid, TenderRunStep.PRELIM_EXTRACTED, global_facts=global_facts)
             step_reports.append(StepReport(
                 step="PRELIM_EXTRACTED", status="OK",
                 duration_ms=int((perf_counter() - t0) * 1000),
-                detail=f"{prelim.fatal_count} fatal items, {len(personnel.constraints)} personnel constraints",
+                detail=f"{prelim.fatal_count} fatal items, {len(personnel.constraints)} personnel constraints, global facts extracted",
             ))
         except Exception as exc:
             _update_step(rid, TenderRunStep.FAILED, error=str(exc))

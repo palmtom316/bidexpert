@@ -150,12 +150,24 @@ class FatalCheckResult(BaseModel):
     asset_matched: bool = False
     match_detail: str | None = None
     blocked: bool = False
+    risk_level: str = "WARN"
+    category: str = "general"
 
 
 class FatalGateReport(BaseModel):
     passed: bool = True
     blocked_reasons: list[str] = Field(default_factory=list)
     checks: list[FatalCheckResult] = Field(default_factory=list)
+    power_scan_results: list["PowerScanHit"] = Field(default_factory=list)
+
+
+class PowerScanHit(BaseModel):
+    """A disqualification clause identified by the power scanner."""
+    clause_text: str
+    risk_level: str = "WARN"
+    category: str = "general"
+    source_offset: int = 0
+    pattern_id: str = ""
 
 
 # ── bid_blueprint.json ────────────────────────────────────────

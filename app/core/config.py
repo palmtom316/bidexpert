@@ -80,6 +80,7 @@ class Settings(BaseSettings):
     project_token_budget_default: int = 500000
     section_max_input_tokens: int = 16000
     section_max_output_tokens: int = 4000
+    section_output_overflow_factor: float = 1.5
     task_max_retries: int = 2
     task_max_fallbacks: int = 1
     max_parallel_sections: int = 4
@@ -124,7 +125,9 @@ class Settings(BaseSettings):
     expert_chunk_min_tokens: int = 800
     expert_chunk_max_tokens: int = 1200
     expert_chunk_overlap_tokens: int = 120
-    chunk_min_char_length: int = 80
+    chunk_min_char_length: int = 200
+
+    qdrant_min_score_threshold: float = 0.01
 
     # v1.4 — Metadata auto-tagging
     metadata_llm_fallback_enabled: bool = True
@@ -147,6 +150,15 @@ class Settings(BaseSettings):
         "environmental_plan": 6000,
         "resource_plan": 6000,
         "commercial_proposal": 6000,
+        "commissioning_plan": 8000,
+        "live_work_plan": 8000,
+        "heavy_equipment_plan": 6000,
+        "cable_laying_plan": 6000,
+        "gis_installation_plan": 6000,
+        "stringing_plan": 6000,
+        "tower_foundation_plan": 6000,
+        "grounding_plan": 6000,
+        "anti_pollution_plan": 6000,
         "default": 4000,
     }
 

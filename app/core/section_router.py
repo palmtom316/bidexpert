@@ -218,6 +218,74 @@ _POWER_SECTION_TYPE_MAP: dict[str, str] = {
 }
 
 
+# ── Section title → prompt_suite section_type mapping ────────
+# Maps Chinese section title keywords to the section_type keys
+# used in prompt_suite_v11._SECTION_GENERATION_GUIDANCE and
+# config.section_output_tokens_map.
+
+_SECTION_TYPE_INFERENCE: tuple[tuple[str, str], ...] = (
+    # Power engineering specific (check first, more specific)
+    ("调试方案", "commissioning_plan"),
+    ("调试", "commissioning_plan"),
+    ("带电作业", "live_work_plan"),
+    ("设备吊装", "heavy_equipment_plan"),
+    ("大型设备", "heavy_equipment_plan"),
+    ("电缆敷设", "cable_laying_plan"),
+    ("电缆", "cable_laying_plan"),
+    ("gis安装", "gis_installation_plan"),
+    ("gis", "gis_installation_plan"),
+    ("架线施工", "stringing_plan"),
+    ("架线", "stringing_plan"),
+    ("铁塔基础", "tower_foundation_plan"),
+    ("杆塔基础", "tower_foundation_plan"),
+    ("接地工程", "grounding_plan"),
+    ("接地", "grounding_plan"),
+    ("防污闪", "anti_pollution_plan"),
+    # Technical proposal (check before general construction)
+    ("技术方案", "technical_proposal"),
+    ("技术路线", "technical_proposal"),
+    ("总体方案", "technical_proposal"),
+    # General construction (check after specific)
+    ("安全施工", "safety_plan"),
+    ("安全生产", "safety_plan"),
+    ("安全方案", "safety_plan"),
+    ("安全管理", "safety_plan"),
+    ("施工组织", "construction_plan"),
+    ("施工方案", "construction_plan"),
+    ("施工部署", "construction_plan"),
+    ("质量保证", "quality_plan"),
+    ("质量管理", "quality_plan"),
+    ("质量控制", "quality_plan"),
+    ("质量体系", "quality_plan"),
+    ("进度计划", "schedule_plan"),
+    ("工期保证", "schedule_plan"),
+    ("环境保护", "environmental_plan"),
+    ("环保方案", "environmental_plan"),
+    ("水土保持", "environmental_plan"),
+    ("资源配置", "resource_plan"),
+    ("人员配置", "resource_plan"),
+    ("设备配置", "resource_plan"),
+    ("商务响应", "commercial_proposal"),
+    ("商务方案", "commercial_proposal"),
+    ("报价说明", "commercial_proposal"),
+)
+
+
+def infer_section_type(title: str) -> str | None:
+    """Infer section_type from a section title string.
+
+    Returns the prompt_suite section_type key (e.g. 'construction_plan'),
+    or None if no match found.
+    """
+    if not title:
+        return None
+    normalized = title.strip().lower()
+    for keyword, section_type in _SECTION_TYPE_INFERENCE:
+        if keyword.lower() in normalized:
+            return section_type
+    return None
+
+
 def detect_power_section_type(section: Any) -> str | None:
     """Detect power engineering section type from section title/content."""
     title = _safe_title(section)
@@ -234,6 +302,7 @@ __all__ = [
     "SectionRoutingConfig",
     "_POWER_SECTION_TYPE_MAP",
     "detect_power_section_type",
+    "infer_section_type",
     "is_critical_section",
     "load_section_routing_config",
     "select_generation_plan",

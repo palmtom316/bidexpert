@@ -74,6 +74,55 @@ const state = {
   sidebarCollapsed: localStorage.getItem("be_sidebar_collapsed") === "true",
 };
 
+/* ── W2-1: Immutable state management ─────────────────────── */
+const _stateSubscribers = [];
+
+function updateState(patch) {
+  const prev = Object.freeze({ ...state });
+  Object.assign(state, patch);
+  for (const fn of _stateSubscribers) {
+    try { fn(state, prev); } catch (e) { console.error("state subscriber error", e); }
+  }
+}
+
+function onStateChange(fn) {
+  _stateSubscribers.push(fn);
+}
+
+/* ── W2-2: File upload validation ─────────────────────────── */
+const ALLOWED_UPLOAD_EXTENSIONS = [".pdf", ".docx", ".zip"];
+const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
+
+function validateFileUpload(fileInput, fieldName = "文件") {
+  if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
+    return `请选择${fieldName}`;
+  }
+  const file = fileInput.files[0];
+  const ext = (file.name || "").toLowerCase().match(/\.[^.]+$/)?.[0] || "";
+  if (!ALLOWED_UPLOAD_EXTENSIONS.includes(ext)) {
+    return `${fieldName}仅支持 ${ALLOWED_UPLOAD_EXTENSIONS.join("/")} 格式`;
+  }
+  if (file.size > MAX_UPLOAD_BYTES) {
+    return `${fieldName}大小不能超过 ${Math.round(MAX_UPLOAD_BYTES / 1024 / 1024)}MB`;
+  }
+  return null;
+}
+
+/* ── W2-3: Async button guard ─────────────────────────────── */
+function withLoading(btn, action) {
+  return async (...args) => {
+    if (!btn || btn.disabled) return;
+    btn.disabled = true;
+    btn.classList.add("is-loading");
+    try {
+      return await action(...args);
+    } finally {
+      btn.disabled = false;
+      btn.classList.remove("is-loading");
+    }
+  };
+}
+
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => document.querySelectorAll(selector);
 
@@ -84,9 +133,11 @@ const Toast = {
   },
   show(message, type = "info", duration = 3200) {
     if (!this.container) return;
-    const icon = type === "success" ? "check-line" : type === "error" ? "close-circle-line" : "information-line";
+    const icon = type === "success" ? "check-line" : type === "error" ? "close-circle-line" : type === "warn" ? "alert-line" : "information-line";
     const node = document.createElement("div");
     node.className = `toast ${type}`;
+    node.setAttribute("role", "alert");
+    node.setAttribute("aria-live", "assertive");
     const iconNode = document.createElement("i");
     iconNode.className = `ri-${icon}`;
     const textNode = document.createElement("span");
@@ -107,6 +158,9 @@ const Toast = {
   },
   info(msg) {
     this.show(msg, "info");
+  },
+  warn(msg) {
+    this.show(msg, "warn", 4000);
   },
 };
 
@@ -378,6 +432,7 @@ const Sidebar = {
       if (this.toggleIcon) {
         this.toggleIcon.className = "ri-menu-unfold-line";
         this.toggleBtn.title = "展开菜单";
+        this.toggleBtn.setAttribute("aria-expanded", "false");
       }
     } else {
       this.nav.classList.remove("collapsed");
@@ -386,6 +441,7 @@ const Sidebar = {
       if (this.toggleIcon) {
         this.toggleIcon.className = "ri-menu-fold-line";
         this.toggleBtn.title = "收起菜单";
+        this.toggleBtn.setAttribute("aria-expanded", "true");
       }
     }
   },
@@ -546,7 +602,7 @@ const ExpertHub = {
   },
 
   saveConversionHistory(history) {
-    state.conversionHistory = Array.isArray(history) ? history : [];
+    updateState({ conversionHistory: Array.isArray(history) ? history : [] });
     localStorage.setItem(CONVERSION_HISTORY_STORAGE_KEY, JSON.stringify(state.conversionHistory));
   },
 
@@ -656,11 +712,9 @@ const ExpertHub = {
   },
 
   async convertStructuredDocument({ suppressSuccessToast = false } = {}) {
+    const vErr = validateFileUpload($("#convertSourceFile"), "待转换文件");
+    if (vErr) { Toast.warn(vErr); return; }
     const file = $("#convertSourceFile").files[0];
-    if (!file) {
-      Toast.error("请选择待转换文件");
-      return;
-    }
 
     const formData = new FormData();
     formData.append("file", file);
@@ -865,11 +919,9 @@ const ExpertHub = {
   },
 
   async feedbackPdfIngest() {
+    const vErr = validateFileUpload($("#feedbackPdfFile"), "回灌文件");
+    if (vErr) { Toast.warn(vErr); return; }
     const file = $("#feedbackPdfFile").files[0];
-    if (!file) {
-      Toast.error("请选择要回灌的 PDF 文件");
-      return;
-    }
 
     const formData = new FormData();
     formData.append("file", file);
@@ -963,11 +1015,9 @@ const TenderHub = {
   },
 
   async analyzePdf() {
+    const vErr = validateFileUpload($("#analysisPdfFile"), "招标文件");
+    if (vErr) { Toast.warn(vErr); return; }
     const file = $("#analysisPdfFile").files[0];
-    if (!file) {
-      Toast.error("请选择招标文件 PDF");
-      return;
-    }
 
     const formData = new FormData();
     formData.append("file", file);
@@ -981,7 +1031,7 @@ const TenderHub = {
       body: formData,
     });
 
-    state.analysisRunId = res.run_id;
+    updateState({ analysisRunId: res.run_id });
     $("#tenderAnalyzeResult").textContent = JSON.stringify(res, null, 2);
     setTaskStatus("招标文件分析完成");
     Toast.success("招标文件拆解完成");
@@ -1019,8 +1069,7 @@ const TenderHub = {
   async loadDetail(runId) {
     setTaskStatus("加载招标分析详情");
     const detail = await api(`/v1/tender/analysis-runs/${runId}`);
-    state.analysisDetail = detail;
-    state.analysisRunId = runId;
+    updateState({ analysisDetail: detail, analysisRunId: runId });
     this.renderDetail(detail);
     setTaskStatus("招标分析详情已加载");
   },
@@ -1200,9 +1249,7 @@ const BidWorkbench = {
       }),
     });
 
-    state.outlineId = res.outline_id;
-    state.outlineConfirmed = false;
-    state.sections = (res.sections || []).map((item) => ({
+    const sections = (res.sections || []).map((item) => ({
       ...item,
       userInput: "",
       evidenceHits: [],
@@ -1212,8 +1259,9 @@ const BidWorkbench = {
       review: null,
       reviewDecision: "PASS",
     }));
+    updateState({ outlineId: res.outline_id, outlineConfirmed: false, sections });
 
-    state.selectedSectionKey = state.sections[0]?.section_key || "";
+    updateState({ selectedSectionKey: state.sections[0]?.section_key || "" });
     $("#feedbackOutlineId").value = state.outlineId;
 
     this.renderOutlineTable();
@@ -1293,7 +1341,8 @@ const BidWorkbench = {
       }),
     });
 
-    state.outlineConfirmed = String(res.status || "").includes("CONFIRMED");
+    const confirmed = String(res.status || "").includes("CONFIRMED");
+    updateState({ outlineConfirmed: confirmed });
     if (state.outlineConfirmed) {
       updateOutlineBadge("目录已确认，可逐章生成", "ok");
       this.setStep("generate");
@@ -1923,7 +1972,7 @@ const ReviewWorkbench = {
       .map((section) => `# ${section.section_key} ${section.section_title}\n\n${section.finalDraft.trim()}`)
       .join("\n\n");
 
-    state.finalBidDraft = `${header}\n\n${body}`;
+    updateState({ finalBidDraft: `${header}\n\n${body}` });
     $("#finalDraftPreview").value = state.finalBidDraft;
     $("#publishFinalDraft").value = state.finalBidDraft;
 
@@ -2158,7 +2207,7 @@ const PublishHub = {
       Boolean(typesetConfig.page.footerText) &&
       typesetConfig.styles.length >= 4;
 
-    state.finalCheck = {
+    updateState({ finalCheck: {
       pricingBlocked: Boolean(pricing.blocked),
       pricingReasons: pricing.reasons || [],
       mustTotal: mustItems.length,
@@ -2168,7 +2217,7 @@ const PublishHub = {
       sectionTotal: state.sections.length,
       sectionReady,
       typesetReady,
-    };
+    } });
 
     this.renderFinalCheck();
     setTaskStatus("终审检查完成");
@@ -2212,7 +2261,7 @@ const PublishHub = {
       return;
     }
 
-    state.finalLocked = true;
+    updateState({ finalLocked: true });
     $("#deliveryStatus").textContent = `状态：已锁定（${new Date().toLocaleString("zh-CN")}）`;
     $("#deliveryStatus").style.color = "var(--success)";
     setTaskStatus("最终投标文件已锁定交付");
@@ -2264,7 +2313,7 @@ const CompletedBidHub = {
   async loadRecords() {
     const params = new URLSearchParams({ limit: "300" });
     const res = await api(`/api/completed-bids?${params.toString()}`);
-    state.completedBids = this.normalizeRecords(res.items || []);
+    updateState({ completedBids: this.normalizeRecords(res.items || []) });
     this.renderTable();
   },
 
@@ -2330,7 +2379,7 @@ const CompletedBidHub = {
   renderTable() {
     const container = $("#completedBidTable");
     const rows = this.normalizeRecords(state.completedBids);
-    state.completedBids = rows;
+    updateState({ completedBids: rows });
 
     if (!rows.length) {
       container.innerHTML = `<p class="hint" style="padding:0.7rem;">暂无完成记录。</p>`;
@@ -2634,7 +2683,7 @@ const ByokSettings = {
   async loadProfiles() {
     const projectId = this.projectId();
     const res = await api(`/api/provider-profiles?project_id=${encodeURIComponent(projectId)}`);
-    state.byokProfiles = res.items || [];
+    updateState({ byokProfiles: res.items || [] });
     this.renderProfileOptions();
     $("#byokResult").textContent = `已加载 ${state.byokProfiles.length} 个 profiles`;
   },

@@ -47,7 +47,7 @@ def test_fallback_rejects_short_chunks() -> None:
 
 def test_fallback_accepts_long_chunks() -> None:
     """Text longer than chunk_min_char_length should be accepted."""
-    long_text = "这是一段足够长的投标文本内容，" * 10  # ~140 chars
+    long_text = "这是一段足够长的投标文本内容，" * 20  # ~280 chars
     blocks = [_make_block(long_text)]
     result = _fallback_chunks_from_blocks(
         blocks=blocks,
@@ -63,7 +63,7 @@ def test_fallback_filters_mixed_lengths() -> None:
     """Only chunks above threshold should survive."""
     short = _make_block("短文本")
     medium = _make_block("A" * 50)  # 50 chars, below 80
-    long = _make_block("这是一段足够长的投标文本内容用于测试分块最小长度阈值的过滤逻辑，" * 3)  # ~90 chars
+    long = _make_block("这是一段足够长的投标文本内容用于测试分块最小长度阈值的过滤逻辑，" * 8)  # ~240 chars
     blocks = [short, medium, long]
     result = _fallback_chunks_from_blocks(
         blocks=blocks,
