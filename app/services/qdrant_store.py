@@ -14,7 +14,7 @@ from typing import cast
 import httpx
 
 from app.core.config import settings
-from app.schemas.contracts import EvidenceSearchHit, EvidenceUpsertItem
+from app.schemas.contracts import EvidenceSearchHit, EvidenceUpsertItem, MethodologySearchHit
 from app.services.byok import resolve_profile_for_task
 from app.services.embedding import embed_text
 
@@ -385,6 +385,7 @@ class QdrantStore:
 
         self.client = QdrantClient(url=settings.qdrant_url, check_compatibility=False)
         self.collection = settings.qdrant_collection
+        self.methodology_collection = settings.qdrant_methodology_collection
         self.vector_size = settings.qdrant_vector_size
         self._sparse_enabled = False
 
@@ -414,6 +415,21 @@ class QdrantStore:
                 self._sparse_enabled = True
             except Exception:
                 logger.info("Sparse vector upgrade unavailable; falling back to dense only")
+
+        # Methodology snippets use a dedicated dense-only collection.
+        self._ensure_dense_collection(self.methodology_collection)
+
+    def _ensure_dense_collection(self, collection_name: str) -> None:
+        from qdrant_client.http.models import Distance, VectorParams
+
+        collections = self.client.get_collections().collections
+        exists = any(c.name == collection_name for c in collections)
+        if exists:
+            return
+        self.client.create_collection(
+            collection_name=collection_name,
+            vectors_config=VectorParams(size=self.vector_size, distance=Distance.COSINE),
+        )
 
     def upsert_chunks(self, expert_doc_id: str, chunks: list[EvidenceUpsertItem], project_id: str | None = None) -> int:
         from qdrant_client.http.models import PointStruct, SparseVector
@@ -727,6 +743,118 @@ class QdrantStore:
 
         return []
 
+    def upsert_methodology_snippet(
+        self,
+        *,
+        snippet_id: str,
+        title: str,
+        domain: str,
+        tags: list[str],
+        applicability: dict,
+        template_md: str,
+        risk_level: str,
+        review_status: str,
+        source_type: str,
+    ) -> None:
+        from qdrant_client.http.models import PointStruct
+
+        self._ensure_dense_collection(self.methodology_collection)
+        embed_profile = resolve_profile_for_task(project_id=None, task_type="EMBED")
+        vector = embed_text(
+            template_md,
+            self.vector_size,
+            model_id=embed_profile.model,
+            provider=embed_profile.provider,
+            api_key=embed_profile.api_key,
+            base_url=embed_profile.base_url,
+            project_id=None,
+        )
+        payload = {
+            "snippet_id": snippet_id,
+            "title": title,
+            "domain": domain,
+            "tags": tags,
+            "applicability": applicability,
+            "template_md": template_md,
+            "risk_level": risk_level,
+            "review_status": review_status,
+            "source_type": source_type,
+            "created_at": date.today().isoformat(),
+        }
+        self.client.upsert(
+            collection_name=self.methodology_collection,
+            points=[PointStruct(id=snippet_id, vector=vector, payload=payload)],
+            wait=True,
+        )
+
+    def search_methodology(
+        self,
+        *,
+        query: str,
+        top_k: int = 5,
+        domain: str | None = None,
+    ) -> list[MethodologySearchHit]:
+        from qdrant_client.http.models import FieldCondition, Filter, MatchValue
+
+        self._ensure_dense_collection(self.methodology_collection)
+        embed_profile = resolve_profile_for_task(project_id=None, task_type="EMBED")
+        query_vector = embed_text(
+            query,
+            self.vector_size,
+            model_id=embed_profile.model,
+            provider=embed_profile.provider,
+            api_key=embed_profile.api_key,
+            base_url=embed_profile.base_url,
+            project_id=None,
+        )
+
+        must = [FieldCondition(key="review_status", match=MatchValue(value="approved"))]
+        if domain:
+            must.append(FieldCondition(key="domain", match=MatchValue(value=domain)))
+        query_filter = Filter(
+            must=must,
+            must_not=[FieldCondition(key="risk_level", match=MatchValue(value="high"))],
+        )
+
+        if hasattr(self.client, "query_points"):
+            response = self.client.query_points(
+                collection_name=self.methodology_collection,
+                query=query_vector,
+                query_filter=query_filter,
+                limit=max(1, min(top_k, 50)),
+                with_payload=True,
+                with_vectors=False,
+            )
+            raw_points = list(getattr(response, "points", []))
+        else:
+            raw_points = list(
+                self.client.search(  # type: ignore[attr-defined]
+                    collection_name=self.methodology_collection,
+                    query_vector=query_vector,
+                    query_filter=query_filter,
+                    limit=max(1, min(top_k, 50)),
+                    with_payload=True,
+                    with_vectors=False,
+                )
+            )
+
+        items: list[MethodologySearchHit] = []
+        for point in raw_points:
+            payload = getattr(point, "payload", None) or {}
+            snippet_id = str(payload.get("snippet_id", getattr(point, "id", "")))
+            text = str(payload.get("template_md", ""))
+            if not snippet_id or not text:
+                continue
+            items.append(
+                MethodologySearchHit(
+                    snippet_id=snippet_id,
+                    score=float(getattr(point, "score", 0.0) or 0.0),
+                    text=text,
+                    payload=payload,
+                )
+            )
+        return items
+
 
 @lru_cache(maxsize=1)
 def get_qdrant_store() -> QdrantStore:
@@ -735,3 +863,7 @@ def get_qdrant_store() -> QdrantStore:
 
 def to_search_hits(items: list[RetrievedEvidence]) -> list[EvidenceSearchHit]:
     return [EvidenceSearchHit(chunk_id=i.chunk_id, score=i.score, text=i.text, payload=i.payload) for i in items]
+
+
+def search_methodology_snippets(*, query: str, top_k: int = 5, domain: str | None = None) -> list[MethodologySearchHit]:
+    return get_qdrant_store().search_methodology(query=query, top_k=top_k, domain=domain)

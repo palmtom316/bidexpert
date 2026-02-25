@@ -9,6 +9,7 @@ from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBea
 
 from app.api.endpoints.evidence import router as evidence_router
 from app.api.endpoints.generation import router as generation_router
+from app.api.endpoints.methodology import router as methodology_router
 from app.api.endpoints.provider import router as provider_router
 from app.api.endpoints.render import router as render_router
 from app.api.endpoints.tasks import router as tasks_router
@@ -49,6 +50,16 @@ from app.api.endpoints.provider import (
     test_ocr_connection_api,
     test_provider_connection_api,
     test_provider_profile_api,
+)
+from app.api.endpoints.methodology import (
+    methodology_extract,
+    methodology_extract_upload,
+    methodology_publish,
+    methodology_review,
+    methodology_run,
+    methodology_run_result,
+    methodology_search,
+    methodology_snippets,
 )
 from app.api.endpoints.render import render_doc, render_structured_doc
 from app.api.endpoints.tasks import enqueue_ingest, enqueue_ingest_directory, task_status, task_status_stream
@@ -127,6 +138,15 @@ from app.services.workflow_runs import (
     update_run_progress,
 )
 from app.services.word_renderer import render_word, render_word_structured
+from app.services.methodology.pipeline import create_methodology_extract_run, create_methodology_extract_run_from_file
+from app.services.methodology.publish import publish_methodology_run
+from app.services.methodology.repository import (
+    get_methodology_run,
+    get_methodology_run_result,
+    list_methodology_snippets,
+    review_methodology_run,
+)
+from app.services.qdrant_store import search_methodology_snippets
 from app.worker.tasks import (
     extract_upsert_historical_task,
     generate_draft_task,
@@ -199,6 +219,14 @@ __all__ = [
     "feedback_upsert_section",
     "evidence_search",
     "cache_invalidate",
+    "methodology_extract",
+    "methodology_extract_upload",
+    "methodology_run",
+    "methodology_run_result",
+    "methodology_review",
+    "methodology_publish",
+    "methodology_snippets",
+    "methodology_search",
     "render_doc",
     "render_structured_doc",
     "chain",
@@ -215,6 +243,14 @@ __all__ = [
     "upsert_project_model_policy",
     "record_audit_event",
     "list_audit_logs",
+    "create_methodology_extract_run",
+    "create_methodology_extract_run_from_file",
+    "get_methodology_run",
+    "get_methodology_run_result",
+    "review_methodology_run",
+    "publish_methodology_run",
+    "list_methodology_snippets",
+    "search_methodology_snippets",
     "create_completed_bid",
     "delete_completed_bid",
     "list_completed_bids",
@@ -410,3 +446,4 @@ router.include_router(generation_router)
 router.include_router(workflow_router)
 router.include_router(evidence_router)
 router.include_router(render_router)
+router.include_router(methodology_router)

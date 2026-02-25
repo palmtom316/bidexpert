@@ -635,6 +635,10 @@ select {
   justify-content: flex-start;
 }
 
+.methodology-actions {
+  justify-content: flex-start;
+}
+
 .btn {
   border: 1px solid transparent;
   border-radius: var(--radius-sm);

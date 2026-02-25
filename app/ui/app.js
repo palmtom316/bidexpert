@@ -506,6 +506,13 @@ const ExpertHub = {
     $("#btnLibraryChunks").addEventListener("click", guarded(() => this.loadChunks()));
     $("#btnFeedbackPdfIngest").addEventListener("click", guarded(() => this.feedbackPdfIngest()));
     $("#btnFeedbackSectionUpsert").addEventListener("click", guarded(() => this.feedbackSectionUpsert()));
+    $("#btnMethodologyExtract").addEventListener("click", guarded(() => this.methodologyExtract()));
+    $("#btnMethodologyExtractUpload").addEventListener("click", guarded(() => this.methodologyExtractUpload()));
+    $("#btnMethodologyRunFetch").addEventListener("click", guarded(() => this.methodologyFetchRun()));
+    $("#btnMethodologyReviewApprove").addEventListener("click", guarded(() => this.methodologyReview("approved")));
+    $("#btnMethodologyReviewNeedEdit").addEventListener("click", guarded(() => this.methodologyReview("need_edit")));
+    $("#btnMethodologyPublish").addEventListener("click", guarded(() => this.methodologyPublish()));
+    $("#btnMethodologySearch").addEventListener("click", guarded(() => this.methodologySearch()));
     this.renderConversionHistoryOptions();
     this.loadDocList();
   },
@@ -773,6 +780,148 @@ const ExpertHub = {
     $("#structuredResult").textContent = JSON.stringify(result, null, 2);
     setTaskStatus("结构化补录完成");
     Toast.success(`已补录 ${result.total_chunks} 条知识`);
+  },
+
+  methodologyTags() {
+    return ($("#methodologyTags").value || "")
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+  },
+
+  methodologyRunId() {
+    return ($("#methodologyRunId").value || "").trim();
+  },
+
+  async methodologyExtract() {
+    const text = $("#methodologyInputText").value.trim();
+    if (!text) {
+      Toast.error("请先输入待提炼文本");
+      return;
+    }
+
+    const payload = {
+      text,
+      source_type: $("#methodologySourceType").value,
+      source_note: $("#methodologySourceNote").value.trim() || null,
+      domain: $("#methodologyDomain").value.trim() || effectiveIndustryTag() || null,
+      tags: this.methodologyTags(),
+    };
+
+    setTaskStatus("方法论提炼任务提交中");
+    const res = await api("/api/methodology/extract", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    $("#methodologyRunId").value = res.run_id;
+    $("#methodologyResult").textContent = JSON.stringify(res, null, 2);
+    setTaskStatus("方法论提炼完成，可继续审核");
+    Toast.success(`提炼任务已完成，run_id=${res.run_id}`);
+  },
+
+  async methodologyExtractUpload() {
+    const file = $("#methodologyInputFile").files[0];
+    if (!file) {
+      Toast.error("请先选择待提炼文件");
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("source_type", $("#methodologySourceType").value);
+    formData.append("source_note", $("#methodologySourceNote").value.trim());
+    formData.append("domain", $("#methodologyDomain").value.trim() || effectiveIndustryTag() || "");
+    formData.append("tags", this.methodologyTags().join(","));
+
+    setTaskStatus("方法论文件提炼中");
+    const res = await api("/api/methodology/extract-upload", {
+      method: "POST",
+      body: formData,
+    });
+
+    $("#methodologyRunId").value = res.run_id;
+    $("#methodologyResult").textContent = JSON.stringify(res, null, 2);
+    setTaskStatus("文件提炼完成，可继续审核");
+    Toast.success(`文件提炼完成，run_id=${res.run_id}`);
+  },
+
+  async methodologyFetchRun() {
+    const runId = this.methodologyRunId();
+    if (!runId) {
+      Toast.error("请先输入 run_id");
+      return;
+    }
+
+    setTaskStatus("加载方法论任务状态");
+    const [run, result] = await Promise.all([
+      api(`/api/methodology/runs/${encodeURIComponent(runId)}`),
+      api(`/api/methodology/runs/${encodeURIComponent(runId)}/result`),
+    ]);
+
+    $("#methodologyResult").textContent = JSON.stringify({ run, result }, null, 2);
+    setTaskStatus(`方法论任务状态：${run.status}`);
+  },
+
+  async methodologyReview(status) {
+    const runId = this.methodologyRunId();
+    if (!runId) {
+      Toast.error("请先输入 run_id");
+      return;
+    }
+
+    const payload = {
+      status,
+      comment: status === "approved" ? "人工审核通过" : "需进一步改写",
+    };
+    setTaskStatus(`提交人工审核：${status}`);
+    const res = await api(`/api/methodology/runs/${encodeURIComponent(runId)}/review`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    $("#methodologyResult").textContent = JSON.stringify(res, null, 2);
+    setTaskStatus(`审核结果：${res.status}`);
+    Toast.info(`审核状态已更新为 ${res.status}`);
+  },
+
+  async methodologyPublish() {
+    const runId = this.methodologyRunId();
+    if (!runId) {
+      Toast.error("请先输入 run_id");
+      return;
+    }
+
+    setTaskStatus("发布方法论资产到知识库");
+    const res = await api(`/api/methodology/runs/${encodeURIComponent(runId)}/publish`, {
+      method: "POST",
+    });
+
+    $("#methodologyResult").textContent = JSON.stringify(res, null, 2);
+    setTaskStatus(`发布完成：${res.snippet_id}`);
+    Toast.success(`已发布 snippet_id=${res.snippet_id}`);
+  },
+
+  async methodologySearch() {
+    const query = $("#methodologySearchQuery").value.trim();
+    if (!query) {
+      Toast.error("请输入检索关键词");
+      return;
+    }
+
+    setTaskStatus("检索方法论库");
+    const res = await api("/api/methodology/search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        query,
+        top_k: 5,
+        domain: $("#methodologyDomain").value.trim() || null,
+      }),
+    });
+    $("#methodologyResult").textContent = JSON.stringify(res, null, 2);
+    setTaskStatus(`方法论检索完成（${(res.hits || []).length} 条）`);
   },
 
   async loadDocList() {

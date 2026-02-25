@@ -13,6 +13,7 @@ from app.extract.tender_parser import parse_tender_requirements
 from app.schemas.contracts import EvidenceUpsertItem
 from app.services.evidence_validator import run_three_gates
 from app.services.generation_pipeline import generate_draft_with_retrieval
+from app.services.methodology.pipeline import execute_methodology_pipeline
 from app.services.global_facts import extract_global_facts_from_text
 from app.services.ingest.file_router import ingest_upload_request
 from app.services.qdrant_store import get_qdrant_store
@@ -268,6 +269,18 @@ def extract_upsert_historical_task(
     )
     count = store.upsert_chunks(expert_doc_id=expert_doc_id, chunks=chunks)
     return {"status": "SUCCEEDED", "upserted": count}
+
+
+@celery_app.task(bind=True, name="tasks.methodology_extract_run", max_retries=settings.task_max_retries)
+def methodology_extract_run_task(
+    self,
+    run_id: str,
+    domain: str | None = None,
+    tags: list[str] | None = None,
+) -> dict:  # type: ignore[no-untyped-def]
+    self.update_state(state="PROGRESS", meta={"stage": "METHODOLOGY_EXTRACT"})
+    execute_methodology_pipeline(run_id=run_id, domain=domain, tags=tags)
+    return {"status": "SUCCEEDED", "run_id": run_id}
 
 
 @celery_app.task(bind=True, name="tasks.generate_draft", max_retries=settings.task_max_retries)

@@ -95,8 +95,29 @@ def retrieve_for_subrequirements(
             rewritten_query = rewritten.rewritten_query.strip() or sub.description
         except AdapterUnavailableError:
             warning = "query_rewrite_fallback_original"
-        hits = store.search(query=rewritten_query, top_k=top_k, industry_tag=industry_tag, project_id=project_id)
-        retrieval[sub.sub_id] = hits
+        methodology_hits = store.search_methodology(query=rewritten_query, top_k=top_k, domain=industry_tag)
+        converted_methodology_hits: list[RetrievedEvidence] = [
+            RetrievedEvidence(
+                chunk_id=hit.snippet_id,
+                score=hit.score,
+                text=hit.text,
+                payload={**hit.payload, "kb_source": "kb_methodology"},
+            )
+            for hit in methodology_hits
+        ]
+
+        history_hits = store.search(query=rewritten_query, top_k=top_k, industry_tag=industry_tag, project_id=project_id)
+        merged_hits: list[RetrievedEvidence] = []
+        seen_ids: set[str] = set()
+        for item in [*converted_methodology_hits, *history_hits]:
+            if item.chunk_id in seen_ids:
+                continue
+            seen_ids.add(item.chunk_id)
+            merged_hits.append(item)
+            if len(merged_hits) >= top_k:
+                break
+
+        retrieval[sub.sub_id] = merged_hits
         retrieval_log.append(
             RetrievalLogItem(
                 sub_id=sub.sub_id,
@@ -104,7 +125,7 @@ def retrieve_for_subrequirements(
                 rewritten_query=rewritten_query,
                 provider=resolved.provider,
                 model=resolved.model,
-                hit_ids=[hit.chunk_id for hit in hits],
+                hit_ids=[hit.chunk_id for hit in merged_hits],
                 warning=warning,
             ).__dict__
         )

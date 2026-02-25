@@ -166,6 +166,76 @@
           </article>
 
           <article class="card">
+            <h3><i class="ri-lightbulb-flash-line"></i> 专家经验提炼模块（Methodology）</h3>
+            <p class="hint">外部资料先做脱敏与改写，再进入人工审核与发布。未审核通过内容不会入库检索。</p>
+            <div class="form-row">
+              <div class="form-group">
+                <label>来源类型</label>
+                <select id="methodologySourceType">
+                  <option value="public_doc">公开资料</option>
+                  <option value="training">培训资料</option>
+                  <option value="sample">样例资料</option>
+                  <option value="unknown">来源不明（默认阻断）</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>领域</label>
+                <input id="methodologyDomain" type="text" placeholder="例如：配网改造" />
+              </div>
+            </div>
+            <div class="form-group">
+              <label>来源备注</label>
+              <input id="methodologySourceNote" type="text" placeholder="仅内部审计记录，不对外使用" />
+            </div>
+            <div class="form-group">
+              <label>标签（逗号分隔）</label>
+              <input id="methodologyTags" type="text" placeholder="例如：进度,质量,安全" />
+            </div>
+            <div class="form-group">
+              <label>待提炼文本</label>
+              <textarea id="methodologyInputText" rows="6" placeholder="粘贴外部片段后提交提炼"></textarea>
+            </div>
+            <div class="form-group">
+              <label>或上传文件（pdf/docx/md/txt）</label>
+              <input id="methodologyInputFile" type="file" accept=".pdf,.docx,.md,.markdown,.txt" />
+            </div>
+            <div class="form-actions methodology-actions">
+              <button id="btnMethodologyExtract" class="btn btn-primary">
+                <i class="ri-flask-line"></i> 提交提炼
+              </button>
+              <button id="btnMethodologyExtractUpload" class="btn btn-secondary">
+                <i class="ri-upload-line"></i> 上传提炼
+              </button>
+              <button id="btnMethodologyRunFetch" class="btn btn-outline">
+                <i class="ri-search-eye-line"></i> 查询运行状态
+              </button>
+              <button id="btnMethodologyReviewApprove" class="btn btn-secondary">
+                <i class="ri-checkbox-circle-line"></i> 审核通过
+              </button>
+              <button id="btnMethodologyReviewNeedEdit" class="btn btn-outline">
+                <i class="ri-edit-2-line"></i> 退回修改
+              </button>
+              <button id="btnMethodologyPublish" class="btn btn-ai">
+                <i class="ri-upload-cloud-2-line"></i> 发布入库
+              </button>
+            </div>
+            <div class="form-group">
+              <label>当前 run_id</label>
+              <input id="methodologyRunId" type="text" placeholder="提炼后自动回填" />
+            </div>
+            <div class="form-group">
+              <label>方法论检索</label>
+              <div class="form-row">
+                <input id="methodologySearchQuery" type="text" placeholder="输入检索关键词" />
+                <button id="btnMethodologySearch" class="btn btn-outline btn-sm">
+                  <i class="ri-search-line"></i> 检索
+                </button>
+              </div>
+            </div>
+            <pre id="methodologyResult" class="result-box">等待提炼...</pre>
+          </article>
+
+          <article class="card">
             <h3><i class="ri-file-upload-line"></i> 投标资料入库（高级快速通道）</h3>
             <p class="hint">跳过结构化预览，直接入库并执行分块、向量化与 embedding。仅建议用于格式稳定、质量已验证的文档。</p>
             <div class="form-group">

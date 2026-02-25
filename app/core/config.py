@@ -18,6 +18,7 @@ class Settings(BaseSettings):
 
     qdrant_url: str = "http://localhost:6333"
     qdrant_collection: str = "expert_chunks_v1"
+    qdrant_methodology_collection: str = "kb_methodology"
     qdrant_vector_size: int = 3072
     qdrant_hybrid_candidate_limit: int = 128
     qdrant_rrf_k: int = 60
@@ -125,6 +126,8 @@ class Settings(BaseSettings):
     expert_chunk_max_tokens: int = 1200
     expert_chunk_overlap_tokens: int = 120
     chunk_min_char_length: int = 80
+    methodology_similarity_threshold: float = 0.35
+    methodology_storage_dir: str = "data/methodology"
 
     # v1.4 — Metadata auto-tagging
     metadata_llm_fallback_enabled: bool = True

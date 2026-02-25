@@ -85,6 +85,28 @@ class KBIngestStep(str, enum.Enum):
     FAILED = "FAILED"
 
 
+class MethodologyRunStep(str, enum.Enum):
+    RECEIVED = "RECEIVED"
+    SANITIZED = "SANITIZED"
+    EXTRACTED = "EXTRACTED"
+    SCORED = "SCORED"
+    READY_FOR_REVIEW = "READY_FOR_REVIEW"
+    FAILED = "FAILED"
+
+
+class MethodologyReviewStatus(str, enum.Enum):
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+    NEED_EDIT = "need_edit"
+
+
+class MethodologyRiskLevel(str, enum.Enum):
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+
+
 class TenderRunStep(str, enum.Enum):
     RECEIVED = "RECEIVED"
     UNPACKED = "UNPACKED"
@@ -602,3 +624,73 @@ class KBIngestRun(Base):
     error_detail: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class MethodologyRun(Base):
+    __tablename__ = "methodology_run"
+    __table_args__ = (
+        Index("idx_methodology_run_review_status", "review_status"),
+        Index("idx_methodology_run_risk_level", "risk_level"),
+        Index("idx_methodology_run_created_at", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
+    status: Mapped[str] = mapped_column(Text, nullable=False, default="RECEIVED")
+    step: Mapped[MethodologyRunStep] = mapped_column(
+        Enum(MethodologyRunStep, name="methodology_run_step"), default=MethodologyRunStep.RECEIVED
+    )
+    progress: Mapped[int] = mapped_column(Integer, default=0)
+    source_type: Mapped[str] = mapped_column(Text, nullable=False)
+    source_note: Mapped[str | None] = mapped_column(Text)
+    input_kind: Mapped[str] = mapped_column(Text, nullable=False, default="text")
+    input_text: Mapped[str | None] = mapped_column(Text)
+    sanitized_input_path: Mapped[str | None] = mapped_column(Text)
+    output_json_path: Mapped[str | None] = mapped_column(Text)
+    risk_level: Mapped[MethodologyRiskLevel] = mapped_column(
+        Enum(MethodologyRiskLevel, name="methodology_risk_level"), default=MethodologyRiskLevel.MEDIUM
+    )
+    similarity_score: Mapped[float] = mapped_column(Numeric(6, 4), default=0.0)
+    pii_removed: Mapped[bool] = mapped_column(default=False)
+    findings_json: Mapped[dict] = mapped_column(JSONDictType(), default=dict)
+    review_status: Mapped[MethodologyReviewStatus] = mapped_column(
+        Enum(MethodologyReviewStatus, name="methodology_review_status"), default=MethodologyReviewStatus.PENDING
+    )
+    reviewer: Mapped[str | None] = mapped_column(Text)
+    review_comment: Mapped[str | None] = mapped_column(Text)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_by: Mapped[str] = mapped_column(Text, nullable=False, default="system")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class MethodologySnippet(Base):
+    __tablename__ = "methodology_snippet"
+    __table_args__ = (
+        Index("idx_methodology_snippet_domain", "domain"),
+        Index("idx_methodology_snippet_risk_level", "risk_level"),
+        Index("idx_methodology_snippet_created_at", "created_at"),
+    )
+
+    snippet_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    run_id: Mapped[uuid.UUID] = mapped_column(
+        GUID(), ForeignKey("methodology_run.id", ondelete="CASCADE"), nullable=False
+    )
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    domain: Mapped[str | None] = mapped_column(Text)
+    tags: Mapped[list[str]] = mapped_column(StringListType(), default=list)
+    applicability: Mapped[dict] = mapped_column(JSONDictType(), default=dict)
+    structure: Mapped[list[str]] = mapped_column(StringListType(), default=list)
+    template_md: Mapped[str] = mapped_column(Text, nullable=False)
+    payload: Mapped[dict] = mapped_column(JSONDictType(), default=dict)
+    risk_level: Mapped[MethodologyRiskLevel] = mapped_column(
+        Enum(MethodologyRiskLevel, name="methodology_risk_level"), default=MethodologyRiskLevel.MEDIUM
+    )
+    review_status: Mapped[MethodologyReviewStatus] = mapped_column(
+        Enum(MethodologyReviewStatus, name="methodology_review_status"), default=MethodologyReviewStatus.APPROVED
+    )
+    source_type: Mapped[str] = mapped_column(Text, nullable=False)
+    source_note: Mapped[str | None] = mapped_column(Text)
+    created_by: Mapped[str] = mapped_column(Text, nullable=False, default="system")
+    reviewed_by: Mapped[str | None] = mapped_column(Text)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

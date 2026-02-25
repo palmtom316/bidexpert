@@ -79,6 +79,11 @@ celery -A app.worker.celery_app.celery_app worker --loglevel=INFO
 - `POST /v1/expert-library/ingest-structured`: 结构化导入规范/公司业绩/公司资质/项目管理人员资质及业绩
 - `GET /v1/expert-library/docs`: 查询本地专家库文档列表
 - `GET /v1/expert-library/docs/{expert_doc_id}/chunks`: 查询文档 chunks
+- `POST /api/methodology/extract`: 外部片段提炼（脱敏/改写/评分）
+- `POST /api/methodology/extract-upload`: 文件提炼（pdf/docx/md/txt）
+- `POST /api/methodology/runs/{run_id}/review`: 人工审核（approved/rejected/need_edit）
+- `POST /api/methodology/runs/{run_id}/publish`: 发布方法论资产到 `kb_methodology`
+- `POST /api/methodology/search`: 检索方法论资产（仅 approved 且非 high risk）
 - `POST /api/provider-profiles`: 创建 BYOK provider profile
 - `GET /api/provider-profiles?project_id=...`: 查询项目 profile
 - `POST /api/provider-profiles/{id}/test`: 测试 profile 连通性
@@ -103,6 +108,9 @@ celery -A app.worker.celery_app.celery_app worker --loglevel=INFO
 - `BIDEXPERT_QDRANT_LLM_RERANK_ENABLED`：是否启用 LLM rerank（默认 false）
 - `BIDEXPERT_QDRANT_LLM_RERANK_CANDIDATE_LIMIT`：LLM rerank 候选数
 - `BIDEXPERT_QDRANT_LLM_RERANK_TOP_K`：LLM rerank 输出上限
+- `BIDEXPERT_QDRANT_METHODOLOGY_COLLECTION`：方法论独立向量集合（默认 `kb_methodology`）
+- `BIDEXPERT_METHODOLOGY_SIMILARITY_THRESHOLD`：改写相似度阈值（默认 `0.35`，超阈值需改写）
+- `BIDEXPERT_METHODOLOGY_STORAGE_DIR`：方法论运行产物目录（默认 `data/methodology`）
 - `BIDEXPERT_LANGEXTRACT_DEFAULT_MODEL`：可选，LangExtract 默认模型（接口未传 `model_id` 时使用）
 
 国产模型切换示例：

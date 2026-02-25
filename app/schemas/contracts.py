@@ -737,3 +737,96 @@ class TenderImportRunListResponse(BaseModel):
 class TenderImportRunDetailResponse(BaseModel):
     run: TenderImportRunItem
     derived_files: list[str] = Field(default_factory=list)
+
+
+class MethodologyExtractRequest(BaseModel):
+    text: str = Field(min_length=1)
+    source_type: str = Field(min_length=1)
+    source_note: str | None = None
+    domain: str | None = None
+    tags: list[str] = Field(default_factory=list)
+    note: str | None = None
+
+
+class MethodologyExtractResponse(BaseModel):
+    run_id: str
+    status: str
+
+
+class MethodologyRunResponse(BaseModel):
+    run_id: str
+    status: str
+    step: str
+    progress: int
+    source_type: str
+    source_note: str | None = None
+    risk_level: str
+    similarity_score: float
+    pii_removed: bool
+    review_status: str
+    reviewer: str | None = None
+    review_comment: str | None = None
+    created_at: str
+    updated_at: str
+
+
+class MethodologyRunResultResponse(BaseModel):
+    run_id: str
+    status: str
+    step: str
+    progress: int
+    risk_level: str
+    similarity_score: float
+    pii_removed: bool
+    review_status: str
+    review_comment: str | None = None
+    reviewer: str | None = None
+    output: dict = Field(default_factory=dict)
+
+
+class MethodologyReviewRequest(BaseModel):
+    status: Literal["approved", "rejected", "need_edit"]
+    comment: str | None = None
+
+
+class MethodologyReviewResponse(BaseModel):
+    run_id: str
+    status: str
+
+
+class MethodologyPublishResponse(BaseModel):
+    run_id: str
+    snippet_id: str
+    status: str
+
+
+class MethodologySnippetItem(BaseModel):
+    snippet_id: str
+    title: str
+    domain: str | None = None
+    tags: list[str] = Field(default_factory=list)
+    risk_level: str
+    review_status: str
+    source_type: str
+    created_at: str
+
+
+class MethodologySnippetListResponse(BaseModel):
+    items: list[MethodologySnippetItem]
+
+
+class MethodologySearchRequest(BaseModel):
+    query: str = Field(min_length=1)
+    top_k: int = 5
+    domain: str | None = None
+
+
+class MethodologySearchHit(BaseModel):
+    snippet_id: str
+    score: float
+    text: str
+    payload: dict
+
+
+class MethodologySearchResponse(BaseModel):
+    hits: list[MethodologySearchHit]
