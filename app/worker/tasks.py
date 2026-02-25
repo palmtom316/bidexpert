@@ -86,7 +86,8 @@ def _safe_token(value: str | None, fallback: str) -> str:
 def _safe_update_run_progress(**kwargs) -> None:  # noqa: ANN003
     try:
         update_run_progress(**kwargs)
-    except ValueError:
+    except ValueError as exc:
+        logger.warning("workflow run progress update skipped: %s kwargs=%s", exc, kwargs)
         return None
 
 

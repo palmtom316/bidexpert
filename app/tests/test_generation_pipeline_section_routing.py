@@ -111,3 +111,51 @@ def test_critical_section_forces_review_and_uses_enhance(monkeypatch) -> None:
     assert calls["review"] == 1
     assert result.generated_text == "这是增强后的草稿内容。"
     assert any(item.startswith("section_route:") for item in result.warnings)
+
+
+def test_section_type_output_limit_allows_long_construction_plan(monkeypatch) -> None:
+    _mock_retrieval(monkeypatch)
+    _mock_profiles(monkeypatch)
+    monkeypatch.setattr(
+        "app.services.generation_pipeline.get_project_model_policy",
+        lambda _: SimpleNamespace(enable_review=False),
+    )
+    monkeypatch.setattr("app.services.generation_pipeline.current_registry_mode", lambda: "prod")
+    monkeypatch.setattr(
+        "app.services.generation_pipeline.select_generation_plan",
+        lambda *_args, **_kwargs: SectionGenerationPlan(
+            is_critical=False,
+            base_model=("qwen", "qwen-max"),
+            post_enhance_model=None,
+            review_model=("deepseek", "deepseek-reasoner"),
+        ),
+    )
+    long_text = "施工方案" * 2500
+    monkeypatch.setattr(
+        "app.services.generation_pipeline.generate_with_fallback_chain",
+        lambda **_: (GenerationResult(text=long_text, provider="qwen", model="qwen-max"), 0),
+    )
+    monkeypatch.setattr(
+        "app.services.generation_pipeline._run_section_enhance_step",
+        lambda **_: SimpleNamespace(
+            text=long_text,
+            payload={"fixed_md": long_text, "issues": [], "pass": True, "suggestions": []},
+            provider="qwen",
+            model="qwen-max",
+            fallback_index=0,
+            warnings=[],
+        ),
+    )
+    monkeypatch.setattr(
+        "app.services.generation_pipeline.estimate_tokens",
+        lambda text: 5000 if text == long_text else 100,
+    )
+
+    result = generate_draft_with_retrieval(
+        requirement_id="REQ-2",
+        requirement_text="请提供完整施工组织设计",
+        project_id="00000000-0000-0000-0000-000000000010",
+        section_context={"section_title": "施工组织设计", "section_type": "construction_plan"},
+    )
+
+    assert result.status != "NEED_HUMAN_INPUT"

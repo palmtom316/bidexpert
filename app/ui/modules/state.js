@@ -29,11 +29,24 @@ function parseStoredArray(raw, fallback = []) {
   }
 }
 
+function readSessionSecret(primaryKey, legacyLocalKeys = []) {
+  const sessionValue = String(sessionStorage.getItem(primaryKey) || "").trim();
+  if (sessionValue) return sessionValue;
+  for (const localKey of legacyLocalKeys) {
+    const legacyValue = String(localStorage.getItem(localKey) || "").trim();
+    if (!legacyValue) continue;
+    sessionStorage.setItem(primaryKey, legacyValue);
+    localStorage.removeItem(localKey);
+    return legacyValue;
+  }
+  return "";
+}
+
 const state = {
   projectId: normalizeStoredProjectId(localStorage.getItem("be_project_id")),
   industryTag: String(localStorage.getItem("be_industry_tag") || "").trim(),
   industryTagHistory: parseStoredArray(localStorage.getItem("be_industry_tag_history")),
-  apiKey: String(localStorage.getItem("be_api_key") || "").trim(),
+  apiKey: readSessionSecret("be_api_key", ["be_api_key"]),
   completedBids: [],
   outlineId: "",
   outlineConfirmed: false,
@@ -48,9 +61,7 @@ const state = {
   byokProfiles: [],
   conversionHistory: parseStoredArray(localStorage.getItem(CONVERSION_HISTORY_STORAGE_KEY)),
   ocrProvider: normalizeConfiguredOcrProvider(localStorage.getItem(OCR_PROVIDER_STORAGE_KEY) || "glm-ocr"),
-  ocrApiKey: String(
-    localStorage.getItem(OCR_API_KEY_STORAGE_KEY) || localStorage.getItem(LEGACY_GLM_OCR_API_KEY_STORAGE_KEY) || "",
-  ).trim(),
+  ocrApiKey: readSessionSecret(OCR_API_KEY_STORAGE_KEY, [OCR_API_KEY_STORAGE_KEY, LEGACY_GLM_OCR_API_KEY_STORAGE_KEY]),
   ocrBaseUrl: resolveOcrBaseUrl(
     localStorage.getItem(OCR_PROVIDER_STORAGE_KEY) || "glm-ocr",
     localStorage.getItem(OCR_BASE_URL_STORAGE_KEY) || localStorage.getItem(LEGACY_GLM_OCR_BASE_URL_STORAGE_KEY) || "",

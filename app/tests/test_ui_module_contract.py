@@ -63,12 +63,13 @@ def test_major_module_files_exist() -> None:
 
 
 # ---------------------------------------------------------------------------
-# R13-4: index.html loads modules instead of monolithic app.js
+# R13-4: index.html uses a single entry script to avoid duplicate globals
 # ---------------------------------------------------------------------------
 
-def test_index_html_loads_module_scripts() -> None:
+def test_index_html_uses_single_entry_script() -> None:
     html = (UI_DIR / "index.html").read_text(encoding="utf-8")
-    assert "modules/state.js" in html, "index.html should load state.js"
+    assert "/ui/app.js" in html, "index.html should load app.js entrypoint"
+    assert "modules/state.js" not in html, "index.html should not load module scripts together with app.js"
 
 
 # ---------------------------------------------------------------------------

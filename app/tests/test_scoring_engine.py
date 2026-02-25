@@ -72,7 +72,7 @@ class TestSimulatedScorer(unittest.TestCase):
         self.assertEqual(items[0]["status"], "PASS")
         self.assertEqual(items[1]["status"], "FAIL")
 
-    def test_calculate_score_estimates_when_no_review_report(self):
+    def test_calculate_score_requires_review_report_before_scoring(self):
         req = MagicMock(spec=Requirement)
         req.requirement_code = "REQ-1"
         req.score_weight = 10.0
@@ -94,8 +94,8 @@ class TestSimulatedScorer(unittest.TestCase):
         report = self.scorer.calculate_score(self.project_id)
         item = report.details_json["items"][0]
 
-        self.assertGreater(report.score_total, 0.0)
-        self.assertEqual(item["status"], "ESTIMATED_PASS")
+        self.assertEqual(report.score_total, 0.0)
+        self.assertEqual(item["status"], "UNREVIEWED")
 
     def test_estimate_coverage_does_not_pass_unrelated_long_text(self):
         supported, confidence = _estimate_requirement_coverage(

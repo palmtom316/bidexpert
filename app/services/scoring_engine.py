@@ -109,21 +109,17 @@ class SimulatedScorer:
                     str(getattr(r, "original_text", "") or ""),
                     str(getattr(section, "content_md", "") or ""),
                 )
-                if estimated_pass:
-                    estimated_score = round(weight * min(max(confidence, 0.5), 0.85), 2)
-                    total_score += estimated_score
-                    details.append(
-                        {
-                            "code": r.requirement_code,
-                            "score": estimated_score,
-                            "status": "ESTIMATED_PASS",
-                            "section": section.section_key,
-                            "confidence": round(confidence, 4),
-                            "reason": "estimated_from_section_without_review",
-                        }
-                    )
-                else:
-                    details.append({"code": r.requirement_code, "score": 0, "status": "UNREVIEWED", "section": section.section_key})
+                details.append(
+                    {
+                        "code": r.requirement_code,
+                        "score": 0,
+                        "status": "UNREVIEWED",
+                        "section": section.section_key,
+                        "confidence": round(confidence, 4),
+                        "reason": "review_report_required_before_scoring",
+                        "estimated_support": bool(estimated_pass),
+                    }
+                )
                 continue
 
             # Evaluate

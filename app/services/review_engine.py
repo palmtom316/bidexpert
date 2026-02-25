@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.db.session import session_scope
 from app.models.tables import Requirement, ReviewReport, SectionContent
 from app.services.byok import resolve_profile_chain_for_task
+from app.services.global_facts import extract_global_facts_from_text
 from app.services.llm_gateway import compliance_review_with_ensemble, compliance_review_with_fallback_chain
 
 logger = logging.getLogger(__name__)
@@ -153,6 +154,7 @@ def _build_full_review_report_payload(
     source_report: dict[str, Any],
     requirements: list[Requirement],
     sections: list[SectionContent],
+    global_facts: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     requirement_codes = _as_requirement_code_set(requirements)
     modeled_issues = _as_modeled_issues(source_report)
@@ -184,7 +186,7 @@ def _build_full_review_report_payload(
         str(getattr(section, "content_md", "") or "") for section in sections
     )
     payload["standard_issues"] = _check_standard_references(sections_text)
-    payload["numerical_issues"] = _check_numerical_consistency(sections_text)
+    payload["numerical_issues"] = _check_numerical_consistency(sections_text, global_facts=global_facts)
     if "error" in source_report:
         payload["error"] = source_report["error"]
     return payload
@@ -298,6 +300,11 @@ class ComplianceReviewer:
         ).all()
         if not sections:
             raise ValueError(f"No section content found in project {project_id}")
+        full_doc_text = _full_document_text(sections)
+        try:
+            global_facts = extract_global_facts_from_text(full_doc_text)
+        except ValueError:
+            global_facts = {}
 
         requirements = self.db.scalars(
             select(Requirement).where(Requirement.project_id == pid)
@@ -309,6 +316,7 @@ class ComplianceReviewer:
                 source_report=source,
                 requirements=[],
                 sections=sections,
+                global_facts=global_facts,
             )
             report = ReviewReport(
                 project_id=pid,
@@ -328,7 +336,7 @@ class ComplianceReviewer:
                 result, _ = compliance_review_with_ensemble(
                     profile_chain=review_chain,
                     project_id=project_id,
-                    content_text=_full_document_text(sections),
+                    content_text=full_doc_text,
                     requirements=_requirements_payload(requirements),
                     ensemble_size=ensemble_size or 3,
                 )
@@ -336,7 +344,7 @@ class ComplianceReviewer:
                 result, _ = compliance_review_with_fallback_chain(
                     profile_chain=review_chain,
                     project_id=project_id,
-                    content_text=_full_document_text(sections),
+                    content_text=full_doc_text,
                     requirements=_requirements_payload(requirements),
                 )
             status = result.status
@@ -356,6 +364,7 @@ class ComplianceReviewer:
                 source_report=source_report,
                 requirements=requirements,
                 sections=sections,
+                global_facts=global_facts,
             ),
         )
         self.db.add(report)

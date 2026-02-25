@@ -10,7 +10,7 @@ from time import perf_counter
 
 from pydantic import BaseModel, Field, ValidationError
 
-from app.core.config import settings
+from app.core.config import get_section_max_output_tokens, settings
 from app.core.section_router import SectionGenerationPlan, select_generation_plan
 from app.llm.model_registry import current_registry_mode
 from app.schemas.contracts import DraftGenerationResponse
@@ -317,6 +317,17 @@ def _section_context_value(section_context: dict | None, *keys: str) -> str:
         if text:
             return text
     return ""
+
+
+def _section_output_limit(section_context: dict | None) -> int:
+    section_type = _section_context_value(
+        section_context,
+        "section_type",
+        "type",
+        "sectionType",
+        "section_kind",
+    ).lower()
+    return get_section_max_output_tokens(section_type or None)
 
 
 def _route_warning(plan: SectionGenerationPlan) -> str:
@@ -667,6 +678,7 @@ def generate_draft_with_retrieval(
     env_mode = _normalize_mode(current_registry_mode())
     section_plan = select_generation_plan(section_context or {}, env_mode=env_mode)
     route_warning = _route_warning(section_plan)
+    section_output_limit = _section_output_limit(section_context)
 
     logger.info(
         "section routing resolved mode=%s section_key=%s section_title=%s critical=%s base=%s:%s enhance=%s review=%s:%s",
@@ -781,7 +793,7 @@ def generate_draft_with_retrieval(
 
     if (
         generation_step.input_tokens > settings.section_max_input_tokens
-        or effective_output_tokens > settings.section_max_output_tokens
+        or effective_output_tokens > section_output_limit
     ):
         return DraftGenerationResponse(
             generated_text="NEED_HUMAN_INPUT",
@@ -799,6 +811,7 @@ def generate_draft_with_retrieval(
                 *enhance_step.warnings,
                 f"input_tokens={generation_step.input_tokens}",
                 f"output_tokens={effective_output_tokens}",
+                f"section_output_limit={section_output_limit}",
             ],
             coverage_map=retrieval_ctx.coverage_map,
             retrieval_log=retrieval_ctx.retrieval_log,

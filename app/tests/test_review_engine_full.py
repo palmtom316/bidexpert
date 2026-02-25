@@ -52,3 +52,22 @@ def test_build_full_review_report_payload_handles_empty_requirements() -> None:
     assert payload["score_estimate"] == 0.0
     assert payload["missing_requirements"] == []
 
+
+def test_build_full_review_payload_applies_global_facts_numerical_check() -> None:
+    requirements = [SimpleNamespace(requirement_code="REQ-1")]
+    sections = [
+        SimpleNamespace(
+            section_key="1.1",
+            requirement_codes=["REQ-1"],
+            content_md="本项目采用220kV变电方案进行设计。",
+        )
+    ]
+    payload = _build_full_review_report_payload(
+        status="FAIL",
+        source_report={"modeled_issues": []},
+        requirements=requirements,
+        sections=sections,
+        global_facts={"voltage_level": "110kV"},
+    )
+    assert payload["numerical_issues"]
+    assert payload["numerical_issues"][0]["issue_type"] == "NUMERICAL_INCONSISTENT"

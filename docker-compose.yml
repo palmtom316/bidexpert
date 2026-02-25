@@ -1,6 +1,6 @@
 x-common-env: &common-env
   BIDEXPERT_APP_ENV: ${BIDEXPERT_APP_ENV:-dev}
-  BIDEXPERT_DATABASE_URL: postgresql+psycopg://bidexpert:${POSTGRES_PASSWORD:-bidexpert}@postgres:5432/bidexpert
+  BIDEXPERT_DATABASE_URL: postgresql+psycopg://bidexpert:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/bidexpert
   BIDEXPERT_MIN_MATRIX_COVERAGE: "0.9"
   BIDEXPERT_AUTH_MODE: ${BIDEXPERT_AUTH_MODE:-api_key}
   BIDEXPERT_JWT_SECRET: ${BIDEXPERT_JWT_SECRET:-}
@@ -13,8 +13,8 @@ x-common-env: &common-env
   BIDEXPERT_LOG_FORMAT: ${BIDEXPERT_LOG_FORMAT:-json}
   BIDEXPERT_METRICS_ENABLED: ${BIDEXPERT_METRICS_ENABLED:-true}
   BIDEXPERT_METRICS_PUBLIC_ENABLED: ${BIDEXPERT_METRICS_PUBLIC_ENABLED:-false}
-  BIDEXPERT_CELERY_BROKER_URL: redis://:${REDIS_PASSWORD:-changeme}@redis:6379/0
-  BIDEXPERT_CELERY_RESULT_BACKEND: redis://:${REDIS_PASSWORD:-changeme}@redis:6379/1
+  BIDEXPERT_CELERY_BROKER_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD is required}@redis:6379/0
+  BIDEXPERT_CELERY_RESULT_BACKEND: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD is required}@redis:6379/1
   BIDEXPERT_QDRANT_URL: http://qdrant:6333
   BIDEXPERT_QDRANT_ENABLE_RERANK: ${BIDEXPERT_QDRANT_ENABLE_RERANK:-true}
   BIDEXPERT_QDRANT_RERANK_CANDIDATE_LIMIT: ${BIDEXPERT_QDRANT_RERANK_CANDIDATE_LIMIT:-24}
@@ -143,7 +143,7 @@ services:
     image: postgres:16
     environment:
       POSTGRES_USER: bidexpert
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-bidexpert}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
       POSTGRES_DB: bidexpert
     expose:
       - "5432"
@@ -160,7 +160,7 @@ services:
     build: .
     command: alembic upgrade head
     environment:
-      BIDEXPERT_DATABASE_URL: postgresql+psycopg://bidexpert:${POSTGRES_PASSWORD:-bidexpert}@postgres:5432/bidexpert
+      BIDEXPERT_DATABASE_URL: postgresql+psycopg://bidexpert:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/bidexpert
     depends_on:
       postgres:
         condition: service_healthy
@@ -176,7 +176,7 @@ services:
       DB_PORT: "5432"
       DB_NAME: bidexpert
       DB_USER: bidexpert
-      DB_PASSWORD: ${POSTGRES_PASSWORD:-bidexpert}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
     depends_on:
       postgres:
         condition: service_healthy
@@ -213,11 +213,11 @@ services:
 
   redis:
     image: redis:7-alpine
-    command: redis-server --requirepass ${REDIS_PASSWORD:-changeme}
+    command: redis-server --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
     expose:
       - "6379"
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-changeme}", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:?REDIS_PASSWORD is required}", "ping"]
       interval: 10s
       timeout: 3s
       retries: 5

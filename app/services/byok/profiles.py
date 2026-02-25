@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import logging
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -30,6 +31,8 @@ from app.services.adapters import (
     create_adapter,
 )
 from app.services.model_quality import evaluate_compliance_quality
+
+logger = logging.getLogger(__name__)
 
 
 def _try_uuid(value: str) -> uuid.UUID:
@@ -111,6 +114,7 @@ def _write_vault_key(secret_ref: str, api_key: str) -> None:
         raise ValueError("vault is not configured")
     if normalized_app_env() == "prod":
         raise ValueError("vault redis fallback is disabled in prod")
+    logger.warning("using redis fallback for vault write secret_ref=%s env=%s", secret_ref, normalized_app_env())
     _redis_client().set(secret_ref, api_key, ex=_secret_ttl_seconds())
 
 
@@ -131,6 +135,7 @@ def _read_vault_key(secret_ref: str) -> str | None:
         return value if isinstance(value, str) else None
     if not _vault_redis_fallback_allowed():
         return None
+    logger.warning("using redis fallback for vault read secret_ref=%s env=%s", secret_ref, normalized_app_env())
     value = _redis_client().get(secret_ref)
     return value if isinstance(value, str) else None
 
@@ -146,6 +151,7 @@ def _delete_vault_key(secret_ref: str) -> None:
             resp.raise_for_status()
         return
     if _vault_redis_fallback_allowed():
+        logger.warning("using redis fallback for vault delete secret_ref=%s env=%s", secret_ref, normalized_app_env())
         _redis_client().delete(secret_ref)
 
 

@@ -29,11 +29,24 @@ function parseStoredArray(raw, fallback = []) {
   }
 }
 
+function readSessionSecret(primaryKey, legacyLocalKeys = []) {
+  const sessionValue = String(sessionStorage.getItem(primaryKey) || "").trim();
+  if (sessionValue) return sessionValue;
+  for (const localKey of legacyLocalKeys) {
+    const legacyValue = String(localStorage.getItem(localKey) || "").trim();
+    if (!legacyValue) continue;
+    sessionStorage.setItem(primaryKey, legacyValue);
+    localStorage.removeItem(localKey);
+    return legacyValue;
+  }
+  return "";
+}
+
 const state = {
   projectId: normalizeStoredProjectId(localStorage.getItem("be_project_id")),
   industryTag: String(localStorage.getItem("be_industry_tag") || "").trim(),
   industryTagHistory: parseStoredArray(localStorage.getItem("be_industry_tag_history")),
-  apiKey: String(sessionStorage.getItem("be_api_key") || "").trim(),
+  apiKey: readSessionSecret("be_api_key", ["be_api_key"]),
   completedBids: [],
   outlineId: "",
   outlineConfirmed: false,
@@ -48,9 +61,7 @@ const state = {
   byokProfiles: [],
   conversionHistory: parseStoredArray(localStorage.getItem(CONVERSION_HISTORY_STORAGE_KEY)),
   ocrProvider: normalizeConfiguredOcrProvider(localStorage.getItem(OCR_PROVIDER_STORAGE_KEY) || "glm-ocr"),
-  ocrApiKey: String(
-    localStorage.getItem(OCR_API_KEY_STORAGE_KEY) || localStorage.getItem(LEGACY_GLM_OCR_API_KEY_STORAGE_KEY) || "",
-  ).trim(),
+  ocrApiKey: readSessionSecret(OCR_API_KEY_STORAGE_KEY, [OCR_API_KEY_STORAGE_KEY, LEGACY_GLM_OCR_API_KEY_STORAGE_KEY]),
   ocrBaseUrl: resolveOcrBaseUrl(
     localStorage.getItem(OCR_PROVIDER_STORAGE_KEY) || "glm-ocr",
     localStorage.getItem(OCR_BASE_URL_STORAGE_KEY) || localStorage.getItem(LEGACY_GLM_OCR_BASE_URL_STORAGE_KEY) || "",
@@ -76,7 +87,11 @@ const Toast = {
     const icon = type === "success" ? "check-line" : type === "error" ? "close-circle-line" : "information-line";
     const node = document.createElement("div");
     node.className = `toast ${type}`;
-    node.innerHTML = `<i class="ri-${icon}"></i><span>${escapeHtml(message)}</span>`;
+    const iconNode = document.createElement("i");
+    iconNode.className = `ri-${icon}`;
+    const textNode = document.createElement("span");
+    textNode.textContent = String(message ?? "");
+    node.append(iconNode, textNode);
     this.container.appendChild(node);
     setTimeout(() => {
       node.style.opacity = "0";
@@ -461,6 +476,7 @@ const GlobalBar = {
           sessionStorage.setItem("be_api_key", raw);
           Toast.success("API Key 已设置 (X-API-Key)");
         } else {
+          sessionStorage.removeItem("be_api_key");
           localStorage.removeItem("be_api_key");
           Toast.info("已清除 API Key");
         }
@@ -2485,6 +2501,8 @@ const ByokSettings = {
     state.ocrModel = model;
     localStorage.setItem(OCR_PROVIDER_STORAGE_KEY, provider);
     sessionStorage.setItem(OCR_API_KEY_STORAGE_KEY, apiKey);
+    localStorage.removeItem(OCR_API_KEY_STORAGE_KEY);
+    localStorage.removeItem(LEGACY_GLM_OCR_API_KEY_STORAGE_KEY);
     localStorage.setItem(OCR_BASE_URL_STORAGE_KEY, baseUrl);
     localStorage.setItem(OCR_MODEL_STORAGE_KEY, model);
     $("#byokResult").textContent = `OCR 设置已保存\nprovider=${provider}\nbase_url=${baseUrl || "(未填写)"}\nmodel=${model}\napi_key=${apiKey ? "已填写" : "未填写"}`;

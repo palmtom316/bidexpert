@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import uuid
 from types import SimpleNamespace
 
@@ -206,6 +207,23 @@ def test_temp_and_vault_fallback_writes_share_same_ttl(monkeypatch) -> None:
     assert first[2] is not None
     assert second[2] is not None
     assert first[2] == second[2]
+
+
+def test_read_vault_key_logs_warning_when_using_redis_fallback(monkeypatch, caplog) -> None:
+    class _RedisStub:
+        def get(self, secret_ref: str) -> str | None:
+            assert secret_ref == "vault:path/dev"
+            return "sk-fallback"
+
+    monkeypatch.setattr(profiles, "_vault_enabled", lambda: False)
+    monkeypatch.setattr(profiles, "_vault_redis_fallback_allowed", lambda: True)
+    monkeypatch.setattr(profiles, "_redis_client", lambda: _RedisStub())
+
+    with caplog.at_level(logging.WARNING):
+        value = profiles._read_vault_key("vault:path/dev")  # noqa: SLF001
+
+    assert value == "sk-fallback"
+    assert "redis fallback" in caplog.text.lower()
 
 
 def test_test_provider_connection_requires_credential() -> None:

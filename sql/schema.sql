@@ -21,6 +21,22 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'job_status') THEN
     CREATE TYPE job_status AS ENUM ('PENDING', 'RUNNING', 'SUCCEEDED', 'FAILED', 'CANCELLED');
   END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'tender_run_step') THEN
+    CREATE TYPE tender_run_step AS ENUM (
+      'RECEIVED', 'UNPACKED', 'VALIDATED', 'SECTIONIZED',
+      'PRELIM_EXTRACTED', 'FATAL_GATE_CHECKED', 'SCORING_EXTRACTED',
+      'TECH_EXTRACTED', 'DEVIATION_BUILT', 'FORMAT_SIGNATURE_EXTRACTED',
+      'BLUEPRINT_BUILT', 'READY_FOR_WRITING', 'FATAL_BLOCKED', 'FAILED'
+    );
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'kb_ingest_step') THEN
+    CREATE TYPE kb_ingest_step AS ENUM (
+      'RECEIVED', 'PARSE_READY', 'METADATA_EXTRACTED', 'LIFECYCLE_VALIDATED',
+      'TABLE_CHUNKED', 'CHUNKED', 'EMBEDDING_DONE', 'UPSERTED', 'KB_READY', 'FAILED'
+    );
+  END IF;
 END$$;
 
 CREATE TABLE IF NOT EXISTS project (
@@ -35,6 +51,23 @@ CREATE TABLE IF NOT EXISTS project (
 );
 
 CREATE INDEX IF NOT EXISTS idx_project_owner ON project(owner_user_id);
+
+CREATE TABLE IF NOT EXISTS workflow_run (
+  id                 text PRIMARY KEY,
+  project_id         text NOT NULL,
+  status             text NOT NULL,
+  sections_json      jsonb NOT NULL DEFAULT '{}'::jsonb,
+  section_status_json jsonb NOT NULL DEFAULT '{}'::jsonb,
+  current_step       text NOT NULL DEFAULT 'G0',
+  step_status        text NOT NULL DEFAULT 'paused',
+  resume_from_step   text NOT NULL DEFAULT 'G1',
+  retry_count        int NOT NULL DEFAULT 0,
+  last_error         text,
+  created_at         timestamptz NOT NULL DEFAULT now(),
+  updated_at         timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_workflow_run_project_id ON workflow_run(project_id);
 
 CREATE TABLE IF NOT EXISTS document (
   id                uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -389,6 +422,36 @@ CREATE TABLE IF NOT EXISTS scoring_report (
 );
 
 CREATE INDEX IF NOT EXISTS idx_scoring_report_project ON scoring_report(project_id);
+
+CREATE TABLE IF NOT EXISTS tender_import_run (
+  id                 uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  project_id         uuid REFERENCES project(id) ON DELETE SET NULL,
+  tender_id          text NOT NULL,
+  filename           text NOT NULL,
+  workspace_path     text NOT NULL,
+  current_step       tender_run_step NOT NULL DEFAULT 'RECEIVED',
+  fatal_blocked_reason jsonb,
+  error_detail       text,
+  created_by         text NOT NULL DEFAULT 'system',
+  created_at         timestamptz NOT NULL DEFAULT now(),
+  updated_at         timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_tender_import_run_project_id ON tender_import_run(project_id);
+CREATE INDEX IF NOT EXISTS idx_tender_import_run_tender_id ON tender_import_run(tender_id);
+
+CREATE TABLE IF NOT EXISTS kb_ingest_run (
+  id                 uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  expert_doc_id      uuid NOT NULL REFERENCES expert_doc(id) ON DELETE CASCADE,
+  filename           text NOT NULL,
+  current_step       kb_ingest_step NOT NULL DEFAULT 'RECEIVED',
+  metadata_json      jsonb NOT NULL DEFAULT '{}'::jsonb,
+  error_detail       text,
+  created_at         timestamptz NOT NULL DEFAULT now(),
+  updated_at         timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_kb_ingest_run_expert_doc_id ON kb_ingest_run(expert_doc_id);
 
 CREATE TABLE IF NOT EXISTS completed_bid (
   id                 uuid PRIMARY KEY DEFAULT gen_random_uuid(),

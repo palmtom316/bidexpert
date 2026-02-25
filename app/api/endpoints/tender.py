@@ -6,6 +6,7 @@ from pathlib import Path
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
+from app.core.config import settings
 from app.api.handlers.provider_completed_tender import (
     analyze_tender_upload_handler,
     get_tender_analysis_detail_handler,
@@ -27,6 +28,23 @@ from app.schemas.contracts import (
 )
 
 router = APIRouter()
+
+
+def _resolve_derived_file_path(workspace_path: str, filename: str) -> Path:
+    workspace_root = Path(settings.tender_workspace_dir).resolve()
+    workspace = Path(workspace_path).resolve()
+    try:
+        workspace.relative_to(workspace_root)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="workspace path is outside configured root") from exc
+
+    derived_root = (workspace / "derived").resolve()
+    file_path = (derived_root / filename).resolve()
+    try:
+        file_path.relative_to(derived_root)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="derived file path escaped workspace boundary") from exc
+    return file_path
 
 
 def _ctx():
@@ -212,7 +230,13 @@ def get_import_run_detail(run_id: str) -> TenderImportRunDetailResponse:
 
         # List derived files from workspace
         derived: list[str] = []
-        derived_dir = Path(run.workspace_path) / "derived"
+        workspace = Path(run.workspace_path).resolve()
+        workspace_root = Path(settings.tender_workspace_dir).resolve()
+        try:
+            workspace.relative_to(workspace_root)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="workspace path is outside configured root") from exc
+        derived_dir = workspace / "derived"
         if derived_dir.is_dir():
             derived = sorted(f.name for f in derived_dir.iterdir() if f.is_file())
 
@@ -269,7 +293,7 @@ def get_derived_file(tender_id: str, name: str) -> FileResponse:
         if not run:
             raise HTTPException(status_code=404, detail="no import run found for tender_id")
 
-        file_path = Path(run.workspace_path) / "derived" / name
+        file_path = _resolve_derived_file_path(run.workspace_path, name)
         if not file_path.is_file():
             raise HTTPException(status_code=404, detail=f"derived file not found: {name}")
         return FileResponse(str(file_path), media_type="application/json", filename=name)
@@ -291,7 +315,7 @@ def _serve_derived_file(run_id: str, filename: str) -> FileResponse:
         if not run:
             raise HTTPException(status_code=404, detail="import run not found")
 
-        file_path = Path(run.workspace_path) / "derived" / filename
+        file_path = _resolve_derived_file_path(run.workspace_path, filename)
         if not file_path.is_file():
             raise HTTPException(status_code=404, detail=f"{filename} not yet generated")
         return FileResponse(str(file_path), media_type="application/json", filename=filename)
