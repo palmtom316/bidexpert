@@ -1,6 +1,6 @@
 # BidExpert AI 辅助投标系统 — IT 运维部署说明书
 
-> 版本：V1.0 | 更新日期：2026-02-23
+> 版本：V1.1 | 更新日期：2026-02-25
 
 ## 技术架构
 
@@ -172,3 +172,148 @@ alembic upgrade head
 | 扩容 Worker | 调整 docker-compose.yml 中 worker 的 `--concurrency` 参数或增加 worker 副本 |
 | 清理语义缓存 | 调用 `POST /v1/evidence/cache/invalidate` |
 | 查看审计日志 | 调用 `GET /v1/provider/audit-logs` |
+
+## 灾难恢复
+
+### RPO / RTO 目标
+
+| 级别 | RPO（数据丢失容忍） | RTO（恢复时间） | 适用场景 |
+|------|---------------------|-----------------|---------|
+| 标准 | ≤ 1 小时 | ≤ 2 小时 | 单机部署 |
+| 高可用 | ≤ 5 分钟 | ≤ 30 分钟 | 多副本部署 |
+
+### 备份策略
+
+| 数据源 | 频率 | 保留周期 | 方式 |
+|--------|------|---------|------|
+| PostgreSQL | 每日全量 + 持续 WAL 归档 | 全量 30 天，WAL 7 天 | `pg_basebackup` + WAL 归档到对象存储 |
+| Qdrant | 每日快照 | 14 天 | `docker compose --profile ops run --rm qdrant-backup` |
+| 文件数据 | 每日增量 | 30 天 | `docker compose --profile ops run --rm data-backup` |
+| Redis | 不备份 | — | 缓存数据可重建，Celery 任务可重投 |
+
+### 恢复流程
+
+1. 停止所有服务：`docker compose down`
+2. 恢复 PostgreSQL：
+   ```bash
+   # 从全量备份恢复
+   docker compose run --rm pg-backup restore <backup_file>
+   # 或使用 WAL 做时间点恢复（PITR）
+   ```
+3. 恢复 Qdrant 快照：
+   ```bash
+   docker compose --profile ops run --rm qdrant-backup restore <snapshot_name>
+   ```
+4. 恢复文件数据：将 `backups/data-*.tar.gz` 解压到 `data/` 目录
+5. 启动服务：`docker compose up -d`
+6. 验证：`curl -H "X-API-Key: <key>" http://localhost:8080/health`
+7. 执行数据库迁移（如有版本差异）：`docker compose run --rm migrate alembic upgrade head`
+
+### 故障场景处理
+
+| 故障 | 影响 | 恢复方式 |
+|------|------|---------|
+| API 容器崩溃 | 服务不可用 | Docker 自动重启（restart: unless-stopped） |
+| PostgreSQL 宕机 | 全部写操作失败 | 从最近备份恢复，重放 WAL |
+| Qdrant 宕机 | 检索不可用，生成降级 | 从快照恢复，或重建索引 |
+| Redis 宕机 | 缓存失效、任务队列中断 | 重启 Redis，未完成任务自动重试 |
+| 磁盘满 | 服务异常 | 清理日志/临时文件，扩容磁盘 |
+| 数据损坏 | 数据不一致 | PITR 恢复到损坏前时间点 |
+
+## 监控告警配置
+
+### Prometheus 集成
+
+系统暴露 `/metrics` 端点（需认证），提供以下指标：
+
+| 指标 | 类型 | 说明 |
+|------|------|------|
+| `http_requests_total` | Counter | HTTP 请求总数（按 method、path、status） |
+| `http_request_duration_seconds` | Histogram | 请求延迟分布 |
+| `llm_calls_total` | Counter | LLM 调用次数（按 provider、model） |
+| `llm_tokens_used_total` | Counter | Token 消耗总量 |
+| `celery_tasks_total` | Counter | 异步任务执行次数（按 task_name、status） |
+
+### 告警规则
+
+在 `deploy/monitoring/prometheus-alerts.yml` 中配置，关键规则：
+
+```yaml
+# API 高错误率
+- alert: HighErrorRate
+  expr: rate(http_requests_total{status=~"5.."}[5m]) / rate(http_requests_total[5m]) > 0.05
+  for: 5m
+  labels:
+    severity: critical
+  annotations:
+    summary: "API 5xx 错误率超过 5%"
+
+# API 响应慢
+- alert: HighLatency
+  expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 10
+  for: 5m
+  labels:
+    severity: warning
+  annotations:
+    summary: "P95 延迟超过 10 秒"
+
+# 服务不可用
+- alert: ServiceDown
+  expr: up{job="bidexpert"} == 0
+  for: 1m
+  labels:
+    severity: critical
+  annotations:
+    summary: "BidExpert 服务不可达"
+
+# 磁盘空间不足
+- alert: DiskSpaceLow
+  expr: node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"} < 0.15
+  for: 10m
+  labels:
+    severity: warning
+  annotations:
+    summary: "磁盘剩余空间低于 15%"
+```
+
+### 告警通知渠道
+
+通过 Alertmanager 配置通知：
+
+| 渠道 | 配置方式 | 适用场景 |
+|------|---------|---------|
+| 企业微信 | Alertmanager webhook | 生产告警 |
+| 邮件 | Alertmanager email_configs | 日报/周报 |
+| 钉钉 | Alertmanager webhook + 钉钉机器人 | 生产告警 |
+
+## 扩容策略
+
+### 垂直扩容（单机）
+
+| 组件 | 基础配置 | 推荐生产配置 | 调整方式 |
+|------|---------|-------------|---------|
+| API | 2 CPU / 2GB | 4 CPU / 8GB | docker-compose.yml `deploy.resources` |
+| Worker | 2 CPU / 2GB | 4 CPU / 8GB | `--concurrency` 参数（建议 CPU 核数 × 2） |
+| PostgreSQL | 1 CPU / 1GB | 2 CPU / 4GB | `shared_buffers`、`work_mem` 调优 |
+| Qdrant | 1 CPU / 1GB | 2 CPU / 4GB | `--memory-limit` 启动参数 |
+| Redis | 1 CPU / 512MB | 1 CPU / 2GB | `maxmemory` 配置 |
+
+### 水平扩容
+
+| 组件 | 扩容方式 | 注意事项 |
+|------|---------|---------|
+| API | 增加副本 + Nginx 负载均衡 | 无状态，直接扩容 |
+| Worker | 增加 Celery worker 副本 | 共享 Redis broker，注意并发限制 |
+| PostgreSQL | 读写分离（主从复制） | 写操作仅主库，读操作可分发到从库 |
+| Qdrant | 分片集群模式 | 需 Qdrant 集群配置，数据量 > 100 万向量时考虑 |
+| Nginx | 多实例 + DNS 轮询或 LB | 前置云负载均衡器 |
+
+### 扩容决策参考
+
+| 指标 | 阈值 | 建议操作 |
+|------|------|---------|
+| API P95 延迟 > 5s | 持续 10 分钟 | 增加 API 副本 |
+| Worker 队列积压 > 100 | 持续 5 分钟 | 增加 Worker 副本或提高 concurrency |
+| PostgreSQL CPU > 80% | 持续 15 分钟 | 垂直扩容或读写分离 |
+| Qdrant 内存 > 85% | 持续 | 垂直扩容或启用分片 |
+| 磁盘使用 > 80% | — | 清理或扩容磁盘 |

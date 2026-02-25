@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, File, Form, UploadFile
 
 from app.api.handlers.evidence_expert_render import (
@@ -34,6 +36,8 @@ from app.schemas.contracts import (
     SectionFeedbackUpsertRequest,
 )
 
+_log = logging.getLogger(__name__)
+
 router = APIRouter()
 
 
@@ -41,6 +45,14 @@ def _ctx():
     from app.api import routes
 
     return routes
+
+
+def _audit(action: str, *, actor: str = "system", project_id: str | None = None, target_id: str | None = None, meta: dict | None = None) -> None:
+    try:
+        from app.services.audit_log import record_audit_event
+        record_audit_event(action=action, actor_user_id=actor, project_id=project_id, target_id=target_id, metadata=meta)
+    except Exception:
+        _log.warning("audit write failed for %s", action, exc_info=True)
 
 
 @router.post("/v1/evidence/upsert", response_model=EnqueueIngestResponse)
@@ -78,7 +90,7 @@ async def expert_library_ingest_upload(
     ocr_model: str | None = Form(default=None),
 ) -> ExpertLibraryIngestResponse:
     ctx = _ctx()
-    return await expert_library_ingest_upload_handler(
+    result = await expert_library_ingest_upload_handler(
         file=file,
         project_id=project_id,
         industry_tag=industry_tag,
@@ -95,6 +107,8 @@ async def expert_library_ingest_upload(
         resolved_created_by_fn=ctx._resolved_created_by,
         service_unavailable_exc_factory=ctx._service_unavailable,
     )
+    _audit("expert_library.ingest_upload", actor=created_by, project_id=project_id, meta={"filename": file.filename, "doc_type": doc_type})
+    return result
 
 
 @router.post("/v1/expert-library/convert-upload", response_model=ExpertLibraryConvertResponse)
@@ -112,7 +126,7 @@ async def expert_library_convert_upload(
     ocr_model: str | None = Form(default=None),
 ) -> ExpertLibraryConvertResponse:
     ctx = _ctx()
-    return await expert_library_convert_upload_handler(
+    result = await expert_library_convert_upload_handler(
         file=file,
         project_id=project_id,
         industry_tag=industry_tag,
@@ -129,17 +143,21 @@ async def expert_library_convert_upload(
         resolved_created_by_fn=ctx._resolved_created_by,
         service_unavailable_exc_factory=ctx._service_unavailable,
     )
+    _audit("expert_library.convert_upload", actor=created_by, project_id=project_id, meta={"filename": file.filename})
+    return result
 
 
 @router.post("/v1/expert-library/convert-confirm", response_model=ExpertLibraryIngestResponse)
 def expert_library_convert_confirm(payload: ExpertLibraryConvertConfirmRequest) -> ExpertLibraryIngestResponse:
     ctx = _ctx()
-    return expert_library_convert_confirm_handler(
+    result = expert_library_convert_confirm_handler(
         payload,
         confirm_structured_conversion_ingest_fn=ctx.confirm_structured_conversion_ingest,
         resolved_created_by_fn=ctx._resolved_created_by,
         service_unavailable_exc_factory=ctx._service_unavailable,
     )
+    _audit("expert_library.convert_confirm", meta={"conversion_id": getattr(payload, "conversion_id", None)})
+    return result
 
 
 @router.post("/v1/expert-library/ingest-uploads", response_model=ExpertLibraryBatchIngestResponse)
@@ -157,7 +175,7 @@ async def expert_library_ingest_uploads(
     ocr_model: str | None = Form(default=None),
 ) -> ExpertLibraryBatchIngestResponse:
     ctx = _ctx()
-    return await expert_library_ingest_uploads_handler(
+    result = await expert_library_ingest_uploads_handler(
         files=files,
         project_id=project_id,
         industry_tag=industry_tag,
@@ -173,6 +191,8 @@ async def expert_library_ingest_uploads(
         ingest_historical_pdf_fn=ctx.ingest_historical_pdf,
         resolved_created_by_fn=ctx._resolved_created_by,
     )
+    _audit("expert_library.ingest_uploads", actor=created_by, project_id=project_id, meta={"file_count": len(files), "doc_type": doc_type})
+    return result
 
 
 @router.post("/v1/expert-library/ingest-structured", response_model=ExpertLibraryStructuredIngestResponse)
@@ -180,12 +200,14 @@ def expert_library_ingest_structured(
     payload: ExpertLibraryStructuredIngestRequest,
 ) -> ExpertLibraryStructuredIngestResponse:
     ctx = _ctx()
-    return expert_library_ingest_structured_handler(
+    result = expert_library_ingest_structured_handler(
         payload,
         ingest_structured_expert_knowledge_fn=ctx.ingest_structured_expert_knowledge,
         resolved_created_by_fn=ctx._resolved_created_by,
         service_unavailable_exc_factory=ctx._service_unavailable,
     )
+    _audit("expert_library.ingest_structured", project_id=getattr(payload, "project_id", None))
+    return result
 
 
 @router.get("/v1/expert-library/docs", response_model=ExpertLibraryDocListResponse)
@@ -218,13 +240,15 @@ def expert_library_doc_chunks(expert_doc_id: str, limit: int = 200) -> ExpertLib
 @router.post("/v1/evidence/feedback-upsert", response_model=EnqueueIngestResponse)
 def feedback_upsert_section(payload: SectionFeedbackUpsertRequest) -> EnqueueIngestResponse:
     ctx = _ctx()
-    return feedback_upsert_section_handler(
+    result = feedback_upsert_section_handler(
         payload,
         get_section_status_fn=ctx.get_section_status,
         detect_pricing_content_fn=ctx.detect_pricing_content,
         standardize_section_feedback_chunks_fn=ctx.standardize_section_feedback_chunks,
         upsert_evidence_task_obj=ctx.upsert_evidence_task,
     )
+    _audit("evidence.feedback_upsert", meta={"outline_id": getattr(payload, "outline_id", None), "section_key": getattr(payload, "section_key", None)})
+    return result
 
 
 @router.post("/v1/evidence/search", response_model=EvidenceSearchResponse)

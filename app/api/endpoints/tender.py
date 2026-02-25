@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import uuid
 from pathlib import Path
 
@@ -27,6 +28,8 @@ from app.schemas.contracts import (
     TenderImportZipResponse,
 )
 
+_log = logging.getLogger(__name__)
+
 router = APIRouter()
 
 
@@ -53,6 +56,14 @@ def _ctx():
     return routes
 
 
+def _audit(action: str, *, actor: str = "system", project_id: str | None = None, target_id: str | None = None, meta: dict | None = None) -> None:
+    try:
+        from app.services.audit_log import record_audit_event
+        record_audit_event(action=action, actor_user_id=actor, project_id=project_id, target_id=target_id, metadata=meta)
+    except Exception:
+        _log.warning("audit write failed for %s", action, exc_info=True)
+
+
 # ── v1.0 endpoints (unchanged) ────────────────────────────────
 
 @router.post("/v1/tender/parse", response_model=ParseTenderResponse)
@@ -72,7 +83,7 @@ async def analyze_tender_upload(
     created_by: str = Form(default="system"),
 ) -> TenderAnalyzeUploadResponse:
     ctx = _ctx()
-    return await analyze_tender_upload_handler(
+    result = await analyze_tender_upload_handler(
         file=file,
         project_id=project_id,
         created_by=created_by,
@@ -81,6 +92,8 @@ async def analyze_tender_upload(
         resolved_created_by_fn=ctx._resolved_created_by,
         service_unavailable_exc_factory=ctx._service_unavailable,
     )
+    _audit("tender.analyze_upload", actor=created_by, project_id=project_id, meta={"filename": file.filename})
+    return result
 
 
 @router.get("/v1/tender/analysis-runs", response_model=TenderAnalysisRunListResponse)
@@ -169,6 +182,8 @@ async def import_tender_zip(
     from app.worker.tender_tasks import tender_import_pipeline_task
 
     tender_import_pipeline_task.delay(str(run_id))
+
+    _audit("tender.import_zip", actor=created_by, project_id=project_id, target_id=str(run_id), meta={"filename": file.filename, "tender_id": manifest.tender_id})
 
     return TenderImportZipResponse(
         run_id=str(run_id),

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter
 
 from app.api.handlers.workflow_generation_review import (
@@ -21,6 +23,8 @@ from app.schemas.contracts import (
     SanitizeResponse,
 )
 
+_log = logging.getLogger(__name__)
+
 router = APIRouter()
 
 
@@ -28,6 +32,14 @@ def _ctx():
     from app.api import routes
 
     return routes
+
+
+def _audit(action: str, *, actor: str = "system", project_id: str | None = None, target_id: str | None = None, meta: dict | None = None) -> None:
+    try:
+        from app.services.audit_log import record_audit_event
+        record_audit_event(action=action, actor_user_id=actor, project_id=project_id, target_id=target_id, metadata=meta)
+    except Exception:
+        _log.warning("audit write failed for %s", action, exc_info=True)
 
 
 @router.post("/v1/policy/pricing-fuse", response_model=PricingFuseResponse)
@@ -58,12 +70,14 @@ def validate_generation(payload: GateValidationRequest) -> GateValidationRespons
 @router.post("/v1/generation/draft", response_model=DraftGenerationResponse)
 def generate_draft(payload: DraftGenerationRequest) -> DraftGenerationResponse:
     ctx = _ctx()
-    return generate_draft_handler(
+    result = generate_draft_handler(
         payload,
         detect_pricing_content_fn=ctx.detect_pricing_content,
         generate_draft_with_retrieval_fn=ctx.generate_draft_with_retrieval,
         service_unavailable_exc_factory=ctx._service_unavailable,
     )
+    _audit("generation.draft", target_id=getattr(payload, "outline_id", None), meta={"section_key": getattr(payload, "section_key", None)})
+    return result
 
 
 @router.post("/v1/tasks/generate-draft", response_model=EnqueueIngestResponse)
