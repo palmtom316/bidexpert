@@ -285,8 +285,6 @@ def _resolved_created_by(provided: str | None) -> str:
     auth = get_auth_context()
     if auth.method == "jwt":
         return auth.user_id
-    if provided and provided.strip():
-        return provided.strip()
     if auth.method == "api_key" and auth.user_id:
         return auth.user_id
     return "system"

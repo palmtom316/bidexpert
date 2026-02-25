@@ -38,6 +38,14 @@ docker compose up -d
 curl -H "X-API-Key: <你的key>" http://localhost:8080/health
 ```
 
+#### 离线或受限网络环境（前端图标本地化）
+
+生产环境 Nginx 默认 CSP 不允许加载外部 CDN 静态资源。首次部署前建议将 `remixicon` 字体/样式下载到本地目录（只需执行一次）：
+
+```bash
+python3 scripts/vendor_remixicon.py --version 3.5.0 --dest app/ui/vendor/remixicon
+```
+
 服务启动顺序：PostgreSQL → Redis/Qdrant → Alembic 迁移 → API → Worker → Nginx
 
 访问地址：`http://localhost:8080`（HTTP）或 `https://localhost:8443`（HTTPS，开发环境自动生成自签名证书）

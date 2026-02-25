@@ -90,12 +90,13 @@ async def expert_library_ingest_upload(
     ocr_model: str | None = Form(default=None),
 ) -> ExpertLibraryIngestResponse:
     ctx = _ctx()
+    actor = ctx._resolved_created_by(created_by)
     result = await expert_library_ingest_upload_handler(
         file=file,
         project_id=project_id,
         industry_tag=industry_tag,
         title=title,
-        created_by=created_by,
+        created_by=actor,
         doc_type=doc_type,
         model_id=model_id,
         ocr_provider=ocr_provider,
@@ -107,7 +108,7 @@ async def expert_library_ingest_upload(
         resolved_created_by_fn=ctx._resolved_created_by,
         service_unavailable_exc_factory=ctx._service_unavailable,
     )
-    _audit("expert_library.ingest_upload", actor=created_by, project_id=project_id, meta={"filename": file.filename, "doc_type": doc_type})
+    _audit("expert_library.ingest_upload", actor=actor, project_id=project_id, meta={"filename": file.filename, "doc_type": doc_type})
     return result
 
 
@@ -126,12 +127,13 @@ async def expert_library_convert_upload(
     ocr_model: str | None = Form(default=None),
 ) -> ExpertLibraryConvertResponse:
     ctx = _ctx()
+    actor = ctx._resolved_created_by(created_by)
     result = await expert_library_convert_upload_handler(
         file=file,
         project_id=project_id,
         industry_tag=industry_tag,
         title=title,
-        created_by=created_by,
+        created_by=actor,
         doc_type=doc_type,
         model_id=model_id,
         ocr_provider=ocr_provider,
@@ -143,7 +145,7 @@ async def expert_library_convert_upload(
         resolved_created_by_fn=ctx._resolved_created_by,
         service_unavailable_exc_factory=ctx._service_unavailable,
     )
-    _audit("expert_library.convert_upload", actor=created_by, project_id=project_id, meta={"filename": file.filename})
+    _audit("expert_library.convert_upload", actor=actor, project_id=project_id, meta={"filename": file.filename})
     return result
 
 
@@ -175,12 +177,13 @@ async def expert_library_ingest_uploads(
     ocr_model: str | None = Form(default=None),
 ) -> ExpertLibraryBatchIngestResponse:
     ctx = _ctx()
+    actor = ctx._resolved_created_by(created_by)
     result = await expert_library_ingest_uploads_handler(
         files=files,
         project_id=project_id,
         industry_tag=industry_tag,
         title=title,
-        created_by=created_by,
+        created_by=actor,
         doc_type=doc_type,
         model_id=model_id,
         ocr_provider=ocr_provider,
@@ -191,7 +194,7 @@ async def expert_library_ingest_uploads(
         ingest_historical_pdf_fn=ctx.ingest_historical_pdf,
         resolved_created_by_fn=ctx._resolved_created_by,
     )
-    _audit("expert_library.ingest_uploads", actor=created_by, project_id=project_id, meta={"file_count": len(files), "doc_type": doc_type})
+    _audit("expert_library.ingest_uploads", actor=actor, project_id=project_id, meta={"file_count": len(files), "doc_type": doc_type})
     return result
 
 

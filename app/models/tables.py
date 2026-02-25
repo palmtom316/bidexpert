@@ -361,6 +361,10 @@ class IngestJob(Base):
 
 class AuditLog(Base):
     __tablename__ = "audit_log"
+    __table_args__ = (
+        Index("idx_audit_log_project_created_at", "project_id", "created_at"),
+        Index("idx_audit_log_action_created_at", "action", "created_at"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
     project_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -565,7 +569,11 @@ class ScoringReport(Base):
 
 class TenderImportRun(Base):
     __tablename__ = "tender_import_run"
-    __table_args__ = (Index("idx_tender_import_run_project_id", "project_id"),)
+    __table_args__ = (
+        Index("idx_tender_import_run_project_id", "project_id"),
+        Index("idx_tender_import_run_project_created_at", "project_id", "created_at"),
+        Index("idx_tender_import_run_tender_created_at", "tender_id", "created_at"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
     project_id: Mapped[uuid.UUID | None] = mapped_column(

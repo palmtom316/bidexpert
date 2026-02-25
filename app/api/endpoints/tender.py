@@ -83,16 +83,17 @@ async def analyze_tender_upload(
     created_by: str = Form(default="system"),
 ) -> TenderAnalyzeUploadResponse:
     ctx = _ctx()
+    actor = ctx._resolved_created_by(created_by)
     result = await analyze_tender_upload_handler(
         file=file,
         project_id=project_id,
-        created_by=created_by,
+        created_by=actor,
         read_upload_with_limit_fn=ctx._read_upload_with_limit,
         analyze_and_persist_tender_pdf_fn=ctx.analyze_and_persist_tender_pdf,
         resolved_created_by_fn=ctx._resolved_created_by,
         service_unavailable_exc_factory=ctx._service_unavailable,
     )
-    _audit("tender.analyze_upload", actor=created_by, project_id=project_id, meta={"filename": file.filename})
+    _audit("tender.analyze_upload", actor=actor, project_id=project_id, meta={"filename": file.filename})
     return result
 
 

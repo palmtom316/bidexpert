@@ -129,6 +129,12 @@ class Settings(BaseSettings):
 
     qdrant_min_score_threshold: float = 0.01
 
+    # v1.5 — Tender zip import safety limits
+    tender_zip_max_entries: int = 512
+    tender_zip_max_total_uncompressed_bytes: int = 512 * 1024 * 1024
+    tender_zip_max_single_file_bytes: int = 200 * 1024 * 1024
+    tender_zip_max_compression_ratio: float = 100.0
+
     # v1.4 — Metadata auto-tagging
     metadata_llm_fallback_enabled: bool = True
     metadata_llm_model: str = "qwen-turbo"

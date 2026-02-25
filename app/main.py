@@ -45,11 +45,10 @@ def _should_apply_rate_limit(path: str) -> bool:
 
 
 def _client_identifier(request) -> str:
-    xff = request.headers.get("x-forwarded-for", "")
-    if xff:
-        first = xff.split(",", maxsplit=1)[0].strip()
-        if first:
-            return first
+    # Prefer a reverse-proxy asserted IP and avoid trusting user-controlled X-Forwarded-For.
+    x_real_ip = (request.headers.get("x-real-ip") or "").strip()
+    if x_real_ip:
+        return x_real_ip
     if request.client and request.client.host:
         return str(request.client.host)
     return "unknown"
