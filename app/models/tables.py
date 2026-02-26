@@ -611,3 +611,124 @@ class KBIngestRun(Base):
     error_detail: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class TenderAddendum(Base):
+    __tablename__ = "tender_addendum"
+    __table_args__ = (Index("idx_tender_addendum_project_id", "project_id"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID | None] = mapped_column(
+        GUID(), ForeignKey("project.id", ondelete="SET NULL")
+    )
+    tender_id: Mapped[str | None] = mapped_column(Text)
+    addendum_code: Mapped[str | None] = mapped_column(Text)
+    parsed_overrides_json: Mapped[dict] = mapped_column(JSONDictType(), default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class MandatoryClause(Base):
+    __tablename__ = "mandatory_clause"
+    __table_args__ = (Index("idx_mandatory_clause_project_id", "project_id"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        GUID(), ForeignKey("project.id", ondelete="CASCADE"), nullable=False
+    )
+    clause_code: Mapped[str | None] = mapped_column(Text)
+    clause_text: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class BidAssetPool(Base):
+    __tablename__ = "bid_asset_pool"
+    __table_args__ = (Index("idx_bid_asset_pool_project_id", "project_id"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        GUID(), ForeignKey("project.id", ondelete="CASCADE"), nullable=False
+    )
+    asset_name: Mapped[str] = mapped_column(Text, nullable=False)
+    ownership_role: Mapped[str] = mapped_column(Text, nullable=False, default="owner")
+    metadata_json: Mapped[dict] = mapped_column(JSONDictType(), default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class ChapterEvidenceLink(Base):
+    __tablename__ = "chapter_evidence_link"
+    __table_args__ = (
+        Index("idx_chapter_evidence_link_project_id", "project_id"),
+        Index("idx_chapter_evidence_link_chapter_key", "chapter_key"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        GUID(), ForeignKey("project.id", ondelete="CASCADE"), nullable=False
+    )
+    chapter_key: Mapped[str] = mapped_column(Text, nullable=False)
+    evidence_chunk_id: Mapped[uuid.UUID] = mapped_column(
+        GUID(), ForeignKey("evidence_chunk.id", ondelete="CASCADE"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class GenerationRun(Base):
+    __tablename__ = "generation_run"
+    __table_args__ = (
+        Index("idx_generation_run_project_id", "project_id"),
+        Index("idx_generation_run_project_created_at", "project_id", "created_at"),
+        Index("idx_generation_run_status_created_at", "status", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        GUID(), ForeignKey("project.id", ondelete="CASCADE"), nullable=False
+    )
+    status: Mapped[str] = mapped_column(Text, nullable=False, default="PENDING")
+    current_step: Mapped[str] = mapped_column(Text, default="RECEIVED")
+    step_status: Mapped[str] = mapped_column(Text, default="paused")
+    retry_count: Mapped[int] = mapped_column(Integer, default=0)
+    resume_from_step: Mapped[str] = mapped_column(Text, default="RECEIVED")
+    input_json: Mapped[dict] = mapped_column(JSONDictType(), default=dict)
+    output_json: Mapped[dict | None] = mapped_column(JSONDictType())
+    error_detail: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class ScoreEvaluation(Base):
+    __tablename__ = "score_evaluation"
+    __table_args__ = (
+        Index("idx_score_evaluation_generation_run_id", "generation_run_id"),
+        Index("idx_score_evaluation_project_id", "project_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
+    generation_run_id: Mapped[uuid.UUID] = mapped_column(
+        GUID(), ForeignKey("generation_run.id", ondelete="CASCADE"), nullable=False
+    )
+    project_id: Mapped[uuid.UUID | None] = mapped_column(
+        GUID(), ForeignKey("project.id", ondelete="SET NULL")
+    )
+    score_total: Mapped[float | None] = mapped_column(Numeric(6, 2))
+    details_json: Mapped[dict] = mapped_column(JSONDictType(), default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class ComplianceReport(Base):
+    __tablename__ = "compliance_report"
+    __table_args__ = (
+        Index("idx_compliance_report_generation_run_id", "generation_run_id"),
+        Index("idx_compliance_report_project_id", "project_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
+    generation_run_id: Mapped[uuid.UUID] = mapped_column(
+        GUID(), ForeignKey("generation_run.id", ondelete="CASCADE"), nullable=False
+    )
+    project_id: Mapped[uuid.UUID | None] = mapped_column(
+        GUID(), ForeignKey("project.id", ondelete="SET NULL")
+    )
+    status: Mapped[str] = mapped_column(Text, nullable=False, default="draft")
+    report_json: Mapped[dict] = mapped_column(JSONDictType(), default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

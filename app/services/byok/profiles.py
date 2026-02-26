@@ -20,6 +20,7 @@ from app.llm import (
     get_fallback_chain,
     get_provider_runtime_config,
     normalize_role,
+    normalize_role_scope,
 )
 from app.models.tables import KeyStorage, ProjectModelPolicy, ProviderProfile, ProviderScope
 from app.secrets.crypto import decrypt, encrypt, load_master_key
@@ -383,8 +384,12 @@ def get_project_model_policy(project_id: str) -> ProjectModelPolicy | None:
         return db.execute(stmt).scalar_one_or_none()
 
 
-def resolve_profile_for_task(project_id: str | None, task_type: str) -> ResolvedProfile:
-    role = normalize_role(task_type)
+def resolve_profile_for_task(
+    project_id: str | None,
+    task_type: str,
+    role_scope: str | None = None,
+) -> ResolvedProfile:
+    role = normalize_role_scope(role_scope or task_type)
     fallback_profile = _default_profile(role.value)
     if not project_id:
         return fallback_profile
@@ -436,9 +441,13 @@ def resolve_profile_for_task(project_id: str | None, task_type: str) -> Resolved
     )
 
 
-def resolve_profile_chain_for_task(project_id: str | None, task_type: str) -> list[ResolvedProfile]:
-    role = normalize_role(task_type)
-    primary = resolve_profile_for_task(project_id=project_id, task_type=role.value)
+def resolve_profile_chain_for_task(
+    project_id: str | None,
+    task_type: str,
+    role_scope: str | None = None,
+) -> list[ResolvedProfile]:
+    role = normalize_role_scope(role_scope or task_type)
+    primary = resolve_profile_for_task(project_id=project_id, task_type=role.value, role_scope=role.value)
     chain = [primary]
     seen = {(primary.provider.lower(), primary.model)}
     for provider, model in get_fallback_chain(role):

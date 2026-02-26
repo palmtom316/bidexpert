@@ -88,6 +88,21 @@ def _parse_provider_model_item(item: Any) -> tuple[str, str] | None:
     return None
 
 
+def normalize_role_scope(role_scope: str | ModelRole | None) -> ModelRole:
+    if isinstance(role_scope, ModelRole):
+        return role_scope
+
+    raw = str(role_scope or "").strip()
+    if not raw:
+        return ModelRole.GENERATE
+    token = raw.replace("-", "_").replace(" ", "_")
+    for separator in (":", "/", "."):
+        if separator in token:
+            token = token.split(separator, maxsplit=1)[0]
+    token = token.strip().upper()
+    return normalize_role(token)
+
+
 def _cn_role_chain(payload: dict[str, Any], resolved_role: ModelRole) -> list[tuple[str, str]]:
     roles = payload.get("roles")
     if not isinstance(roles, dict):
@@ -208,7 +223,7 @@ def list_registry_entries() -> tuple[ModelRegistryEntry, ...]:
 
 
 def get_fallback_chain(role: str | ModelRole) -> list[tuple[str, str]]:
-    resolved_role = normalize_role(role.value if isinstance(role, ModelRole) else str(role))
+    resolved_role = normalize_role_scope(role)
     payload = _load_registry_payload()
 
     role_defaults = payload.get("role_defaults", {})
@@ -254,7 +269,7 @@ def get_registry_entry(provider: str, model_name: str) -> ModelRegistryEntry | N
 
 
 def list_models_for_role(role: str | ModelRole) -> list[ModelRegistryEntry]:
-    resolved_role = normalize_role(role.value if isinstance(role, ModelRole) else str(role))
+    resolved_role = normalize_role_scope(role)
     return [item for item in list_registry_entries() if resolved_role.value in item.roles]
 
 
@@ -309,4 +324,5 @@ __all__ = [
     "list_models_for_role",
     "list_registry_entries",
     "model_registry_source_path",
+    "normalize_role_scope",
 ]

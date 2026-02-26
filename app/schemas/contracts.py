@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class ParseTenderRequest(BaseModel):
@@ -710,6 +710,142 @@ class ScoringReportResponse(BaseModel):
     created_at: str
 
 
+# ── Scoring v2 ────────────────────────────────────────────────
+
+class ScoringV2PointInput(BaseModel):
+    point_id: str
+    weight: float = Field(ge=0.0)
+    cov: float = Field(ge=0.0, le=1.0)
+    evi: float = Field(ge=0.0, le=1.0)
+    spec: float = Field(ge=0.0, le=1.0)
+    risk: float = Field(ge=0.0, le=1.0)
+    negative_deviation: bool = False
+    arithmetic_conflict: bool = False
+    evidence_refs: list[str] = Field(default_factory=list)
+
+
+class ScoringV2ItemInput(BaseModel):
+    item_id: str
+    max_score: float = Field(ge=0.0)
+    points: list[ScoringV2PointInput] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_unique_point_ids(self):
+        point_ids = [item.point_id for item in self.points]
+        if len(point_ids) != len(set(point_ids)):
+            raise ValueError("duplicate point_id in scoring item")
+        return self
+
+
+class ScoringV2Request(BaseModel):
+    project_id: str
+    items: list[ScoringV2ItemInput] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_unique_item_ids(self):
+        item_ids = [item.item_id for item in self.items]
+        if len(item_ids) != len(set(item_ids)):
+            raise ValueError("duplicate item_id in scoring request")
+        return self
+
+
+class ScoringV2Deduction(BaseModel):
+    item_id: str
+    point_id: str
+    reason: str
+    deducted_score: float = Field(ge=0.0)
+
+
+class ScoringV2ItemResult(BaseModel):
+    item_id: str
+    score: float
+    deductions: list[ScoringV2Deduction] = Field(default_factory=list)
+    evidence_map: dict[str, list[str]] = Field(default_factory=dict)
+
+
+class ScoringV2Response(BaseModel):
+    score_total: float
+    items: list[ScoringV2ItemResult] = Field(default_factory=list)
+    deductions: list[ScoringV2Deduction] = Field(default_factory=list)
+    evidence_map: dict[str, dict[str, list[str]]] = Field(default_factory=dict)
+
+
+# ── Scorecard v2 ──────────────────────────────────────────────
+
+class ScorecardParseRequest(BaseModel):
+    project_id: str
+    tender_text: str = Field(min_length=1)
+
+
+class ScorecardParseResponse(BaseModel):
+    scorecard_id: str
+    status: Literal["PENDING_CONFIRM", "LOCKED"]
+    table_blocks: list[str] = Field(default_factory=list)
+    structured_json: dict = Field(default_factory=dict)
+
+
+class ScorecardConfirmRequest(BaseModel):
+    scorecard_id: str
+    project_id: str
+    approved: bool
+    reviewer: str = "system"
+
+
+class ScorecardConfirmResponse(BaseModel):
+    scorecard_id: str
+    status: Literal["LOCKED"]
+    locked: bool = True
+
+
+# ── Redline v2 ────────────────────────────────────────────────
+
+class RedlineParameterComparison(BaseModel):
+    parameter_name: str
+    required_value: float
+    provided_value: float
+    unit: str | None = None
+
+
+class RedlineFinding(BaseModel):
+    rule_id: str
+    category: str
+    severity: Literal["P0", "P1", "P2", "P3"]
+    message: str
+    clause_ref: str | None = None
+    required_action: str | None = None
+    evidence_refs: list[str] = Field(default_factory=list)
+
+
+class RedlineCheckRequest(BaseModel):
+    project_id: str
+    tender_package_id: str
+    findings: list[RedlineFinding] = Field(default_factory=list)
+    parameter_comparisons: list[RedlineParameterComparison] = Field(default_factory=list)
+    required_documents: list[str] = Field(default_factory=list)
+    provided_documents: list[str] = Field(default_factory=list)
+
+
+class RedlineReport(BaseModel):
+    status: Literal["PASS", "NEED_FIX", "BLOCKED"]
+    summary: str
+    readiness_missing_items: list[str] = Field(default_factory=list)
+    findings: list[RedlineFinding] = Field(default_factory=list)
+
+
+class RedlineOverrideRequest(BaseModel):
+    project_id: str
+    tender_package_id: str
+    approved_by: str = "system"
+    override_reason: str = Field(min_length=1)
+    findings: list[RedlineFinding] = Field(default_factory=list)
+
+
+class RedlineOverrideResponse(BaseModel):
+    status: Literal["OVERRIDDEN"]
+    override_id: str
+    audited: bool = True
+
+
 # ── Tender v1.1 Import ────────────────────────────────────────
 
 class TenderImportZipResponse(BaseModel):
@@ -726,6 +862,8 @@ class TenderImportRunItem(BaseModel):
     filename: str
     current_step: str
     fatal_blocked_reason: dict | None = None
+    addendum_alert: bool = False
+    stale_chapters: list[str] = Field(default_factory=list)
     error_detail: str | None = None
     created_at: str
 

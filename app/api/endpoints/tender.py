@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import uuid
 from pathlib import Path
@@ -54,6 +55,45 @@ def _ctx():
     from app.api import routes
 
     return routes
+
+
+def _load_addendum_alert(workspace_path: str) -> tuple[bool, list[str]]:
+    alert_path = Path(workspace_path) / "derived" / "addendum_alert.json"
+    if not alert_path.is_file():
+        return False, []
+    try:
+        alert = json.loads(alert_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return False, []
+    if not isinstance(alert, dict) or not alert.get("has_addendum_alert"):
+        return False, []
+
+    stale_chapters = alert.get("stale_chapters")
+    if not isinstance(stale_chapters, list):
+        return True, []
+
+    normalized = [
+        chapter.strip()
+        for chapter in stale_chapters
+        if isinstance(chapter, str) and chapter.strip()
+    ]
+    return True, normalized
+
+
+def _build_tender_import_run_item(run: object) -> TenderImportRunItem:
+    addendum_alert, stale_chapters = _load_addendum_alert(run.workspace_path)
+    return TenderImportRunItem(
+        run_id=str(run.id),
+        project_id=str(run.project_id) if run.project_id else None,
+        tender_id=run.tender_id,
+        filename=run.filename,
+        current_step=run.current_step.value if hasattr(run.current_step, "value") else str(run.current_step),
+        fatal_blocked_reason=run.fatal_blocked_reason,
+        addendum_alert=addendum_alert,
+        stale_chapters=stale_chapters,
+        error_detail=run.error_detail,
+        created_at=run.created_at.isoformat() if run.created_at else "",
+    )
 
 
 def _audit(action: str, *, actor: str = "system", project_id: str | None = None, target_id: str | None = None, meta: dict | None = None) -> None:
@@ -211,19 +251,7 @@ def list_import_runs(project_id: str | None = None, limit: int = 50) -> TenderIm
                 pass
         runs = db.execute(stmt).scalars().all()
         return TenderImportRunListResponse(
-            items=[
-                TenderImportRunItem(
-                    run_id=str(r.id),
-                    project_id=str(r.project_id) if r.project_id else None,
-                    tender_id=r.tender_id,
-                    filename=r.filename,
-                    current_step=r.current_step.value if hasattr(r.current_step, "value") else str(r.current_step),
-                    fatal_blocked_reason=r.fatal_blocked_reason,
-                    error_detail=r.error_detail,
-                    created_at=r.created_at.isoformat() if r.created_at else "",
-                )
-                for r in runs
-            ]
+            items=[_build_tender_import_run_item(r) for r in runs]
         )
 
 
@@ -257,16 +285,7 @@ def get_import_run_detail(run_id: str) -> TenderImportRunDetailResponse:
             derived = sorted(f.name for f in derived_dir.iterdir() if f.is_file())
 
         return TenderImportRunDetailResponse(
-            run=TenderImportRunItem(
-                run_id=str(run.id),
-                project_id=str(run.project_id) if run.project_id else None,
-                tender_id=run.tender_id,
-                filename=run.filename,
-                current_step=run.current_step.value if hasattr(run.current_step, "value") else str(run.current_step),
-                fatal_blocked_reason=run.fatal_blocked_reason,
-                error_detail=run.error_detail,
-                created_at=run.created_at.isoformat() if run.created_at else "",
-            ),
+            run=_build_tender_import_run_item(run),
             derived_files=derived,
         )
 

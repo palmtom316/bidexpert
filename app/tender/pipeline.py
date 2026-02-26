@@ -84,6 +84,7 @@ def run_pipeline(run_id: str) -> dict:
         if not run:
             raise ValueError(f"run {run_id} not found")
         current = run.current_step
+        project_id = run.project_id
         workspace = Path(run.workspace_path)
         tender_id = run.tender_id
         filename = run.filename
@@ -310,6 +311,46 @@ def run_pipeline(run_id: str) -> dict:
         _save_derived(workspace, "compliance_check.json", compliance.model_dump(mode="json"))
     except Exception as exc:  # noqa: BLE001
         logger.warning("compliance extraction failed (non-fatal): %s", exc)
+
+    # ── v2.0 Addendum override + stale-chapter alert (non-fatal, additive) ──
+    if project_id is not None:
+        try:
+            from app.services.addendum_parser import persist_addendum_from_workspace
+            from app.services.mandatory_clause_service import (
+                compute_effective_mandatory_clauses,
+                extract_impacted_chapters,
+                mark_generated_chapters_stale,
+            )
+
+            with session_scope() as db:
+                addendum = persist_addendum_from_workspace(
+                    db,
+                    project_id=project_id,
+                    tender_id=tender_id,
+                    workspace=workspace,
+                )
+                if addendum is not None:
+                    effective = compute_effective_mandatory_clauses(db, project_id=project_id, addendum=addendum)
+                    stale_chapters = mark_generated_chapters_stale(
+                        db,
+                        project_id=project_id,
+                        chapter_keys=extract_impacted_chapters(addendum),
+                        addendum_code=addendum.addendum_code,
+                    )
+                    db.commit()
+                    _save_derived(
+                        workspace,
+                        "effective_mandatory_clauses.json",
+                        {"items": effective},
+                    )
+                    if stale_chapters:
+                        _save_derived(
+                            workspace,
+                            "addendum_alert.json",
+                            {"has_addendum_alert": True, "stale_chapters": stale_chapters},
+                        )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("addendum override flow failed (non-fatal): %s", exc)
 
     # ── Step 12: READY_FOR_WRITING ──
     # R2 check: deviation_tables.json must exist before marking ready

@@ -6,14 +6,31 @@ Uses SQL hard filters (R3, R4) against existing expert_doc + evidence_chunk tabl
 from __future__ import annotations
 
 import logging
+import uuid
+from typing import Any
 from datetime import date
 
 from sqlalchemy import and_, select
+from sqlalchemy.orm import Session
 
 from app.db.session import session_scope
-from app.models.tables import EvidenceChunk, ExpertDoc
+from app.models.tables import BidAssetPool, EvidenceChunk, ExpertDoc
 
 logger = logging.getLogger(__name__)
+
+
+def _safe_int(value: Any, default: int = 0) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _safe_float(value: Any, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
 
 
 def get_company_qualifications(*, valid_after: date | None = None) -> list[dict]:
@@ -124,3 +141,78 @@ def get_project_performance(
             }
             for doc in docs
         ]
+
+
+def list_bid_asset_pool_entries(
+    db: Session,
+    *,
+    project_id: uuid.UUID,
+    ownership_roles: list[str] | None = None,
+    asset_type: str | None = None,
+) -> list[BidAssetPool]:
+    stmt = select(BidAssetPool).where(BidAssetPool.project_id == project_id)
+    if ownership_roles:
+        normalized_roles = [role.strip() for role in ownership_roles if role and role.strip()]
+        if normalized_roles:
+            stmt = stmt.where(BidAssetPool.ownership_role.in_(normalized_roles))
+    rows = db.execute(stmt).scalars().all()
+    if not asset_type:
+        return rows
+    normalized_type = asset_type.strip().lower()
+    return [
+        row
+        for row in rows
+        if isinstance(row.metadata_json, dict)
+        and str(row.metadata_json.get("asset_type", "")).strip().lower() == normalized_type
+    ]
+
+
+def list_personnel_candidates_from_asset_pool(
+    db: Session,
+    *,
+    project_id: uuid.UUID,
+    ownership_roles: list[str] | None = None,
+    role: str | None = None,
+    no_active_project: bool = False,
+    social_security_months: int | None = None,
+) -> list[dict[str, Any]]:
+    rows = list_bid_asset_pool_entries(
+        db,
+        project_id=project_id,
+        ownership_roles=ownership_roles,
+        asset_type="person",
+    )
+    normalized_role = (role or "").strip()
+    candidates: list[dict[str, Any]] = []
+    for row in rows:
+        metadata = dict(row.metadata_json or {})
+        roles = metadata.get("roles")
+        role_list = [str(item).strip() for item in roles] if isinstance(roles, list) else []
+        if normalized_role and normalized_role not in role_list:
+            continue
+
+        months = _safe_int(metadata.get("social_security_months"), default=0)
+        if social_security_months is not None and months < int(social_security_months):
+            continue
+
+        active_project_count = _safe_int(metadata.get("active_project_count"), default=0)
+        if no_active_project and active_project_count > 0:
+            continue
+
+        evidence_refs = metadata.get("evidence_refs")
+        evidence_list = evidence_refs if isinstance(evidence_refs, list) else []
+
+        candidates.append(
+            {
+                "asset_pool_id": row.id,
+                "project_id": row.project_id,
+                "asset_name": row.asset_name,
+                "ownership_role": row.ownership_role,
+                "roles": role_list,
+                "social_security_months": months,
+                "active_project_count": active_project_count,
+                "match_score": _safe_float(metadata.get("match_score", metadata.get("score", 0.0)), default=0.0),
+                "evidence_refs": evidence_list,
+            }
+        )
+    return candidates

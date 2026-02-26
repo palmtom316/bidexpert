@@ -47,6 +47,15 @@ def _shared_http_client(timeout_seconds: float) -> httpx.Client:
     return httpx.Client(timeout=timeout)
 
 
+def _should_retry_without_response_format(exc: httpx.HTTPStatusError, response_format: dict | None) -> bool:
+    if not isinstance(response_format, dict):
+        return False
+    if exc.response.status_code not in {400, 404, 415, 422}:
+        return False
+    text = (exc.response.text or "").lower()
+    return "response_format" in text or "json_object" in text
+
+
 class MockAdapter(LLMAdapter):
     provider = "mock"
 
@@ -127,6 +136,7 @@ class OpenAICompatibleAdapter(LLMAdapter):
         api_key: str | None,
         base_url: str | None,
         temperature: float = 0.2,
+        response_format: dict | None = None,
     ) -> str:
         if not api_key or not base_url:
             raise AdapterUnavailableError("missing api_key or base_url")
@@ -137,22 +147,38 @@ class OpenAICompatibleAdapter(LLMAdapter):
             "messages": [{"role": "user", "content": prompt}],
             "temperature": temperature,
         }
-        try:
-            client = _shared_http_client(float(settings.llm_http_timeout_seconds))
+        if isinstance(response_format, dict):
+            body["response_format"] = response_format
+        def _send(request_body: dict) -> dict:
             resp = client.post(
                 url,
                 headers={
                     "Content-Type": "application/json",
                     "Authorization": f"Bearer {api_key}",
                 },
-                json=body,
+                json=request_body,
             )
             resp.raise_for_status()
-            raw = resp.json()
+            return resp.json()
+        try:
+            client = _shared_http_client(float(settings.llm_http_timeout_seconds))
+            raw = _send(body)
         except httpx.TimeoutException as exc:
             raise AdapterUnavailableError("provider timeout") from exc
         except httpx.HTTPStatusError as exc:
-            raise AdapterUnavailableError(f"provider returned {exc.response.status_code}") from exc
+            if _should_retry_without_response_format(exc, response_format):
+                fallback_body = dict(body)
+                fallback_body.pop("response_format", None)
+                try:
+                    raw = _send(fallback_body)
+                except httpx.TimeoutException as retry_exc:
+                    raise AdapterUnavailableError("provider timeout") from retry_exc
+                except httpx.HTTPStatusError as retry_exc:
+                    raise AdapterUnavailableError(f"provider returned {retry_exc.response.status_code}") from retry_exc
+                except (httpx.HTTPError, json.JSONDecodeError) as retry_exc:
+                    raise AdapterUnavailableError("provider unavailable") from retry_exc
+            else:
+                raise AdapterUnavailableError(f"provider returned {exc.response.status_code}") from exc
         except (httpx.HTTPError, json.JSONDecodeError) as exc:
             raise AdapterUnavailableError("provider unavailable") from exc
 
@@ -269,6 +295,7 @@ class OpenAICompatibleAdapter(LLMAdapter):
             prompt=prompt,
             api_key=payload.api_key,
             base_url=payload.base_url,
+            response_format={"type": "json_object"},
         )
         try:
             parsed = validate_compliance_payload(content)
@@ -302,6 +329,7 @@ class OpenAICompatibleAdapter(LLMAdapter):
             prompt=prompt,
             api_key=payload.api_key,
             base_url=payload.base_url,
+            response_format={"type": "json_object"},
         )
         rewritten = payload.query
         try:

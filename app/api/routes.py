@@ -10,7 +10,9 @@ from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBea
 from app.api.endpoints.evidence import router as evidence_router
 from app.api.endpoints.generation import router as generation_router
 from app.api.endpoints.provider import router as provider_router
+from app.api.endpoints.redline_v2 import router as redline_v2_router
 from app.api.endpoints.render import router as render_router
+from app.api.endpoints.scorecard_v2 import router as scorecard_v2_router
 from app.api.endpoints.tasks import router as tasks_router
 from app.api.endpoints.tender import router as tender_router
 from app.api.endpoints.workflow import router as workflow_router
@@ -68,6 +70,7 @@ from app.api.endpoints.tender import (
 )
 from app.api.endpoints.workflow import (
     calculate_score_api,
+    calculate_score_v2_api,
     confirm_outline,
     confirm_section,
     create_outline,
@@ -187,6 +190,7 @@ __all__ = [
     "review_section_api",
     "review_full_api",
     "calculate_score_api",
+    "calculate_score_v2_api",
     "evidence_upsert",
     "evidence_extract_upsert",
     "expert_library_convert_upload",
@@ -403,6 +407,8 @@ def health() -> HealthResponse:
 
 router.include_router(provider_router)
 router.include_router(tender_router)
+router.include_router(redline_v2_router)
+router.include_router(scorecard_v2_router)
 router.include_router(tasks_router)
 router.include_router(generation_router)
 router.include_router(workflow_router)

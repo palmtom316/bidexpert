@@ -13,6 +13,7 @@ from docx.shared import Cm
 from docxtpl import DocxTemplate
 
 from app.core.config import settings
+from app.services.frozen_block_guard import verify_frozen_block_signatures
 
 _HEADING_STYLES = {"Title1", "Title2", "Title3", "Title4"}
 _PARAGRAPH_STYLES = {"BodyText", "BodyText_Indent", "ClauseText"}
@@ -336,6 +337,27 @@ def _append_structured_blocks(doc: Document, blocks: list[dict[str, Any]]) -> No
             raise ValueError(f"unsupported content type: {block_type}")
 
 
+def _content_as_text(content: dict[str, list[dict[str, Any]]]) -> str:
+    parts: list[str] = []
+    for area in ("body", "appendix"):
+        blocks = content.get(area, [])
+        if not isinstance(blocks, list):
+            continue
+        for block in blocks:
+            if not isinstance(block, dict):
+                continue
+            block_type = str(block.get("type") or "")
+            if block_type in {"heading", "paragraph"}:
+                parts.append(str(block.get("text") or ""))
+            elif block_type == "table":
+                table_data = block.get("table_data")
+                if isinstance(table_data, list):
+                    for row in table_data:
+                        if isinstance(row, dict):
+                            parts.append(" ".join(str(v) for v in row.values()))
+    return "\n".join(parts)
+
+
 def _export_pdf_via_soffice(docx_path: Path) -> str:
     cmd = [
         "soffice",
@@ -363,6 +385,8 @@ def render_word_structured(
     template_path: str | None = None,
     style_config: dict | None = None,
     export_pdf: bool = False,
+    frozen_signatures: dict[str, str] | None = None,
+    enforce_frozen: bool = False,
 ) -> tuple[str, str | None]:
     template_root = Path(settings.render_template_dir)
     export_root = Path(settings.render_output_dir)
@@ -386,6 +410,10 @@ def render_word_structured(
     appendix_blocks = content.get("appendix", [])
     if not isinstance(body_blocks, list) or not isinstance(appendix_blocks, list):
         raise ValueError("content.body and content.appendix must be arrays")
+    if enforce_frozen and frozen_signatures is None:
+        raise ValueError("frozen_signatures is required when enforce_frozen=true")
+    if frozen_signatures is not None:
+        verify_frozen_block_signatures(_content_as_text(content), frozen_signatures)
 
     doc = Document(str(out))
     _append_structured_blocks(doc, body_blocks)

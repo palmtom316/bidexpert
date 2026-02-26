@@ -29,7 +29,7 @@ def record_audit_event(
     project_id: str | None = None,
     target_id: str | None = None,
     metadata: dict | None = None,
-) -> None:
+) -> bool:
     action_value = (action or "").strip()
     if not action_value:
         raise ValueError("action is required")
@@ -46,8 +46,10 @@ def record_audit_event(
                 )
             )
             db.commit()
+        return True
     except (SQLAlchemyError, ValueError):
         logger.warning("audit log persistence failed for action=%s", action_value, exc_info=True)
+        return False
 
 
 def list_audit_logs(

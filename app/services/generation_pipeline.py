@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import uuid
 from functools import lru_cache
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -9,6 +10,8 @@ from pathlib import Path
 from time import perf_counter
 
 from pydantic import BaseModel, Field, ValidationError
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from app.core.config import get_section_max_output_tokens, settings
 from app.core.section_router import SectionGenerationPlan, select_generation_plan
@@ -90,6 +93,60 @@ logger = logging.getLogger(__name__)
 
 _PROMPTS_DIR = Path(__file__).resolve().parent.parent / "prompts"
 _SECTION_ENHANCE_PROMPT_FILE = _PROMPTS_DIR / "section_enhance_r1_cn.md"
+
+
+def persist_chapter_evidence_links(
+    db: Session,
+    *,
+    project_id: str | uuid.UUID,
+    chapter_key: str,
+    evidence_chunk_ids: list[str | uuid.UUID],
+) -> int:
+    from app.models.tables import ChapterEvidenceLink
+
+    try:
+        project_uuid = project_id if isinstance(project_id, uuid.UUID) else uuid.UUID(str(project_id))
+    except ValueError as exc:
+        raise ValueError("invalid project_id") from exc
+
+    normalized_chunk_ids: list[uuid.UUID] = []
+    seen_chunk_ids: set[uuid.UUID] = set()
+    for item in evidence_chunk_ids:
+        try:
+            chunk_id = item if isinstance(item, uuid.UUID) else uuid.UUID(str(item))
+        except ValueError:
+            continue
+        if chunk_id in seen_chunk_ids:
+            continue
+        seen_chunk_ids.add(chunk_id)
+        normalized_chunk_ids.append(chunk_id)
+    if not normalized_chunk_ids:
+        return 0
+
+    existing = db.execute(
+        select(ChapterEvidenceLink.evidence_chunk_id).where(
+            ChapterEvidenceLink.project_id == project_uuid,
+            ChapterEvidenceLink.chapter_key == chapter_key,
+            ChapterEvidenceLink.evidence_chunk_id.in_(normalized_chunk_ids),
+        )
+    ).scalars().all()
+    existing_set = set(existing)
+
+    inserted = 0
+    for chunk_id in normalized_chunk_ids:
+        if chunk_id in existing_set:
+            continue
+        db.add(
+            ChapterEvidenceLink(
+                project_id=project_uuid,
+                chapter_key=chapter_key,
+                evidence_chunk_id=chunk_id,
+            )
+        )
+        existing_set.add(chunk_id)
+        inserted += 1
+    db.flush()
+    return inserted
 
 
 class SectionEnhanceIssue(BaseModel):

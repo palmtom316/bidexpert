@@ -23,11 +23,14 @@ from app.schemas.contracts import (
     ReviewSectionRequest,
     ScoringReportResponse,
     ScoringRequest,
+    ScoringV2Request,
+    ScoringV2Response,
     SectionConfirmRequest,
     SectionConfirmResponse,
     WorkflowSectionRequest,
     WorkflowSectionResponse,
 )
+from app.services.scoring_engine_v2 import run_scoring_v2
 
 _log = logging.getLogger(__name__)
 
@@ -132,4 +135,15 @@ def calculate_score_api(payload: ScoringRequest) -> ScoringReportResponse:
         service_unavailable_exc_factory=ctx._service_unavailable,
     )
     _audit("workflow.calculate_score", target_id=getattr(payload, "outline_id", None))
+    return result
+
+
+@router.post("/api/v2/workflow/scoring/calculate", response_model=ScoringV2Response)
+def calculate_score_v2_api(payload: ScoringV2Request) -> ScoringV2Response:
+    result = run_scoring_v2(payload)
+    _audit(
+        "workflow.calculate_score_v2",
+        project_id=payload.project_id,
+        meta={"item_count": len(payload.items)},
+    )
     return result
