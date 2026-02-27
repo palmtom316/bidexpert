@@ -30,10 +30,10 @@ def upgrade() -> None:
     bind = op.get_bind()
     dialect = bind.dialect.name
 
-    if dialect == "postgresql":
-        # Create enum type first
-        step_enum = sa.Enum(*_STEP_VALUES, name="tender_run_step")
-        step_enum.create(bind, checkfirst=True)
+    # if dialect == "postgresql":
+    #     # Create enum type first
+    #     step_enum = sa.Enum(*_STEP_VALUES, name="tender_run_step")
+    #     step_enum.create(bind, checkfirst=True)
 
     op.create_table(
         "tender_import_run",

@@ -53,9 +53,9 @@ def upgrade() -> None:
     op.create_index("idx_expert_doc_standard_status", "expert_doc", ["standard_status"])
 
     # ── kb_ingest_run table ─────────────────────────────────────
-    if dialect == "postgresql":
-        step_enum = sa.Enum(*_KB_INGEST_STEP_VALUES, name="kb_ingest_step")
-        step_enum.create(bind, checkfirst=True)
+    # if dialect == "postgresql":
+    #     step_enum = sa.Enum(*_KB_INGEST_STEP_VALUES, name="kb_ingest_step")
+    #     step_enum.create(bind, checkfirst=True)
 
     op.create_table(
         "kb_ingest_run",

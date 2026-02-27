@@ -2878,6 +2878,198 @@ const ByokSettings = {
   },
 };
 
+/* ── V2.0 Interfaces ────────────────────────────────────────── */
+const RedlineEngine = {
+  init() {
+    const btn = $("#btnRunRedlineCheck");
+    if (btn) btn.addEventListener("click", guarded(() => this.runCheck()));
+  },
+
+  async runCheck() {
+    const projectId = state.projectId.trim();
+    if (!projectId) {
+      Toast.warn("请先生成或输入项目 ID");
+      return;
+    }
+    const tenderPackageId = ""; // Will be derived from state or context in real backend
+    
+    setTaskStatus("正在执行防废标红线核验...");
+    
+    // Check if the backend endpoint is available, else mock data for demonstration
+    let res;
+    try {
+      res = await api(`/v2/redline/check?project_id=${projectId}&tender_package_id=${tenderPackageId}`, { method: "POST" });
+    } catch (e) {
+      // Mock Data if API fails (as per V2 frontend-only validation phase)
+      console.warn("API /v2/redline/check failed or not implemented, using mock data.", e);
+      res = {
+        status: "NEED_FIX",
+        summary: "完成红线审查，发现 2 项风险。",
+        readiness_missing_items: [
+          "缺少 110kV 类似工程业绩至少 1 份",
+          "项目经理缺少有效的安全生产考核合格证书(B证)"
+        ],
+        findings: [
+          {
+            severity: "P1",
+            category: "业绩",
+            problem: "公司业绩库中未找到满足电压等级要求的变电站项目",
+            required_action: "缺少 110kV 类似工程业绩至少 1 份",
+            suggested_fix: "请在“结构化补录”页补充该类业绩并入库。"
+          },
+          {
+            severity: "P1",
+            category: "人员",
+            problem: "指定的项目经理(张三)目前证书库中无B证记录",
+            required_action: "项目经理缺少有效的安全生产考核合格证书(B证)",
+            suggested_fix: "请上传人员证书信息。"
+          }
+        ]
+      };
+      await sleep(1000); // Simulate network delay
+    }
+
+    this.renderDashboard(res);
+    setTaskStatus(res.summary);
+    if (res.status === "BLOCKED") {
+      Toast.error("发现致命废标风险，已被红线引擎阻断！");
+    } else if (res.status === "NEED_FIX") {
+      Toast.warn("发现缺失或待补充项，请注意核查！");
+    } else {
+      Toast.success("红线核验通过，粮草齐套！");
+    }
+  },
+
+  renderDashboard(data) {
+    const db = $("#redlineDashboard");
+    const missingList = $("#redlineMissingItems");
+    const findingsDiv = $("#redlineFindings");
+    
+    if (!db || !missingList || !findingsDiv) return;
+    
+    db.style.display = "block";
+    
+    // Render Readiness Missing Items
+    if (data.readiness_missing_items && data.readiness_missing_items.length > 0) {
+      missingList.style.display = "block";
+      missingList.innerHTML = data.readiness_missing_items.map(item => `<li><i class="ri-error-warning-fill"></i> ${escapeHtml(item)}</li>`).join("");
+    } else {
+      missingList.style.display = "none";
+    }
+
+    // Render Findings Details
+    if (data.findings && data.findings.length > 0) {
+      findingsDiv.style.display = "block";
+      findingsDiv.innerHTML = data.findings.map(f => {
+        const color = f.severity === "P0" ? "#dc2626" : (f.severity === "P1" ? "#f59e0b" : "var(--primary)");
+        return `<div class="review-line" style="border-left: 4px solid ${color}; padding-left: 0.8rem; margin-bottom: 0.5rem; background: var(--bg-surface); border-radius: var(--radius-sm); padding-top: 0.5rem; padding-bottom: 0.5rem; border-top: 1px solid var(--line-soft); border-right: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft);">
+            <div style="flex:1;">
+              <span style="font-weight:bold; color:${color}; margin-right: 0.5rem;">[${f.severity}] ${escapeHtml(f.category)}</span>
+              <span>${escapeHtml(f.problem)}</span>
+              <div style="font-size: 0.75rem; color: var(--text-dim); margin-top: 0.5rem;">建议：${escapeHtml(f.suggested_fix)}</div>
+            </div>
+          </div>`;
+      }).join("");
+    } else {
+      findingsDiv.style.display = "none";
+    }
+  }
+};
+
+const ScoringRulesEngine = {
+  init() {
+    const btnExtract = $("#btnExtractScoringRules");
+    const btnConfirm = $("#btnConfirmScoringRules");
+    
+    if (btnExtract) btnExtract.addEventListener("click", guarded(() => this.extractRules()));
+    if (btnConfirm) btnConfirm.addEventListener("click", guarded(() => this.confirmRules()));
+  },
+
+  async extractRules() {
+    setTaskStatus("正在调用 G3 引擎提取评分规则...");
+    
+    // Simulate extraction API logic
+    await sleep(1500); 
+    
+    // Mock Data representing V2.0 LLM parsed JSON structure
+    const mockRules = {
+      total_score: 100,
+      method: "综合评估法",
+      items: [
+        {
+          item_id: "S-001",
+          name: "施工组织设计",
+          max_score: 30,
+          criteria: [
+            { point: "工程概述与总平面布置合理详细，得 5 分", weight: 5, type: "qualitative" },
+            { point: "施工进度计划及保证措施满足工期要求，得 10 分", weight: 10, type: "qualitative" },
+            { point: "质量管控体系完整，通过 ISO 认证额外加 5 分", weight: 15, type: "qualitative" }
+          ]
+        },
+        {
+          item_id: "S-002",
+          name: "项目团队及人员配置",
+          max_score: 20,
+          criteria: [
+            { point: "项目经理具有一级建造师及高级职称，得 10 分", weight: 10, type: "quantitative", evidence_required: ["建造师注册证书", "职称证书"] },
+            { point: "总工具有高级职称，得 10 分", weight: 10, type: "quantitative", evidence_required: ["职称证书"] }
+          ]
+        }
+      ]
+    };
+
+    this.renderGrid(mockRules);
+    setTaskStatus("评分规则提取完成，请核对并确认");
+    Toast.success("评分规则提取成功 (Mock数据)");
+    if ($("#btnConfirmScoringRules")) $("#btnConfirmScoringRules").style.display = "inline-flex";
+  },
+
+  renderGrid(data) {
+    const grid = $("#scoringRulesGrid");
+    if (!grid) return;
+    grid.style.display = "block";
+    grid.style.opacity = "1";
+    
+    let html = `<div style="margin-bottom:0.8rem; font-weight:bold; color: var(--text-main);">总分: ${data.total_score} | 评标法: ${escapeHtml(data.method)}</div>`;
+    
+    data.items.forEach(item => {
+      html += `<div style="margin-bottom: 1rem; border: 1px solid var(--line-soft); border-radius: var(--radius-sm); padding: 0.6rem; background: var(--bg-surface);">
+          <div style="font-weight: 700; color: var(--primary); margin-bottom: 0.8rem; display: flex; justify-content: space-between; border-bottom: 1px dashed var(--line-soft); padding-bottom: 0.4rem;">
+            <span>[${escapeHtml(item.item_id)}] ${escapeHtml(item.name)}</span>
+            <span>满分 ${item.max_score} 分</span>
+          </div>`;
+          
+      item.criteria.forEach(c => {
+        let evTags = "";
+        if (c.evidence_required) {
+          evTags = c.evidence_required.map(e => `<span class="completed-bid-tag" style="background:#1e3a8a; border-color:#2563eb; color:#60a5fa; font-size:0.65rem; padding:0.1rem 0.35rem;">${escapeHtml(e)}</span>`).join(" ");
+        }
+        
+        html += `<div class="review-line" style="border-bottom: 1px dashed var(--line-soft); align-items:flex-start; padding: 0.5rem 0;">
+            <div style="flex:1;">
+              <div style="color: var(--text-main); line-height: 1.4;">${escapeHtml(c.point)} <span style="font-weight:bold; margin-left:0.5rem; color:var(--text-sub);">(${c.weight}分)</span></div>
+              <div style="margin-top:0.4rem;">${evTags}</div>
+            </div>
+            <div>
+              <span style="font-size:0.7rem; color: var(--text-dim); background: var(--bg-accent); padding: 0.15rem 0.35rem; border-radius: 4px;">${escapeHtml(c.type)}</span>
+            </div>
+          </div>`;
+      });
+      html += `</div>`;
+    });
+    
+    grid.innerHTML = html;
+  },
+  
+  async confirmRules() {
+    setTaskStatus("评分规则已确认并锁定入库");
+    Toast.success("评分规则已锁定入库！(模拟操作)");
+    const grid = $("#scoringRulesGrid");
+    if (grid) grid.style.opacity = "0.5"; // Visual cue of lock
+    if ($("#btnConfirmScoringRules")) $("#btnConfirmScoringRules").style.display = "none";
+  }
+};
+
 document.addEventListener("DOMContentLoaded", () => {
   GlobalBar.init();
   Navigation.init();
@@ -2889,6 +3081,8 @@ document.addEventListener("DOMContentLoaded", () => {
   PublishHub.init();
   CompletedBidHub.init();
   ByokSettings.init();
+  RedlineEngine.init();
+  ScoringRulesEngine.init();
 
   updateOutlineBadge("未生成");
   setTaskStatus("工作台已就绪");

@@ -5,20 +5,20 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>AI辅助投标系统 | 投标办公工作台</title>
-  <link rel="stylesheet" href="/ui/vendor/remixicon/remixicon.css" />
-  <link rel="stylesheet" href="/ui/styles.css?v=release/V1.1" />
+  <link rel="stylesheet" href="./vendor/remixicon/remixicon.css" />
+  <link rel="stylesheet" href="./styles.css?v=release/V1.4" />
 </head>
 
 <body>
   <header class="ribbon" role="banner">
     <div class="brand">
       <div class="brand-mark">
-        <img src="/ui/assets/app-logo.png?v=release/V1.1" alt="BidExpert Logo" class="brand-logo" />
+        <img src="./assets/app-logo.png?v=release/V1.2" alt="BidExpert Logo" class="brand-logo" />
       </div>
       <div class="brand-text">
         <div class="brand-title-row">
           <h1 class="brand-title-handwritten">AI辅助投标系统</h1>
-          <span class="brand-version">release/V1.0</span>
+          <span class="brand-version">release/V2.0</span>
         </div>
       </div>
     </div>
@@ -36,7 +36,8 @@
       <div class="sidebar-resizer" id="sidebarResizer"></div>
       <div class="nav-header">
         <div class="flow-title">操作流程</div>
-        <button id="btnToggleSidebar" class="nav-toggle-btn" title="收起/展开菜单" aria-expanded="true" aria-controls="sidebarNav" aria-label="收起/展开菜单">
+        <button id="btnToggleSidebar" class="nav-toggle-btn" title="收起/展开菜单" aria-expanded="true"
+          aria-controls="sidebarNav" aria-label="收起/展开菜单">
           <i class="ri-menu-fold-line" aria-hidden="true"></i>
         </button>
       </div>
@@ -383,6 +384,29 @@
             </div>
           </article>
 
+          <!-- ── v2.0: G2 Redline Check ── -->
+          <article class="card">
+            <h3><i class="ri-alarm-warning-line"></i> 致命废标红线核验 (G2)</h3>
+            <p class="hint">执行符合性审查一票否决项与逻辑一致性检测，阻断致命废标风险。</p>
+            <div class="form-actions">
+              <button id="btnRunRedlineCheck" class="btn btn-ai">
+                <i class="ri-shield-cross-line"></i> 执行红线核验
+              </button>
+            </div>
+
+            <div id="redlineDashboard" style="display:none; margin-top: 1rem;">
+              <h4 style="color: var(--text-main);"><i class="ri-dashboard-line"></i> 粮草齐套性看板 (缺件清单)</h4>
+              <ul id="redlineMissingItems" class="derived-file-list"
+                style="color: #f87171; background: rgba(220, 38, 38, 0.1); padding: 0.8rem; border-left: 4px solid #dc2626; border-radius: var(--radius-sm); margin-top: 0.5rem; list-style-type: none;">
+                <!-- Missing items will be rendered here -->
+              </ul>
+              <h4 style="color: var(--text-main); margin-top: 1rem;"><i class="ri-list-check"></i> 核验详情</h4>
+              <div id="redlineFindings" class="review-report" style="margin-top: 0.5rem;">
+                <!-- Findings will be rendered here -->
+              </div>
+            </div>
+          </article>
+
           <!-- ── v1.0: PDF 上传（保留兼容） ── -->
           <article class="card">
             <h3><i class="ri-upload-2-line"></i> 招标文件拆解 (PDF)</h3>
@@ -591,6 +615,23 @@
               </div>
             </div>
             <pre id="reviewSummaryDetail" class="result-box compact">等待请求...</pre>
+          </article>
+
+          <article class="card">
+            <h3><i class="ri-list-settings-line"></i> 评分规则提取与确认 (G3)</h3>
+            <p class="hint">核实得分/扣分条件及对应章节，确认后锁定入库。</p>
+            <div class="form-actions">
+              <button id="btnExtractScoringRules" class="btn btn-secondary">
+                <i class="ri-file-search-line"></i> 提取评分规则 (Mock)
+              </button>
+              <button id="btnConfirmScoringRules" class="btn btn-primary" style="display:none;">
+                <i class="ri-lock-2-line"></i> 确认并锁定入库
+              </button>
+            </div>
+            <div id="scoringRulesGrid" class="review-report"
+              style="display:none; margin-top: 1rem; max-height: 400px; overflow-y: auto;">
+              <!-- Scoring rules grid rendered here -->
+            </div>
           </article>
 
           <article class="card">
@@ -1108,7 +1149,7 @@
 
   <div id="toastContainer" class="toast-container" role="log" aria-live="assertive" aria-label="通知消息"></div>
 
-  <script src="/ui/app.js?v=release/V1.1"></script>
+  <script src="./app.js?v=release/V1.2"></script>
 </body>
 
 </html>
