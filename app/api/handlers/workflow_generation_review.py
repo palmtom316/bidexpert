@@ -378,11 +378,11 @@ def confirm_section_handler(
 def review_section_handler(
     payload: ReviewSectionRequest,
     *,
-    run_compliance_review_fn: Callable[[str, str], object],
+    run_compliance_review_fn: Callable[[str, str, str | None], object],
     service_unavailable_exc_factory: Callable[[], HTTPException],
 ) -> ReviewReportResponse:
     try:
-        report = run_compliance_review_fn(payload.project_id, payload.section_key)
+        report = run_compliance_review_fn(payload.project_id, payload.section_key, payload.outline_id)
         return ReviewReportResponse(
             id=str(report.id),
             project_id=str(report.project_id),

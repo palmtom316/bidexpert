@@ -354,7 +354,7 @@ class ProviderProfileItem(BaseModel):
     base_url: str | None = None
     default_model: str
     key_storage: str
-    key_secret_ref: str
+    key_secret_ref: str | None = None
     allowed_tasks: list[str]
     created_by: str | None = None
 

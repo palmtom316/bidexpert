@@ -40,6 +40,17 @@ _KNOWN_CURRENT_STANDARDS: dict[str, str] = {
 }
 
 
+def _resolve_outline_id_for_section(section: SectionContent, outline_id: str | None = None) -> str:
+    value = str(outline_id or "").strip()
+    if value:
+        return value
+    version_id = getattr(section, "version_id", None)
+    if version_id:
+        return str(version_id)
+    section_key = str(getattr(section, "section_key", "")).strip()
+    return section_key or "__SECTION__"
+
+
 def _as_requirement_code_set(requirements: list[Requirement]) -> set[str]:
     return {str(item.requirement_code).strip() for item in requirements if str(item.requirement_code).strip()}
 
@@ -216,7 +227,7 @@ class ComplianceReviewer:
     def __init__(self, db: Session):
         self.db = db
 
-    def review_section(self, project_id: str, section_id: str) -> ReviewReport:
+    def review_section(self, project_id: str, section_id: str, outline_id: str | None = None) -> ReviewReport:
         """
         Run compliance review for a specific section against its mapped requirements.
         """
@@ -232,7 +243,13 @@ class ComplianceReviewer:
 
         if not section.requirement_codes:
             logger.info("Section %s has no requirements mapped, skipping review.", section.section_key)
-            return self._create_empty_report(project_id, section, "PASS", "No requirements mapped.")
+            return self._create_empty_report(
+                project_id,
+                section,
+                "PASS",
+                "No requirements mapped.",
+                outline_id=outline_id,
+            )
 
         # 2. Load requirements
         # We assume requirement_codes are stored in SectionContent array.
@@ -244,7 +261,13 @@ class ComplianceReviewer:
         
         if not requirements:
              logger.warning("Section %s has codes %s but no Requirement records found.", section.section_key, section.requirement_codes)
-             return self._create_empty_report(project_id, section, "WARN", "Requirements not found in DB.")
+             return self._create_empty_report(
+                 project_id,
+                 section,
+                 "WARN",
+                 "Requirements not found in DB.",
+                 outline_id=outline_id,
+             )
 
         # 3. Prepare payload for LLM
         req_payload = _requirements_payload(requirements)
@@ -274,7 +297,7 @@ class ComplianceReviewer:
         report = ReviewReport(
             project_id=pid,
             section_key=section.section_key,
-            outline_id=section.section_key, # simplistic mapping
+            outline_id=_resolve_outline_id_for_section(section, outline_id=outline_id),
             status=status,
             report_json=report_json
         )
@@ -372,12 +395,20 @@ class ComplianceReviewer:
         self.db.refresh(report)
         return report
 
-    def _create_empty_report(self, project_id: str, section: SectionContent, status: str, msg: str) -> ReviewReport:
+    def _create_empty_report(
+        self,
+        project_id: str,
+        section: SectionContent,
+        status: str,
+        msg: str,
+        *,
+        outline_id: str | None = None,
+    ) -> ReviewReport:
         pid = uuid.UUID(project_id)
         report = ReviewReport(
             project_id=pid,
             section_key=section.section_key,
-            outline_id=section.section_key,
+            outline_id=_resolve_outline_id_for_section(section, outline_id=outline_id),
             status=status,
             report_json={"general_comments": msg, "modeled_issues": []}
         )
@@ -387,7 +418,7 @@ class ComplianceReviewer:
         return report
 
 
-def run_compliance_review(project_id: str, section_key: str) -> ReviewReport:
+def run_compliance_review(project_id: str, section_key: str, outline_id: str | None = None) -> ReviewReport:
     """Orchestrate compliance review with session management."""
     with session_scope() as db:
         stmt = select(SectionContent).where(
@@ -399,7 +430,7 @@ def run_compliance_review(project_id: str, section_key: str) -> ReviewReport:
             raise ValueError(f"Section {section_key} not found in project {project_id}")
 
         reviewer = ComplianceReviewer(db)
-        return reviewer.review_section(project_id, str(section.id))
+        return reviewer.review_section(project_id, str(section.id), outline_id=outline_id)
 
 
 def run_full_compliance_review(

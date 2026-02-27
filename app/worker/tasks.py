@@ -3,13 +3,25 @@ from __future__ import annotations
 import logging
 import re
 from pathlib import Path
+import uuid
 from uuid import uuid4
 
 from celery.result import AsyncResult
+from sqlalchemy import func
 
 from app.core.config import settings
+from app.db.session import session_scope
 from app.extract.historical_extractor import extract_evidence_chunks_from_text
 from app.extract.tender_parser import parse_tender_requirements
+from app.models.tables import (
+    GenerationVersion,
+    JobStatus,
+    Project,
+    Requirement,
+    RequirementStrength,
+    SectionContent,
+    SectionOrigin,
+)
 from app.schemas.contracts import EvidenceUpsertItem
 from app.services.evidence_validator import run_three_gates
 from app.services.generation_pipeline import generate_draft_with_retrieval
@@ -93,6 +105,232 @@ def _safe_update_run_progress(**kwargs) -> None:  # noqa: ANN003
 
 def _context_outline_id(context: dict) -> str:
     return str(context.get("outline_id", "") or "").strip()
+
+
+def _safe_uuid(value: str | None) -> uuid.UUID | None:
+    try:
+        return uuid.UUID(str(value or "").strip())
+    except (ValueError, TypeError, AttributeError):
+        return None
+
+
+def _safe_uuid_list(values: object) -> list[uuid.UUID]:
+    if not isinstance(values, list):
+        return []
+    result: list[uuid.UUID] = []
+    for item in values:
+        uid = _safe_uuid(str(item) if item is not None else None)
+        if uid:
+            result.append(uid)
+    return result
+
+
+def _extract_requirement_rows(extract_payload: object, section_key: str) -> list[dict]:
+    if not isinstance(extract_payload, dict):
+        return []
+    requirements = extract_payload.get("requirements")
+    if not isinstance(requirements, list):
+        return []
+    rows: list[dict] = []
+    for index, item in enumerate(requirements, start=1):
+        if not isinstance(item, dict):
+            continue
+        code = str(item.get("requirement_id") or "").strip() or f"{section_key}-REQ-{index:03d}"
+        original_text = str(item.get("original_text") or "").strip()
+        if not original_text:
+            continue
+        rows.append(
+            {
+                "code": code,
+                "original_text": original_text,
+                "is_must": bool(item.get("is_must", False)),
+                "score_weight": item.get("score_weight"),
+                "section_anchor": str(item.get("section_anchor") or "").strip() or None,
+                "page_no": item.get("page_no"),
+                "format_constraints": item.get("format_constraints") if isinstance(item.get("format_constraints"), dict) else {},
+            }
+        )
+    return rows
+
+
+def _resolve_requirement_strength(row: dict) -> RequirementStrength:
+    if bool(row.get("is_must")):
+        return RequirementStrength.MUST
+    score_weight = row.get("score_weight")
+    if score_weight not in (None, ""):
+        return RequirementStrength.SCORE
+    format_constraints = row.get("format_constraints")
+    if isinstance(format_constraints, dict) and format_constraints:
+        return RequirementStrength.FORMAT
+    return RequirementStrength.OTHER
+
+
+def _content_md_from_generated(generated: object, fallback_text: str | None = None) -> str:
+    if not isinstance(generated, dict):
+        return str(fallback_text or "").strip()
+    generated_text = str(generated.get("generated_text") or "").strip()
+    if generated_text:
+        return generated_text
+    generation_json = generated.get("generation_json")
+    if isinstance(generation_json, dict):
+        content_blocks = generation_json.get("content_blocks")
+        if isinstance(content_blocks, list):
+            paragraphs: list[str] = []
+            for block in content_blocks:
+                if isinstance(block, dict):
+                    text = str(block.get("text") or "").strip()
+                    if text:
+                        paragraphs.append(text)
+            if paragraphs:
+                return "\n".join(paragraphs)
+    return str(fallback_text or "").strip()
+
+
+def _persist_pipeline_outputs(context: dict, final_status: str) -> None:
+    project_uuid = _safe_uuid(str(context.get("project_id", "")).strip())
+    if not project_uuid:
+        return
+
+    section_key = str(context.get("section_key") or "").strip()
+    if not section_key:
+        return
+    section_title = str(context.get("section_title") or section_key).strip() or section_key
+    outline_id = _context_outline_id(context)
+    marker = f"workflow:{outline_id or 'adhoc'}"
+
+    stages = context.get("stages") if isinstance(context.get("stages"), dict) else {}
+    extract_payload = stages.get("extract") if isinstance(stages, dict) else {}
+    generated = stages.get("generate") if isinstance(stages, dict) else {}
+    requirement_rows = _extract_requirement_rows(extract_payload, section_key=section_key)
+    requirement_codes = [item["code"] for item in requirement_rows]
+    content_md = _content_md_from_generated(generated, fallback_text=str(context.get("requirement_text") or ""))
+    evidence_ids = _safe_uuid_list(generated.get("evidence_ids") if isinstance(generated, dict) else [])
+
+    try:
+        with session_scope() as db:
+            project_exists = db.query(Project.id).filter(Project.id == project_uuid).first()
+            if not project_exists:
+                logger.warning(
+                    "pipeline persistence skipped: project %s not found for section=%s",
+                    project_uuid,
+                    section_key,
+                )
+                return
+
+            version = (
+                db.query(GenerationVersion)
+                .filter(
+                    GenerationVersion.project_id == project_uuid,
+                    GenerationVersion.model_used == marker,
+                )
+                .order_by(GenerationVersion.version_no.desc(), GenerationVersion.created_at.desc())
+                .first()
+            )
+            if not version:
+                latest_no = db.query(func.max(GenerationVersion.version_no)).filter(
+                    GenerationVersion.project_id == project_uuid
+                ).scalar()
+                version = GenerationVersion(
+                    project_id=project_uuid,
+                    version_no=int(latest_no or 0) + 1,
+                    status=JobStatus.RUNNING,
+                    created_by="workflow-pipeline",
+                    model_used=marker,
+                    config={"outline_id": outline_id or None},
+                )
+                db.add(version)
+                db.flush()
+
+            if requirement_codes:
+                existing_reqs = db.query(Requirement).filter(
+                    Requirement.project_id == project_uuid,
+                    Requirement.requirement_code.in_(requirement_codes),
+                ).all()
+                by_code = {str(item.requirement_code): item for item in existing_reqs}
+                for row in requirement_rows:
+                    score_weight = row.get("score_weight")
+                    try:
+                        score_value = float(score_weight) if score_weight not in (None, "") else None
+                    except (TypeError, ValueError):
+                        score_value = None
+
+                    requirement = by_code.get(row["code"])
+                    if requirement:
+                        requirement.strength = _resolve_requirement_strength(row)
+                        requirement.original_text = row["original_text"]
+                        requirement.score_weight = score_value
+                        requirement.location_anchor = row.get("section_anchor")
+                        requirement.location_page_no = row.get("page_no")
+                        requirement.constraints = row.get("format_constraints") or {}
+                        db.add(requirement)
+                    else:
+                        db.add(
+                            Requirement(
+                                project_id=project_uuid,
+                                requirement_code=row["code"],
+                                strength=_resolve_requirement_strength(row),
+                                score_weight=score_value,
+                                title=row.get("section_anchor"),
+                                original_text=row["original_text"],
+                                location_anchor=row.get("section_anchor"),
+                                location_page_no=row.get("page_no"),
+                                constraints=row.get("format_constraints") or {},
+                                deliverables={},
+                            )
+                        )
+
+            section = (
+                db.query(SectionContent)
+                .filter(
+                    SectionContent.project_id == project_uuid,
+                    SectionContent.version_id == version.id,
+                    SectionContent.section_key == section_key,
+                )
+                .order_by(SectionContent.created_at.desc())
+                .first()
+            )
+            has_placeholders = final_status != "SUPPORTED" or "NEED_HUMAN_INPUT" in content_md
+            payload_json = generated if isinstance(generated, dict) else {}
+
+            if section:
+                section.section_title = section_title
+                section.content_md = content_md
+                section.content_json = payload_json
+                section.requirement_codes = requirement_codes
+                section.evidence_ids = evidence_ids
+                section.origin = SectionOrigin.AI
+                section.created_by = "workflow-pipeline"
+                section.has_placeholders = has_placeholders
+                db.add(section)
+            else:
+                db.add(
+                    SectionContent(
+                        project_id=project_uuid,
+                        version_id=version.id,
+                        section_key=section_key,
+                        section_title=section_title,
+                        content_md=content_md,
+                        content_json=payload_json,
+                        requirement_codes=requirement_codes,
+                        evidence_ids=evidence_ids,
+                        origin=SectionOrigin.AI,
+                        created_by="workflow-pipeline",
+                        has_placeholders=has_placeholders,
+                    )
+                )
+
+            if final_status == "SUPPORTED":
+                version.status = JobStatus.SUCCEEDED
+            db.add(version)
+            db.commit()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "pipeline persistence failed for project=%s section=%s: %s",
+            project_uuid,
+            section_key,
+            exc,
+            exc_info=True,
+        )
 
 
 def _structured_content_from_generated(*, section_key: str, generated: dict) -> dict[str, list[dict[str, str]]]:
@@ -523,6 +761,7 @@ def section_render_stage_task(self, context: dict) -> dict:  # type: ignore[no-u
         final_status = str(generated.get("status", "NEED_HUMAN_INPUT"))
         if final_status == "SUPPORTED" and render_result.get("status") == "FAILED":
             final_status = "FAILED"
+        _persist_pipeline_outputs(context, final_status)
         if final_status == "SUPPORTED" and render_result.get("status") == "SUCCEEDED":
             _safe_update_run_progress(
                 outline_id=outline_id,

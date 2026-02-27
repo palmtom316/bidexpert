@@ -51,7 +51,7 @@ def profile_to_item(profile) -> ProviderProfileItem:
         base_url=profile.base_url,
         default_model=profile.default_model,
         key_storage=str(profile.key_storage.value if hasattr(profile.key_storage, "value") else profile.key_storage),
-        key_secret_ref=profile.key_secret_ref,
+        key_secret_ref=None,
         allowed_tasks=profile.allowed_tasks or ["*"],
         created_by=profile.created_by,
     )

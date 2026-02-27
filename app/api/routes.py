@@ -370,7 +370,8 @@ def _resolve_within_base(
 
 async def _read_upload_with_limit(file: UploadFile) -> bytes:
     limit = int(settings.max_upload_bytes)
-    content_length = file.headers.get("content-length")
+    headers = getattr(file, "headers", None)
+    content_length = headers.get("content-length") if headers and hasattr(headers, "get") else None
     if content_length:
         try:
             if int(content_length) > limit:
@@ -383,10 +384,20 @@ async def _read_upload_with_limit(file: UploadFile) -> bytes:
 
     chunks: list[bytes] = []
     total = 0
+    stream = getattr(file, "file", None)
+    can_read_sync = bool(stream) and callable(getattr(stream, "read", None))
     while True:
-        chunk = await file.read(min(1024 * 1024, max(1, limit - total + 1)))
+        read_size = min(1024 * 1024, max(1, limit - total + 1))
+        if can_read_sync:
+            chunk = stream.read(read_size)
+        else:
+            chunk = await file.read(read_size)
         if not chunk:
             break
+        if isinstance(chunk, bytearray):
+            chunk = bytes(chunk)
+        if not isinstance(chunk, bytes):
+            raise HTTPException(status_code=400, detail="uploaded file stream returned non-bytes content")
         total += len(chunk)
         if total > limit:
             raise HTTPException(

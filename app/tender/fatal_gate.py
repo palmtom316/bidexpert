@@ -445,8 +445,8 @@ def _match_prelim_to_assets(clause_text: str) -> tuple[bool, str]:
 
         return True, "qualifications exist but exact match needs human review"
     except Exception as exc:  # noqa: BLE001
-        logger.warning("asset query failed, defaulting to pass: %s", exc)
-        return True, f"asset query error (defaulting to pass): {exc}"
+        logger.error("asset query failed, defaulting to block: %s", exc)
+        return False, f"asset query error (blocked): {exc}"
 
 
 def _match_personnel_to_assets(constraint: dict) -> tuple[bool, str]:
@@ -466,5 +466,5 @@ def _match_personnel_to_assets(constraint: dict) -> tuple[bool, str]:
 
         return True, f"{len(candidates)} candidate(s) available for {role}"
     except Exception as exc:  # noqa: BLE001
-        logger.warning("personnel query failed, defaulting to pass: %s", exc)
-        return True, f"personnel query error (defaulting to pass): {exc}"
+        logger.error("personnel query failed, defaulting to block: %s", exc)
+        return False, f"personnel query error (blocked): {exc}"

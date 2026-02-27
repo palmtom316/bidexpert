@@ -21,6 +21,7 @@ class TestComplianceReviewer(unittest.TestCase):
         mock_section.section_key = "1.1"
         mock_section.content_md = "Some content"
         mock_section.requirement_codes = ["REQ-01"]
+        mock_section.version_id = uuid.uuid4()
         
         self.mock_db.scalar.return_value = mock_section
         
@@ -57,6 +58,7 @@ class TestComplianceReviewer(unittest.TestCase):
         mock_section.project_id = uuid.UUID(self.project_id)
         mock_section.section_key = "1.1"
         mock_section.requirement_codes = []
+        mock_section.version_id = uuid.uuid4()
         
         self.mock_db.scalar.return_value = mock_section
         
@@ -64,6 +66,35 @@ class TestComplianceReviewer(unittest.TestCase):
         
         self.assertEqual(report.status, "PASS")
         self.assertIn("No requirements mapped", report.report_json["general_comments"])
+
+    @patch("app.services.review_engine.resolve_profile_chain_for_task")
+    @patch("app.services.review_engine.compliance_review_with_fallback_chain")
+    def test_review_section_respects_outline_id(self, mock_review, mock_resolve):
+        mock_section = SectionContent()
+        mock_section.id = uuid.UUID(self.section_id)
+        mock_section.project_id = uuid.UUID(self.project_id)
+        mock_section.section_key = "1.1"
+        mock_section.content_md = "Some content"
+        mock_section.requirement_codes = ["REQ-01"]
+        mock_section.version_id = uuid.uuid4()
+
+        self.mock_db.scalar.return_value = mock_section
+
+        mock_req = Requirement()
+        mock_req.requirement_code = "REQ-01"
+        mock_req.original_text = "Must compliant"
+        mock_req.strength = MagicMock()
+        mock_req.strength.name = "MUST"
+        self.mock_db.scalars.return_value.all.return_value = [mock_req]
+
+        mock_result = MagicMock()
+        mock_result.status = "PASS"
+        mock_result.report = {"approved": True}
+        mock_review.return_value = (mock_result, 0)
+
+        report = self.reviewer.review_section(self.project_id, self.section_id, outline_id="outline-abc")
+
+        self.assertEqual(report.outline_id, "outline-abc")
 
 if __name__ == "__main__":
     unittest.main()

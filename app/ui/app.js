@@ -52,6 +52,7 @@ const state = {
   outlineConfirmed: false,
   sections: [],
   selectedSectionKey: "",
+  scorecardId: "",
   analysisRunId: "",
   analysisDetail: null,
   finalBidDraft: "",
@@ -2891,43 +2892,22 @@ const RedlineEngine = {
       Toast.warn("请先生成或输入项目 ID");
       return;
     }
-    const tenderPackageId = ""; // Will be derived from state or context in real backend
-    
+    const tenderPackageId = state.outlineId.trim() || state.analysisRunId.trim() || `project-${projectId}`;
+
     setTaskStatus("正在执行防废标红线核验...");
-    
-    // Check if the backend endpoint is available, else mock data for demonstration
-    let res;
-    try {
-      res = await api(`/v2/redline/check?project_id=${projectId}&tender_package_id=${tenderPackageId}`, { method: "POST" });
-    } catch (e) {
-      // Mock Data if API fails (as per V2 frontend-only validation phase)
-      console.warn("API /v2/redline/check failed or not implemented, using mock data.", e);
-      res = {
-        status: "NEED_FIX",
-        summary: "完成红线审查，发现 2 项风险。",
-        readiness_missing_items: [
-          "缺少 110kV 类似工程业绩至少 1 份",
-          "项目经理缺少有效的安全生产考核合格证书(B证)"
-        ],
-        findings: [
-          {
-            severity: "P1",
-            category: "业绩",
-            problem: "公司业绩库中未找到满足电压等级要求的变电站项目",
-            required_action: "缺少 110kV 类似工程业绩至少 1 份",
-            suggested_fix: "请在“结构化补录”页补充该类业绩并入库。"
-          },
-          {
-            severity: "P1",
-            category: "人员",
-            problem: "指定的项目经理(张三)目前证书库中无B证记录",
-            required_action: "项目经理缺少有效的安全生产考核合格证书(B证)",
-            suggested_fix: "请上传人员证书信息。"
-          }
-        ]
-      };
-      await sleep(1000); // Simulate network delay
-    }
+    const res = await api("/api/v2/redline/check", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        project_id: projectId,
+        tender_package_id: tenderPackageId,
+        findings: [],
+        parameter_comparisons: [],
+        required_documents: [],
+        provided_documents: [],
+        run_active_checks: true,
+      }),
+    });
 
     this.renderDashboard(res);
     setTaskStatus(res.summary);
@@ -2961,12 +2941,14 @@ const RedlineEngine = {
     if (data.findings && data.findings.length > 0) {
       findingsDiv.style.display = "block";
       findingsDiv.innerHTML = data.findings.map(f => {
+        const problemText = f.problem || f.message || "";
+        const actionText = f.suggested_fix || f.required_action || "";
         const color = f.severity === "P0" ? "#dc2626" : (f.severity === "P1" ? "#f59e0b" : "var(--primary)");
         return `<div class="review-line" style="border-left: 4px solid ${color}; padding-left: 0.8rem; margin-bottom: 0.5rem; background: var(--bg-surface); border-radius: var(--radius-sm); padding-top: 0.5rem; padding-bottom: 0.5rem; border-top: 1px solid var(--line-soft); border-right: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft);">
             <div style="flex:1;">
               <span style="font-weight:bold; color:${color}; margin-right: 0.5rem;">[${f.severity}] ${escapeHtml(f.category)}</span>
-              <span>${escapeHtml(f.problem)}</span>
-              <div style="font-size: 0.75rem; color: var(--text-dim); margin-top: 0.5rem;">建议：${escapeHtml(f.suggested_fix)}</div>
+              <span>${escapeHtml(problemText)}</span>
+              <div style="font-size: 0.75rem; color: var(--text-dim); margin-top: 0.5rem;">建议：${escapeHtml(actionText)}</div>
             </div>
           </div>`;
       }).join("");
@@ -2986,42 +2968,53 @@ const ScoringRulesEngine = {
   },
 
   async extractRules() {
+    const projectId = state.projectId.trim();
+    if (!projectId) {
+      Toast.warn("请先生成或输入项目 ID");
+      return;
+    }
+    const tenderText = this.collectTenderText();
+    if (!tenderText) {
+      Toast.warn("缺少评分文本，请先填写“招标要求输入”或完成目录生成");
+      return;
+    }
     setTaskStatus("正在调用 G3 引擎提取评分规则...");
-    
-    // Simulate extraction API logic
-    await sleep(1500); 
-    
-    // Mock Data representing V2.0 LLM parsed JSON structure
-    const mockRules = {
-      total_score: 100,
-      method: "综合评估法",
-      items: [
-        {
-          item_id: "S-001",
-          name: "施工组织设计",
-          max_score: 30,
-          criteria: [
-            { point: "工程概述与总平面布置合理详细，得 5 分", weight: 5, type: "qualitative" },
-            { point: "施工进度计划及保证措施满足工期要求，得 10 分", weight: 10, type: "qualitative" },
-            { point: "质量管控体系完整，通过 ISO 认证额外加 5 分", weight: 15, type: "qualitative" }
-          ]
-        },
-        {
-          item_id: "S-002",
-          name: "项目团队及人员配置",
-          max_score: 20,
-          criteria: [
-            { point: "项目经理具有一级建造师及高级职称，得 10 分", weight: 10, type: "quantitative", evidence_required: ["建造师注册证书", "职称证书"] },
-            { point: "总工具有高级职称，得 10 分", weight: 10, type: "quantitative", evidence_required: ["职称证书"] }
-          ]
-        }
-      ]
+    const res = await api("/api/v2/scorecard/parse", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        project_id: projectId,
+        tender_text: tenderText,
+      }),
+    });
+    updateState({ scorecardId: String(res.scorecard_id || "").trim() });
+
+    const structured = (res.structured_json && typeof res.structured_json === "object")
+      ? res.structured_json
+      : {};
+    const rulesData = {
+      total_score: Number(structured.total_score || 0),
+      method: String(structured.method || "综合评估法"),
+      items: Array.isArray(structured.items) ? structured.items : [],
     };
 
-    this.renderGrid(mockRules);
+    this.renderGrid(rulesData);
     setTaskStatus("评分规则提取完成，请核对并确认");
-    Toast.success("评分规则提取成功 (Mock数据)");
+    Toast.success("评分规则提取成功");
     if ($("#btnConfirmScoringRules")) $("#btnConfirmScoringRules").style.display = "inline-flex";
+  },
+
+  collectTenderText() {
+    const outlineText = String($("#outlineRequirementText")?.value || "").trim();
+    if (outlineText) return outlineText;
+    if (!state.sections.length) return "";
+    return state.sections
+      .map((section) => {
+        const lines = Array.isArray(section.requirement_texts) ? section.requirement_texts : [];
+        return [`[${section.section_key}] ${section.section_title}`, ...lines].join("\n");
+      })
+      .join("\n\n")
+      .trim();
   },
 
   renderGrid(data) {
@@ -3062,8 +3055,24 @@ const ScoringRulesEngine = {
   },
   
   async confirmRules() {
+    const projectId = state.projectId.trim();
+    const scorecardId = state.scorecardId.trim();
+    if (!projectId || !scorecardId) {
+      Toast.warn("缺少 scorecard_id，请先提取评分规则");
+      return;
+    }
+    await api("/api/v2/scorecard/confirm", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        scorecard_id: scorecardId,
+        project_id: projectId,
+        approved: true,
+        reviewer: "ui-reviewer",
+      }),
+    });
     setTaskStatus("评分规则已确认并锁定入库");
-    Toast.success("评分规则已锁定入库！(模拟操作)");
+    Toast.success("评分规则已锁定入库");
     const grid = $("#scoringRulesGrid");
     if (grid) grid.style.opacity = "0.5"; // Visual cue of lock
     if ($("#btnConfirmScoringRules")) $("#btnConfirmScoringRules").style.display = "none";

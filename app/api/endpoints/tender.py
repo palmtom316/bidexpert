@@ -247,8 +247,8 @@ def list_import_runs(project_id: str | None = None, limit: int = 50) -> TenderIm
             try:
                 project_uuid = uuid.UUID(project_id)
                 stmt = stmt.where(TenderImportRun.project_id == project_uuid)
-            except ValueError:
-                pass
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail="invalid project_id") from exc
         runs = db.execute(stmt).scalars().all()
         return TenderImportRunListResponse(
             items=[_build_tender_import_run_item(r) for r in runs]
