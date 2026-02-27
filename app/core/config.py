@@ -70,6 +70,9 @@ class Settings(BaseSettings):
     textin_ocr_api_key: str | None = None
     textin_ocr_base_url: str = "https://api.textin.com/ai/service/v2/recognize/document"
     textin_ocr_model: str | None = None
+    mineru_ocr_api_key: str | None = None
+    mineru_ocr_base_url: str | None = None
+    mineru_ocr_model: str = "mineru-ocr"
     hunyuan_ocr_api_key: str | None = None
     hunyuan_ocr_base_url: str | None = None
     docai_ocr_api_key: str | None = None

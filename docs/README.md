@@ -96,6 +96,9 @@ celery -A app.worker.celery_app.celery_app worker --loglevel=INFO
 - `BIDEXPERT_GLM_OCR_API_KEY`：GLM OCR API Key
 - `BIDEXPERT_GLM_OCR_BASE_URL`：GLM OCR 网关地址（OpenAI-compatible，通常以 `/v1` 结尾）
 - `BIDEXPERT_GLM_OCR_MODEL`：GLM OCR 模型名（默认 `glm-ocr`）
+- `BIDEXPERT_MINERU_OCR_API_KEY`：MinerU OCR API Key
+- `BIDEXPERT_MINERU_OCR_BASE_URL`：MinerU OCR 网关地址（OpenAI-compatible，通常以 `/v1` 结尾）
+- `BIDEXPERT_MINERU_OCR_MODEL`：MinerU OCR 模型名（默认 `mineru-ocr`）
 - `BIDEXPERT_REVIEW_FALLBACK_PROVIDER`：可选，审查备用 provider
 - `BIDEXPERT_REVIEW_FALLBACK_MODEL`：可选，审查备用模型
 - `BIDEXPERT_REVIEW_FALLBACK_BASE_URL`：可选，审查备用 base_url
@@ -121,14 +124,14 @@ export SECTION_ROUTING_PATH=app/config/section_routing.cn.json
 
 - 生产部署必须提供真实 TLS 证书：`deploy/nginx/certs/tls.crt` 与 `deploy/nginx/certs/tls.key`，不再自动生成自签名证书。
 - OCR 依赖 `tesseract` 系统二进制；若缺失将自动退回非 OCR 文本提取。
-- 专家库接口支持可选 `ocr_provider` 覆盖（`glm-ocr/tesseract/hunyuan/docai`）：
+- 专家库接口支持可选 `ocr_provider` 覆盖（`glm-ocr/textin/mineru/tesseract/hunyuan/docai`）：
   - `POST /v1/expert-library/convert-upload`
   - `POST /v1/expert-library/ingest-upload`
   - `POST /v1/expert-library/ingest-uploads`
 - 证据不足、证据近到期或验证失败时，系统返回 `NEED_HUMAN_INPUT`。
 - 命中报价熔断时，系统阻断处理。
 - UI 的“BYOK 配置”页可完成：创建 profile -> 测试 -> 绑定策略 -> 生成验证。
-- UI 的“AI 模型设置”页支持录入 GLM-OCR `API Key/Base URL/Model`（保存在浏览器侧，按请求覆盖到 OCR 链路）。
+- UI 的“AI 模型设置”页支持录入 `glm-ocr / textin / mineru` 的 `API Key/Base URL/Model`（保存在浏览器侧，按请求覆盖到 OCR 链路）。
 - UI 的“招标关键分析”页可完成：上传招标文件 -> 自动拆解分析 -> 分类查看关键要求与评分要点。
 - UI 的“本地专家库”页可完成：历史投标文件上传入库 + 结构化资料入库（规范/公司业绩/公司资质/项目管理人员资质及业绩）-> 文档/Chunk 查询。
 - UI 的“本地专家库”上传支持 `LangExtract model_id`（下拉预设 + 可手填；留空走后端默认）。

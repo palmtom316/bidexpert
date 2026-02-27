@@ -66,3 +66,30 @@ def test_test_ocr_connection_textin_requires_app_id() -> None:
     assert model == "your-textin-app-id"
     assert ok is False
     assert detail == "missing app_id"
+
+
+def test_test_ocr_connection_mineru_calls_chat_completion(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    def _fake_post(url: str, *, json: dict, headers: dict, timeout: float) -> _DummyResponse:
+        captured["url"] = url
+        captured["json"] = json
+        captured["headers"] = headers
+        captured["timeout"] = timeout
+        return _DummyResponse(status_code=200)
+
+    monkeypatch.setattr(ocr_module.httpx, "post", _fake_post)
+
+    provider, model, ok, detail = ocr_module.test_ocr_connection(
+        provider="mineru",
+        api_key="mineru-key",
+        base_url="https://mineru.example.com/v1",
+        model="mineru-ocr",
+    )
+
+    assert provider == "mineru"
+    assert model == "mineru-ocr"
+    assert ok is True
+    assert detail == "mineru probe OK (200)"
+    assert captured["url"] == "https://mineru.example.com/v1/chat/completions"
+    assert captured["headers"] == {"Authorization": "Bearer mineru-key", "Content-Type": "application/json"}

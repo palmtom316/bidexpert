@@ -86,9 +86,10 @@ celery -A app.worker.celery_app.celery_app worker --loglevel=INFO
 
 | 变量 | 说明 |
 |------|------|
-| `BIDEXPERT_OCR_PROVIDER` | 引擎选择：glm-ocr / textin / tesseract / hunyuan / docai |
+| `BIDEXPERT_OCR_PROVIDER` | 引擎选择：glm-ocr / textin / mineru / tesseract / hunyuan / docai |
 | `BIDEXPERT_GLM_OCR_API_KEY` / `_BASE_URL` | GLM OCR 配置 |
 | `BIDEXPERT_TEXTIN_OCR_API_KEY` / `_BASE_URL` | TextIn OCR 配置 |
+| `BIDEXPERT_MINERU_OCR_API_KEY` / `_BASE_URL` | MinerU OCR 配置（OpenAI-compatible 网关） |
 
 ### 认证模式
 

@@ -217,17 +217,22 @@ function normalizeOcrProviderValue(value) {
   const normalized = String(value || "").trim().toLowerCase().replace(/_/g, "-");
   if (normalized === "glmocr") return "glm-ocr";
   if (normalized === "text-in") return "textin";
+  if (normalized === "miner-u") return "mineru";
   return normalized;
 }
 
 function normalizeConfiguredOcrProvider(value) {
   const normalized = normalizeOcrProviderValue(value);
   if (normalized === "textin") return "textin";
+  if (normalized === "mineru") return "mineru";
   return "glm-ocr";
 }
 
 function defaultOcrModelForProvider(provider) {
-  return normalizeConfiguredOcrProvider(provider) === "textin" ? "your-textin-app-id" : "glm-ocr";
+  const normalized = normalizeConfiguredOcrProvider(provider);
+  if (normalized === "textin") return "your-textin-app-id";
+  if (normalized === "mineru") return "mineru-ocr";
+  return "glm-ocr";
 }
 
 function defaultOcrBaseUrlForProvider(provider) {
@@ -2544,7 +2549,8 @@ const ByokSettings = {
       }
     }
     if (modelInput) {
-      modelInput.placeholder = provider === "textin" ? "例如：your-textin-app-id" : "例如：glm-ocr";
+      modelInput.placeholder =
+        provider === "textin" ? "例如：your-textin-app-id" : provider === "mineru" ? "例如：mineru-ocr" : "例如：glm-ocr";
       if (!preserveInputValues) {
         const current = modelInput.value.trim();
         const previousDefault = defaultOcrModelForProvider(previousProvider);

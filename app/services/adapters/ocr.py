@@ -9,12 +9,14 @@ import httpx
 
 from app.core.config import settings
 
-OCR_PROVIDER_ALLOWLIST = frozenset({"glm-ocr", "textin", "tesseract", "local", "hunyuan", "docai", ""})
+OCR_PROVIDER_ALLOWLIST = frozenset({"glm-ocr", "textin", "mineru", "tesseract", "local", "hunyuan", "docai", ""})
 _OCR_PROVIDER_ALIASES = {
     "glmocr": "glm-ocr",
     "glm_ocr": "glm-ocr",
     "text-in": "textin",
     "text_in": "textin",
+    "miner-u": "mineru",
+    "miner_u": "mineru",
 }
 TEXTIN_OCR_ENDPOINT_DEFAULT = "https://api.textin.com/ai/service/v2/recognize/document"
 
@@ -308,6 +310,21 @@ class GLMOCRAdapter(OCRAdapter):
         raise OCRAdapterUnavailableError(f"{self.provider} ocr response is invalid")
 
 
+class MinerUOCRAdapter(GLMOCRAdapter):
+    provider = "mineru"
+
+    def __init__(
+        self,
+        *,
+        api_key: str | None = None,
+        base_url: str | None = None,
+        model: str | None = None,
+    ) -> None:
+        self.api_key = (api_key if api_key is not None else settings.mineru_ocr_api_key or "").strip()
+        self.base_url = (base_url if base_url is not None else settings.mineru_ocr_base_url or "").strip()
+        self.model = (model if model is not None else settings.mineru_ocr_model or "mineru-ocr").strip() or "mineru-ocr"
+
+
 def test_ocr_connection(
     *,
     provider: str,
@@ -316,10 +333,16 @@ def test_ocr_connection(
     model: str | None = None,
 ) -> tuple[str, str, bool, str]:
     normalized = normalize_ocr_provider(provider, default=settings.ocr_provider or "glm-ocr")
-    if normalized not in {"glm-ocr", "textin"}:
+    if normalized not in {"glm-ocr", "textin", "mineru"}:
         raise ValueError(f"unsupported ocr provider: {normalized}")
 
-    effective_model = (model or "").strip() or ("your-textin-app-id" if normalized == "textin" else "glm-ocr")
+    if normalized == "textin":
+        default_model = "your-textin-app-id"
+    elif normalized == "mineru":
+        default_model = settings.mineru_ocr_model or "mineru-ocr"
+    else:
+        default_model = "glm-ocr"
+    effective_model = (model or "").strip() or str(default_model).strip()
     credential = (api_key or "").strip()
     if not credential:
         return normalized, effective_model, False, "missing credential"
@@ -327,7 +350,7 @@ def test_ocr_connection(
     default_base_url = (
         settings.textin_ocr_base_url or TEXTIN_OCR_ENDPOINT_DEFAULT
         if normalized == "textin"
-        else settings.glm_ocr_base_url or ""
+        else (settings.mineru_ocr_base_url or "" if normalized == "mineru" else settings.glm_ocr_base_url or "")
     )
     effective_base_url = (base_url or "").strip() or str(default_base_url or "").strip()
     if not effective_base_url:
@@ -371,10 +394,10 @@ def test_ocr_connection(
             timeout=timeout,
         )
         if 200 <= response.status_code < 400:
-            return normalized, effective_model, True, f"glm-ocr probe OK ({response.status_code})"
-        return normalized, effective_model, False, f"glm-ocr probe returned {response.status_code}"
+            return normalized, effective_model, True, f"{normalized} probe OK ({response.status_code})"
+        return normalized, effective_model, False, f"{normalized} probe returned {response.status_code}"
     except (httpx.HTTPError, OSError, TimeoutError) as exc:
-        return normalized, effective_model, False, f"glm-ocr probe failed: {exc}"
+        return normalized, effective_model, False, f"{normalized} probe failed: {exc}"
 
 
 def create_ocr_adapter(provider: str | None = None, *, runtime_credential: OCRRuntimeCredential | None = None) -> OCRAdapter:
@@ -387,6 +410,12 @@ def create_ocr_adapter(provider: str | None = None, *, runtime_credential: OCRRu
         )
     if normalized == "textin":
         return TextInOCRAdapter(
+            api_key=runtime_credential.api_key if runtime_credential else None,
+            base_url=runtime_credential.base_url if runtime_credential else None,
+            model=runtime_credential.model if runtime_credential else None,
+        )
+    if normalized == "mineru":
+        return MinerUOCRAdapter(
             api_key=runtime_credential.api_key if runtime_credential else None,
             base_url=runtime_credential.base_url if runtime_credential else None,
             model=runtime_credential.model if runtime_credential else None,

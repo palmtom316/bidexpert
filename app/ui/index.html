@@ -147,7 +147,7 @@
                 <option value="">无历史会话</option>
               </select>
             </div>
-            <p class="hint">提示：OCR 引擎由“AI 模型设置”统一控制（仅支持 textin / glm-ocr）。</p>
+            <p class="hint">提示：OCR 引擎由“AI 模型设置”统一控制（支持 textin / glm-ocr / mineru）。</p>
             <div class="form-group">
               <label>转换会话 ID（只读）</label>
               <input id="convertSessionId" type="text" placeholder="转换后自动写入" readonly />
@@ -1014,6 +1014,7 @@
               <select id="ocrProvider">
                 <option value="glm-ocr">glm-ocr</option>
                 <option value="textin">textin</option>
+                <option value="mineru">mineru</option>
               </select>
             </div>
             <div class="form-group">
