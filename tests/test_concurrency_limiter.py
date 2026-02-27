@@ -1,7 +1,6 @@
 """Tests for app.services.concurrency_limiter — local slot management."""
 from __future__ import annotations
 
-import threading
 
 import pytest
 

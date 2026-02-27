@@ -517,7 +517,6 @@ def _ingest_historical_with_blocks(
     from app.services.lifecycle_manager import (
         auto_deprecate_old_versions,
         detect_standard_info,
-        validate_asset_lifecycle,
         validate_standard_version,
     )
     detected_std_code, detected_version_year = detect_standard_info(full_text)

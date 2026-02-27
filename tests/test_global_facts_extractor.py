@@ -6,8 +6,6 @@ from tender documents and wiring them into the import pipeline.
 
 from __future__ import annotations
 
-import json
-import pytest
 
 from app.tender.global_facts_extractor import extract_global_facts
 

@@ -8,7 +8,6 @@ import zipfile
 from io import BytesIO
 from pathlib import Path
 
-import pytest
 
 
 def _make_full_tender_zip() -> bytes:
@@ -104,7 +103,7 @@ def test_full_pipeline_reaches_ready_for_writing() -> None:
         # Step 1: Unpack
         root = unpack_zip(zip_bytes, workspace / "unpacked")
         manifest = load_manifest(root)
-        warnings = validate_tender_package(root, manifest)
+        validate_tender_package(root, manifest)
         assert manifest.tender_id == "INT-TEST-001"
 
         # Step 2: Read markdown

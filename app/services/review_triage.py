@@ -14,7 +14,6 @@ def triage_review_result(report: dict[str, Any]) -> dict[str, Any]:
     """
     status = str(report.get("status", "")).upper()
     modeled_issues = report.get("modeled_issues", []) or []
-    missing_reqs = report.get("missing_requirements", []) or []
     inconsistencies = report.get("logical_inconsistencies", []) or []
     coverage = float(report.get("coverage_estimate", 1.0))
 

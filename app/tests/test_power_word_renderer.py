@@ -8,7 +8,6 @@ from app.services.word_renderer import (
     ensure_default_template,
     _SIGNATURE_SECTIONS,
     _add_signature_placeholder,
-    render_word_sections,
 )
 
 

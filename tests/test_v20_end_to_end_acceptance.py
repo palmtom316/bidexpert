@@ -1,17 +1,16 @@
 """DoD acceptance tests covering Bidexpert V2.0 delivery document Section 7."""
 from __future__ import annotations
 
-import uuid
 from datetime import date, timedelta
 from unittest.mock import patch
 
 import pytest
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 from app.db.base import Base
 from app.models import tables  # noqa: F401
-from app.models.tables import BidAssetPool, ChapterEvidenceLink, EvidenceChunk, ExpertDoc, Project
+from app.models.tables import BidAssetPool, Project
 from app.schemas.contracts import (
     RedlineCheckRequest,
     RedlineDurationCheck,
@@ -20,7 +19,6 @@ from app.schemas.contracts import (
 )
 from app.services.entity_assembly import render_bid_asset_pool_markdown_table
 from app.services.frozen_block_guard import build_frozen_block_signatures, verify_frozen_block_signatures
-from app.services.generation_pipeline import persist_chapter_evidence_links
 from app.services.redline_engine import run_redline_check
 
 

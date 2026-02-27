@@ -1,9 +1,8 @@
 """Tests for G2.6 duration arithmetic hard validation."""
 from __future__ import annotations
 
-import pytest
 
-from app.schemas.contracts import RedlineCheckRequest, RedlineDurationCheck, RedlineFinding
+from app.schemas.contracts import RedlineCheckRequest, RedlineDurationCheck
 from app.services.redline_engine import _build_duration_findings, run_redline_check
 
 

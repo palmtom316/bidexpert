@@ -4,6 +4,8 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import pytest
+
 from app.services.routing_optimizer import (
     _bucket_name,
     _profile_key,
@@ -57,9 +59,6 @@ class TestReward:
         r = _reward({"attempts": 10, "successes": 0, "latency_ms": 0})
         # 0*0.85 + 1.0*0.15 = 0.15
         assert r == pytest.approx(0.15)
-
-
-import pytest
 
 
 class TestBuildRoutingOrder:

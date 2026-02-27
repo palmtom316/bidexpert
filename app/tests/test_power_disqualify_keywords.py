@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from app.extract.tender_parser import DISQUALIFY_KEYWORDS, _PROMPT_DESCRIPTION
-from app.services.tender_analysis import _RISK_PATTERN, _POWER_ENG_PATTERN, _classify_line
+from app.services.tender_analysis import _RISK_PATTERN, _POWER_ENG_PATTERN
 
 
 def test_disqualify_keywords_count_above_50():

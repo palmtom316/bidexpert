@@ -1,7 +1,6 @@
 """Unit tests for v1.4 Metadata Auto-Tagging Engine."""
 from __future__ import annotations
 
-import pytest
 
 from app.services.metadata_extractor import (
     DocumentMetadata,

@@ -5,10 +5,7 @@ from app.services.pii_policy import (
     _BID_PERSONNEL_CONTEXT,
     _ENTERPRISE_CREDENTIAL,
     _CREDENTIAL_NUMBER,
-    _is_bid_personnel_context,
-    _is_enterprise_credential,
     _mask_pii,
-    sanitize_outbound_text,
 )
 
 

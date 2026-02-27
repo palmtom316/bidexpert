@@ -6,10 +6,8 @@ to section_type keys used by prompt_suite and token limits.
 
 from __future__ import annotations
 
-import pytest
 
 from app.core.section_router import (
-    detect_power_section_type,
     infer_section_type,
     is_critical_section,
 )

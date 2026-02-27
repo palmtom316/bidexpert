@@ -5,7 +5,6 @@ from app.rag.rag_flow import (
     decompose_requirement,
     _classify_sub_requirement,
     _POWER_BOOST_TERMS,
-    _CONTINUATION_WORDS,
 )
 
 

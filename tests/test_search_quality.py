@@ -4,9 +4,8 @@ TDD RED phase.
 """
 from __future__ import annotations
 
-import pytest
 
-from app.services.retrieval_synonyms import SYNONYM_DICT, expand_synonyms
+from app.services.retrieval_synonyms import expand_synonyms
 
 
 class TestSynonymExpansion:

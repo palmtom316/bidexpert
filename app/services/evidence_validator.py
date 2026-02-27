@@ -115,7 +115,7 @@ def run_three_gates(
         return GateResult("NEED_HUMAN_INPUT", missing_sentences, 0.0)
 
     # Soft warnings: numerical consistency and format elements (don't block)
-    numerical_warnings = gate2_numerical_consistency(generated_text, requirement_text or "")
+    _ = gate2_numerical_consistency(generated_text, requirement_text or "")
     # These are informational — added to missing_sentences as warnings but don't change status
 
     coverage = gate3_matrix_coverage(requirement_mapped, requirement_total)

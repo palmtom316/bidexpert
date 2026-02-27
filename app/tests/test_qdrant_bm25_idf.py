@@ -8,7 +8,7 @@ Covers:
 from __future__ import annotations
 
 from app.services.retrieval_synonyms import expand_synonyms, SYNONYM_DICT
-from app.services.qdrant_store import _build_sparse_vector, _tokenize
+from app.services.qdrant_store import _build_sparse_vector
 
 
 # ---------------------------------------------------------------------------

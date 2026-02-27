@@ -20,7 +20,6 @@ def build_deviation_tables(tech_data: dict) -> DeviationTables:
     for req in tech_data.get("requirements", []):
         req_id = req.get("req_id", "")
         desc = req.get("description", "")
-        tracking = req.get("deviation_tracking", "")
         is_mandatory = req.get("is_mandatory", False)
         category = req.get("category", "general")
 

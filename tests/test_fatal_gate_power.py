@@ -13,7 +13,7 @@ from app.tender.fatal_gate import (
     RiskLevel,
     check_fatal_gate,
 )
-from app.tender.schemas import FatalCheckResult, FatalGateReport
+from app.tender.schemas import FatalGateReport
 
 
 # ── Risk level enum ──────────────────────────────────────────

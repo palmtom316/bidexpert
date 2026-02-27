@@ -10,7 +10,6 @@ from app.llm.prompt_suite_v11 import (
 from app.core.section_router import (
     _DEFAULT_CRITICAL_KEYWORDS,
     is_critical_section,
-    load_section_routing_config,
 )
 
 

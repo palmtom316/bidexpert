@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 
-import pytest
 
 from app.services.lifecycle_manager import (
     detect_standard_info,

@@ -8,7 +8,6 @@ import re
 from app.extract.tender_parser import (
     DISQUALIFY_KEYWORDS,
     MUST_KEYWORDS,
-    SCORE_PATTERN,
     classify_clause_strength,
     extract_cross_references,
     ClauseStrength,

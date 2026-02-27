@@ -5,7 +5,6 @@ while multi-signal real pricing content is still blocked.
 """
 from __future__ import annotations
 
-import pytest
 
 from app.services.pricing_guard import detect_pricing_content
 

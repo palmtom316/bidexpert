@@ -1,7 +1,6 @@
 """Tests for app.services.model_quality — compliance quality scoring."""
 from __future__ import annotations
 
-import pytest
 
 from app.services.model_quality import evaluate_compliance_quality
 

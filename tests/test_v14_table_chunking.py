@@ -1,14 +1,12 @@
 """Unit tests for v1.4 Table-Aware Chunking."""
 from __future__ import annotations
 
-import pytest
 
 from app.services.expert_chunking import (
     _extract_table_header,
     _is_parameter_table,
     _split_table_with_header,
     chunk_sections_for_rag,
-    estimate_text_tokens,
 )
 
 

@@ -4,7 +4,6 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from app.rag.rag_flow import (
-    SubRequirement,
     _classify_sub_requirement,
     decompose_requirement,
     merge_retrieval,

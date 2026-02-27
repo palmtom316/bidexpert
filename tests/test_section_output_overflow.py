@@ -5,7 +5,6 @@ instead of hard-failing with NEED_HUMAN_INPUT.
 """
 from __future__ import annotations
 
-import pytest
 
 
 class TestSectionOutputOverflowConfig:

@@ -14,7 +14,6 @@ import pytest
 from sqlalchemy import create_engine, inspect as sa_inspect
 from sqlalchemy.orm import sessionmaker
 
-from app.core.config import Settings
 from app.db.base import Base
 from app.models import tables  # noqa: F401  — register all models
 from app.models.tables import CompletedBid, Project

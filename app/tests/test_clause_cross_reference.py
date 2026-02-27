@@ -1,7 +1,7 @@
 """Clause cross-reference extraction tests."""
 from __future__ import annotations
 
-from app.extract.tender_parser import extract_cross_references, _CROSS_REF
+from app.extract.tender_parser import extract_cross_references
 
 
 def test_extract_chapter_reference():

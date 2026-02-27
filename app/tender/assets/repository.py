@@ -14,7 +14,7 @@ from sqlalchemy import and_, select
 from sqlalchemy.orm import Session
 
 from app.db.session import session_scope
-from app.models.tables import BidAssetPool, EvidenceChunk, ExpertDoc
+from app.models.tables import BidAssetPool, ExpertDoc
 
 logger = logging.getLogger(__name__)
 

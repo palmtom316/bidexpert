@@ -17,7 +17,6 @@ from app.core.config import settings
 from app.schemas.contracts import EvidenceSearchHit, EvidenceUpsertItem
 from app.services.byok import resolve_profile_for_task
 from app.services.embedding import embed_text
-from app.services.retrieval_synonyms import expand_synonyms
 
 logger = logging.getLogger(__name__)
 TOKEN_PATTERN = re.compile(r"[\w\u4e00-\u9fff]+", re.UNICODE)

@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 from app.services.disqualification_matrix import (
-    DisqualificationMatrix,
     build_matrix_from_requirements,
     check_section_against_matrix,
 )

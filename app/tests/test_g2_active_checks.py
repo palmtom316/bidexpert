@@ -5,7 +5,6 @@ import uuid
 from datetime import date, timedelta
 from unittest.mock import patch
 
-import pytest
 
 from app.schemas.contracts import RedlineCheckRequest, RedlineFinding
 from app.services.redline_engine import (
@@ -63,8 +62,7 @@ def test_check_qualifications_passes_when_valid():
 
 def test_check_key_staff_returns_p0_when_pool_empty():
     project_id = str(uuid.uuid4())
-    with patch("app.db.session.session_scope") as mock_scope:
-        mock_db = mock_scope.return_value.__enter__.return_value
+    with patch("app.db.session.session_scope"):
         with patch(
             "app.tender.assets.repository.list_personnel_candidates_from_asset_pool",
             return_value=[],
@@ -89,8 +87,7 @@ def test_check_key_staff_detects_concurrent_project_conflict():
             "evidence_refs": ["E-1"],
         },
     ]
-    with patch("app.db.session.session_scope") as mock_scope:
-        mock_db = mock_scope.return_value.__enter__.return_value
+    with patch("app.db.session.session_scope"):
         with patch(
             "app.tender.assets.repository.list_personnel_candidates_from_asset_pool",
             return_value=candidates,
@@ -115,8 +112,7 @@ def test_check_key_staff_detects_low_social_security():
             "evidence_refs": [],
         },
     ]
-    with patch("app.db.session.session_scope") as mock_scope:
-        mock_db = mock_scope.return_value.__enter__.return_value
+    with patch("app.db.session.session_scope"):
         with patch(
             "app.tender.assets.repository.list_personnel_candidates_from_asset_pool",
             return_value=candidates,
@@ -151,8 +147,7 @@ class _FakeAssetEntry:
 
 def test_check_authorization_returns_p0_when_no_auth_assets():
     project_id = str(uuid.uuid4())
-    with patch("app.db.session.session_scope") as mock_scope:
-        mock_db = mock_scope.return_value.__enter__.return_value
+    with patch("app.db.session.session_scope"):
         with patch(
             "app.tender.assets.repository.list_bid_asset_pool_entries",
             return_value=[],
@@ -174,8 +169,7 @@ def test_check_authorization_detects_missing_phrases():
             {"asset_type": "authorization", "content_text": "本授权书由公章确认"},
         ),
     ]
-    with patch("app.db.session.session_scope") as mock_scope:
-        mock_db = mock_scope.return_value.__enter__.return_value
+    with patch("app.db.session.session_scope"):
         with patch(
             "app.tender.assets.repository.list_bid_asset_pool_entries",
             return_value=entries,
@@ -198,8 +192,7 @@ def test_check_authorization_passes_when_complete():
             {"asset_type": "authorization", "content_text": "法定代表人授权并加盖公章"},
         ),
     ]
-    with patch("app.db.session.session_scope") as mock_scope:
-        mock_db = mock_scope.return_value.__enter__.return_value
+    with patch("app.db.session.session_scope"):
         with patch(
             "app.tender.assets.repository.list_bid_asset_pool_entries",
             return_value=entries,

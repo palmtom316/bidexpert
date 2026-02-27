@@ -32,7 +32,7 @@ class TestGenerateImportReport:
     def test_writes_json_file(self, tmp_path: Path):
         workspace = tmp_path / "ws"
         workspace.mkdir()
-        report = generate_import_report(
+        generate_import_report(
             tender_id="t-002",
             filename="doc.pdf",
             workspace=workspace,
@@ -69,7 +69,7 @@ class TestGenerateImportReport:
         workspace = tmp_path / "ws"
         workspace.mkdir()
         # No derived dir exists yet
-        report = generate_import_report(
+        generate_import_report(
             tender_id="t-004",
             filename="y.pdf",
             workspace=workspace,

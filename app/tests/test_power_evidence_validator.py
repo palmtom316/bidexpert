@@ -6,7 +6,6 @@ from app.services.evidence_validator import (
     _extract_fact_sentences,
     gate2_numerical_consistency,
     gate2_format_elements,
-    run_three_gates,
 )
 
 

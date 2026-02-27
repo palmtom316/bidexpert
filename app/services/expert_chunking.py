@@ -111,7 +111,6 @@ def _split_table_with_header(
         return [(table_md, headers, _is_parameter_table(headers))]
 
     # Find header row and separator
-    header_row = lines[0]
     separator_idx = None
     for i, line in enumerate(lines[1:], start=1):
         if _TABLE_SEPARATOR_RE.match(line.strip()):
