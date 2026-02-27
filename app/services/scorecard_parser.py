@@ -31,11 +31,13 @@ def parse_scorecard(
         "locked": False,
     }
     _save_scorecard(payload)
+    structured = payload["structured_json"]
     return {
         "scorecard_id": scorecard_id,
         "status": payload["status"],
         "table_blocks": table_blocks,
-        "structured_json": payload["structured_json"],
+        "structured_json": structured,
+        "method": structured.get("method", "综合评估法") if isinstance(structured, dict) else "综合评估法",
     }
 
 
@@ -82,7 +84,8 @@ def _build_structuring_prompt(table_blocks: list[str]) -> str:
     joined = "\n\n".join(table_blocks) if table_blocks else "(no score table blocks found)"
     return (
         "你是评分细则结构化助手。请从评分表中提取 JSON。\n"
-        "输出字段：total_score, items[].item_id/name/max_score/criteria。\n\n"
+        "输出字段：method, total_score, items[].item_id/name/max_score/criteria。\n"
+        "method 字段取值：综合评估法 / 最低投标价法（默认综合评估法）。\n\n"
         f"评分表内容：\n{joined}"
     )
 
@@ -106,7 +109,7 @@ def _default_llm_extract(*, prompt: str, response_format: dict) -> dict:  # noqa
             }
         )
     total_score = sum(float(item["max_score"]) for item in items)
-    return {"total_score": total_score, "items": items}
+    return {"total_score": total_score, "items": items, "method": "综合评估法"}
 
 
 def _parse_score(raw: str) -> float:

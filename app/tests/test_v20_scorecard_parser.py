@@ -23,6 +23,7 @@ def test_scorecard_parser_extracts_table_blocks_then_structures_json(tmp_path, m
     assert result["status"] == "PENDING_CONFIRM"
     assert len(result["table_blocks"]) == 1
     assert result["structured_json"]["items"]
+    assert result["method"] == "综合评估法"
 
 
 def test_scorecard_parser_uses_response_format_json_object(tmp_path, monkeypatch) -> None:

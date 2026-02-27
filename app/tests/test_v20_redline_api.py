@@ -13,6 +13,7 @@ def test_redline_returns_blocked_on_p0_negative_deviation() -> None:
         RedlineCheckRequest(
             project_id="proj-1",
             tender_package_id="tpkg-1",
+            run_active_checks=False,
             parameter_comparisons=[
                 {
                     "parameter_name": "主变容量",
@@ -32,6 +33,7 @@ def test_redline_returns_readiness_missing_items() -> None:
         RedlineCheckRequest(
             project_id="proj-2",
             tender_package_id="tpkg-2",
+            run_active_checks=False,
             findings=[
                 RedlineFinding(
                     rule_id="QUAL-001",

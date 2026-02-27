@@ -13,7 +13,7 @@ from docx.shared import Cm
 from docxtpl import DocxTemplate
 
 from app.core.config import settings
-from app.services.frozen_block_guard import verify_frozen_block_signatures
+from app.services.frozen_block_guard import build_frozen_block_signatures, verify_frozen_block_signatures
 
 _HEADING_STYLES = {"Title1", "Title2", "Title3", "Title4"}
 _PARAGRAPH_STYLES = {"BodyText", "BodyText_Indent", "ClauseText"}
@@ -386,7 +386,7 @@ def render_word_structured(
     style_config: dict | None = None,
     export_pdf: bool = False,
     frozen_signatures: dict[str, str] | None = None,
-    enforce_frozen: bool = False,
+    enforce_frozen: bool = True,
 ) -> tuple[str, str | None]:
     template_root = Path(settings.render_template_dir)
     export_root = Path(settings.render_output_dir)
@@ -411,7 +411,7 @@ def render_word_structured(
     if not isinstance(body_blocks, list) or not isinstance(appendix_blocks, list):
         raise ValueError("content.body and content.appendix must be arrays")
     if enforce_frozen and frozen_signatures is None:
-        raise ValueError("frozen_signatures is required when enforce_frozen=true")
+        frozen_signatures = build_frozen_block_signatures(_content_as_text(content))
     if frozen_signatures is not None:
         verify_frozen_block_signatures(_content_as_text(content), frozen_signatures)
 

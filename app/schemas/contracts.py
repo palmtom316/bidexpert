@@ -816,6 +816,13 @@ class RedlineFinding(BaseModel):
     evidence_refs: list[str] = Field(default_factory=list)
 
 
+class RedlineDurationCheck(BaseModel):
+    committed_duration_days: int
+    start_date: str  # YYYY-MM-DD
+    completion_date: str  # YYYY-MM-DD
+    min_required_duration_days: int | None = None
+
+
 class RedlineCheckRequest(BaseModel):
     project_id: str
     tender_package_id: str
@@ -823,6 +830,8 @@ class RedlineCheckRequest(BaseModel):
     parameter_comparisons: list[RedlineParameterComparison] = Field(default_factory=list)
     required_documents: list[str] = Field(default_factory=list)
     provided_documents: list[str] = Field(default_factory=list)
+    run_active_checks: bool = True
+    duration_check: RedlineDurationCheck | None = None
 
 
 class RedlineReport(BaseModel):

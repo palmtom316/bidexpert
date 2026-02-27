@@ -1,7 +1,7 @@
 {
   "tool_name": "Bash",
-  "tool_input_preview": "{\"command\":\"python -c \\\"\\nimport ast, sys\\nfiles = [\\n    'app/models/tables.py',\\n    'app/schemas/contracts.py', \\n    'app/core/config.py',\\n    'app/services/expert_chunking.py',\\n    'app/service...",
-  "error": "Exit code 127\n/bin/bash: line 24: python: command not found\n\n/bin/bash: line 24: python: command not found",
-  "timestamp": "2026-02-25T08:47:26.259Z",
+  "tool_input_preview": "{\"command\":\".venv/bin/python -m pytest app/tests/test_v20_*.py app/tests/test_g2_*.py app/tests/test_g8_*.py app/tests/test_entity_assembly_templates.py app/tests/test_generation_run_orchestrator.py t...",
+  "error": "Exit code 1\n============================= test session starts ==============================\nplatform linux -- Python 3.12.3, pytest-9.0.2, pluggy-1.6.0 -- /home/palmtom/projects/bidexpert/.venv/bin/python\ncachedir: .pytest_cache\nrootdir: /home/palmtom/projects/bidexpert\nconfigfile: pyproject.toml\nplugins: anyio-4.12.1, cov-7.0.0\ncollecting ... collected 76 items\n\napp/tests/test_v20_addendum_override.py::test_addendum_overrides_mandatory_clause_by_clause_no PASSED [  1%]\napp/tests/test_v20_adden...",
+  "timestamp": "2026-02-27T01:19:43.625Z",
   "retry_count": 1
 }

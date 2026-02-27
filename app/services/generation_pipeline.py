@@ -1048,4 +1048,22 @@ def generate_draft_with_retrieval(
     if response.status == "SUPPORTED" and not review_enabled_for_section:
         set_cache(cache_key=cache_key, payload=response.model_dump(mode="json"), ttl_seconds=3600)
 
+    # G5: Persist chapter evidence links when generation succeeds
+    if response.status == "SUPPORTED" and project_id and retrieval_ctx.merged_evidence_ids:
+        _section_key = _section_context_value(section_context, "section_key", "id")
+        if _section_key:
+            try:
+                from app.db.session import session_scope as _evidence_session_scope
+
+                with _evidence_session_scope() as _ev_db:
+                    persist_chapter_evidence_links(
+                        _ev_db,
+                        project_id=project_id,
+                        chapter_key=_section_key,
+                        evidence_chunk_ids=retrieval_ctx.merged_evidence_ids,
+                    )
+                    _ev_db.commit()
+            except Exception:
+                logger.debug("chapter evidence link persistence skipped", exc_info=True)
+
     return response

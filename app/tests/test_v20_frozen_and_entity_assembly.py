@@ -83,9 +83,9 @@ def test_entity_assembly_renders_bid_asset_pool_tables_via_jinja2() -> None:
             ownership_roles=["leader", "member"],
         )
 
-    assert "| 资产名称 | 归属角色 | 资产类型 | 证据 |" in markdown
+    assert "| 项目名称 | 合同金额(万元) | 工程类型 | 建设单位 | 竣工日期 | 证据 |" in markdown
     assert "110kV 变电站业绩" in markdown
-    assert "leader" in markdown
+    assert "E-P-1" in markdown
 
 
 def test_generation_persists_chapter_evidence_links() -> None:
