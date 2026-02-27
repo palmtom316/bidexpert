@@ -1090,6 +1090,7 @@
         <section class="drawer-section">
           <h4>按工作流程绑定模型</h4>
           <p class="hint">支持不同流程使用不同商用模型；Embedding 下拉仅展示向量模型；未选择时使用系统默认模型（通用为百炼 Qwen3）。</p>
+          <h5>通用流程</h5>
           <div class="form-group">
             <label>投标专家库（抽取模型）</label>
             <select id="byokWorkflowExpert"></select>
@@ -1114,6 +1115,45 @@
             <label>排版与终审（Program Support）</label>
             <select id="byokWorkflowPublish"></select>
           </div>
+          <h5>专家库入库阶段（按你前述质量方案）</h5>
+          <div class="form-group">
+            <label>S1 文档结构补抽（OCR/视觉补抽）</label>
+            <select id="byokExpertIngestVision"></select>
+          </div>
+          <div class="form-group">
+            <label>S2 字段抽取（json_schema strict）</label>
+            <select id="byokExpertIngestField"></select>
+          </div>
+          <div class="form-group">
+            <label>S3 辅助回退抽取（fallback）</label>
+            <select id="byokExpertIngestFallback"></select>
+          </div>
+          <div class="form-group">
+            <label>S4 冲突仲裁与一致性审查</label>
+            <select id="byokExpertIngestReview"></select>
+          </div>
+          <div class="form-group">
+            <label>S5 向量化（Embedding）</label>
+            <select id="byokExpertIngestEmbed"></select>
+          </div>
+          <div class="form-group">
+            <label>S6 检索重排（Rerank）</label>
+            <select id="byokExpertIngestRerank"></select>
+          </div>
+          <h5>专家库生成模型（单独列出）</h5>
+          <div class="form-group">
+            <label>G1 专家库驱动生成（Generate）</label>
+            <select id="byokExpertGenerateMain"></select>
+          </div>
+          <div class="form-group">
+            <label>G2 生成后审查（Review）</label>
+            <select id="byokExpertGenerateReview"></select>
+          </div>
+          <div class="form-group">
+            <label>G3 排版与发布（Program Support）</label>
+            <select id="byokExpertGeneratePublish"></select>
+          </div>
+          <pre id="byokExpertGenerationSummary" class="result-box">专家库生成模型：未配置（使用默认）</pre>
           <div class="form-actions left">
             <button id="btnByokSavePolicy" class="btn btn-primary btn-sm" type="button">
               <i class="ri-save-line"></i> 保存流程策略
@@ -1126,6 +1166,107 @@
           <div id="byokProfileList" class="byok-profile-list">
             <p class="hint">暂无 profile，请先创建。</p>
           </div>
+        </section>
+
+        <section class="drawer-section">
+          <h4>模型用量统计</h4>
+          <div class="form-actions left">
+            <button id="btnRefreshUsage" class="btn btn-outline btn-sm" type="button">
+              <i class="ri-bar-chart-line"></i> 刷新用量
+            </button>
+          </div>
+          <div id="usageStatsContainer" class="result-box">等待加载...</div>
+        </section>
+
+        <section class="drawer-section">
+          <h4>质量控制与模型对比</h4>
+          <div class="form-row">
+            <div class="form-group">
+              <label>对比窗口（天）</label>
+              <select id="byokCompareWindowDays">
+                <option value="7">7 天</option>
+                <option value="30" selected>30 天</option>
+                <option value="90">90 天</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>基线窗口（天）</label>
+              <select id="byokCompareBaselineDays">
+                <option value="30">30 天</option>
+                <option value="90" selected>90 天</option>
+                <option value="180">180 天</option>
+              </select>
+            </div>
+            <div class="form-group action-stack">
+              <button id="btnByokRefreshQuality" class="btn btn-outline btn-sm" type="button">
+                <i class="ri-radar-line"></i> 刷新质量看板
+              </button>
+              <button id="btnByokExportQualityCsv" class="btn btn-outline btn-sm" type="button">
+                <i class="ri-download-2-line"></i> 导出明细 CSV
+              </button>
+            </div>
+          </div>
+          <pre id="byokQualitySummary" class="result-box">等待加载质量指标...</pre>
+          <div id="byokQualityDocTypeContainer" class="result-box">等待加载文档类型明细...</div>
+          <div id="byokQualityIngestStepContainer" class="result-box">等待加载入库阶段明细...</div>
+          <div id="byokModelCompareContainer" class="result-box">等待加载模型对比...</div>
+          <div id="byokModelWindowCompareContainer" class="result-box">等待加载窗口对比...</div>
+        </section>
+
+        <section class="drawer-section">
+          <h4>阈值调参</h4>
+          <p class="hint">修改后会写入 runtime 阈值文件，不会覆盖默认模板。</p>
+          <div class="form-row">
+            <div class="form-group">
+              <label>low_confidence</label>
+              <input id="thresholdLowConfidence" type="number" min="0" max="1" step="0.01" />
+            </div>
+            <div class="form-group">
+              <label>strong_review_confidence</label>
+              <input id="thresholdStrongReviewConfidence" type="number" min="0" max="1" step="0.01" />
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>max_section_pages</label>
+              <input id="thresholdMaxSectionPages" type="number" min="1" step="1" />
+            </div>
+            <div class="form-group">
+              <label>max_chunk_tokens</label>
+              <input id="thresholdMaxChunkTokens" type="number" min="200" step="1" />
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>chunk_overlap_tokens</label>
+              <input id="thresholdChunkOverlapTokens" type="number" min="0" step="1" />
+            </div>
+          </div>
+          <div class="form-actions left">
+            <button id="btnByokLoadExpertThresholds" class="btn btn-outline btn-sm" type="button">
+              <i class="ri-download-2-line"></i> 加载阈值
+            </button>
+            <button id="btnByokLoadGoLiveThresholds" class="btn btn-outline btn-sm" type="button">
+              <i class="ri-calendar-check-line"></i> 加载上线值
+            </button>
+            <button id="btnByokSuggestExpertThresholds" class="btn btn-outline btn-sm" type="button">
+              <i class="ri-lightbulb-line"></i> 生成建议值
+            </button>
+            <button id="btnByokApplySuggestedThresholds" class="btn btn-outline btn-sm" type="button">
+              <i class="ri-magic-line"></i> 回填建议值
+            </button>
+            <button id="btnByokSaveGoLiveThresholds" class="btn btn-outline btn-sm" type="button">
+              <i class="ri-draft-line"></i> 保存上线值
+            </button>
+            <button id="btnByokPublishGoLiveThresholds" class="btn btn-outline btn-sm" type="button">
+              <i class="ri-rocket-line"></i> 一键发布上线值
+            </button>
+            <button id="btnByokSaveExpertThresholds" class="btn btn-primary btn-sm" type="button">
+              <i class="ri-save-line"></i> 保存阈值
+            </button>
+          </div>
+          <div id="byokThresholdSuggestTable" class="result-box">等待建议值生成...</div>
+          <pre id="byokThresholdResult" class="result-box">等待阈值加载...</pre>
         </section>
 
         <section class="drawer-section">
@@ -1149,7 +1290,7 @@
 
   <div id="toastContainer" class="toast-container" role="log" aria-live="assertive" aria-label="通知消息"></div>
 
-  <script src="./app.js?v=release/V1.2"></script>
+  <script src="/ui/app.js?v=release/V1.2"></script>
 </body>
 
 </html>

@@ -1545,6 +1545,38 @@ select {
   gap: 0.35rem;
 }
 
+.usage-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+}
+
+.usage-table th,
+.usage-table td {
+  border-bottom: 1px solid var(--line-soft);
+  padding: 0.36rem 0.42rem;
+  text-align: left;
+  color: var(--text-main);
+  vertical-align: top;
+}
+
+.usage-table th {
+  color: var(--text-dim);
+  font-weight: 600;
+}
+
+.usage-table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.usage-total {
+  margin-top: 0.5rem;
+  text-align: right;
+  font-size: 0.76rem;
+  color: var(--text-dim);
+}
+
 .statusbar {
   height: 34px;
   border-top: 1px solid var(--line-soft);

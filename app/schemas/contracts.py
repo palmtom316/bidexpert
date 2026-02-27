@@ -437,6 +437,8 @@ class ProjectModelPolicyUpsertRequest(BaseModel):
     rerank_profile_id: str | None = None
     query_rewrite_profile_id: str | None = None
     program_support_profile_id: str | None = None
+    expert_ingest_profiles: dict[str, str | None] | None = None
+    expert_generation_profiles: dict[str, str | None] | None = None
     enable_review: bool = True
     token_budget_total: int | None = None
     concurrency_limits: dict | None = None
@@ -451,6 +453,8 @@ class ProjectModelPolicyResponse(BaseModel):
     rerank_profile_id: str | None = None
     query_rewrite_profile_id: str | None = None
     program_support_profile_id: str | None = None
+    expert_ingest_profiles: dict[str, str | None] = Field(default_factory=dict)
+    expert_generation_profiles: dict[str, str | None] = Field(default_factory=dict)
     enable_review: bool
     token_budget_total: int
     token_budget_used: int

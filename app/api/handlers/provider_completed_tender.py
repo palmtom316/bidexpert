@@ -41,6 +41,22 @@ DEFAULT_CONCURRENCY_LIMITS = {
     "program_support": 1,
 }
 
+_POLICY_META_EXPERT_INGEST_KEY = "__expert_ingest_profiles"
+_POLICY_META_EXPERT_GENERATION_KEY = "__expert_generation_profiles"
+_EXPERT_INGEST_PROFILE_KEYS = (
+    "ocr_vision",
+    "field_extract",
+    "field_extract_fallback",
+    "conflict_review",
+    "embedding",
+    "rerank",
+)
+_EXPERT_GENERATION_PROFILE_KEYS = (
+    "expert_generate",
+    "expert_review",
+    "expert_program_support",
+)
+
 
 def profile_to_item(profile) -> ProviderProfileItem:
     return ProviderProfileItem(
@@ -103,11 +119,42 @@ def _policy_changed_fields(payload: ProjectModelPolicyUpsertRequest) -> list[str
         fields.append("token_budget_total")
     if payload.concurrency_limits is not None:
         fields.append("concurrency_limits")
+    if payload.expert_ingest_profiles is not None:
+        fields.append("expert_ingest_profiles")
+    if payload.expert_generation_profiles is not None:
+        fields.append("expert_generation_profiles")
     fields.append("enable_review")
     return fields
 
 
+def _policy_profile_map(payload: object, allowed_keys: tuple[str, ...]) -> dict[str, str | None]:
+    result: dict[str, str | None] = {key: None for key in allowed_keys}
+    if not isinstance(payload, dict):
+        return result
+    for key in allowed_keys:
+        value = payload.get(key)
+        if isinstance(value, str):
+            token = value.strip()
+            result[key] = token or None
+        elif value is None:
+            result[key] = None
+    return result
+
+
+def _policy_limits_and_meta(raw_limits: object) -> tuple[dict, dict[str, str | None], dict[str, str | None]]:
+    limits_payload = raw_limits if isinstance(raw_limits, dict) else {}
+    limits = {k: v for k, v in limits_payload.items() if not str(k).startswith("__")}
+    cleaned_limits = limits or dict(DEFAULT_CONCURRENCY_LIMITS)
+    ingest_profiles = _policy_profile_map(limits_payload.get(_POLICY_META_EXPERT_INGEST_KEY), _EXPERT_INGEST_PROFILE_KEYS)
+    generation_profiles = _policy_profile_map(
+        limits_payload.get(_POLICY_META_EXPERT_GENERATION_KEY),
+        _EXPERT_GENERATION_PROFILE_KEYS,
+    )
+    return cleaned_limits, ingest_profiles, generation_profiles
+
+
 def _policy_to_response(policy) -> ProjectModelPolicyResponse:
+    limits, ingest_profiles, generation_profiles = _policy_limits_and_meta(policy.concurrency_limits)
     return ProjectModelPolicyResponse(
         project_id=str(policy.project_id),
         extract_profile_id=str(policy.extract_profile_id) if policy.extract_profile_id else None,
@@ -117,10 +164,12 @@ def _policy_to_response(policy) -> ProjectModelPolicyResponse:
         rerank_profile_id=str(policy.rerank_profile_id) if policy.rerank_profile_id else None,
         query_rewrite_profile_id=str(policy.query_rewrite_profile_id) if policy.query_rewrite_profile_id else None,
         program_support_profile_id=str(policy.program_support_profile_id) if policy.program_support_profile_id else None,
+        expert_ingest_profiles=ingest_profiles,
+        expert_generation_profiles=generation_profiles,
         enable_review=policy.enable_review,
         token_budget_total=int(policy.token_budget_total),
         token_budget_used=int(policy.token_budget_used),
-        concurrency_limits=policy.concurrency_limits or DEFAULT_CONCURRENCY_LIMITS,
+        concurrency_limits=limits,
     )
 
 
@@ -306,6 +355,8 @@ def put_model_policy_handler(
             rerank_profile_id=payload.rerank_profile_id,
             query_rewrite_profile_id=payload.query_rewrite_profile_id,
             program_support_profile_id=payload.program_support_profile_id,
+            expert_ingest_profiles=payload.expert_ingest_profiles,
+            expert_generation_profiles=payload.expert_generation_profiles,
             enable_review=payload.enable_review,
             token_budget_total=payload.token_budget_total,
             concurrency_limits=payload.concurrency_limits,

@@ -93,3 +93,63 @@ def test_resolve_profile_for_task_uses_rerank_profile_id(monkeypatch) -> None:
     assert resolved.profile_id == str(profile_id)
     assert resolved.provider == "qwen"
     assert resolved.model == "qwen3.5"
+
+
+def test_put_model_policy_forwards_expert_stage_profiles(monkeypatch) -> None:
+    project_id = str(uuid.uuid4())
+    extract_profile_id = str(uuid.uuid4())
+    review_profile_id = str(uuid.uuid4())
+    captured: dict[str, object] = {}
+
+    ingest_profiles = {
+        "ocr_vision": extract_profile_id,
+        "field_extract": None,
+    }
+    generation_profiles = {
+        "expert_generate": extract_profile_id,
+        "expert_review": review_profile_id,
+        "expert_program_support": None,
+    }
+
+    def _fake_upsert(**kwargs):  # noqa: ANN003
+        captured.update(kwargs)
+        return SimpleNamespace(
+            project_id=uuid.UUID(project_id),
+            extract_profile_id=None,
+            generate_profile_id=None,
+            review_profile_id=None,
+            embed_profile_id=None,
+            query_rewrite_profile_id=None,
+            program_support_profile_id=None,
+            rerank_profile_id=None,
+            enable_review=True,
+            token_budget_total=500000,
+            token_budget_used=0,
+            concurrency_limits={
+                "extract": 2,
+                "__expert_ingest_profiles": {
+                    "ocr_vision": extract_profile_id,
+                    "field_extract": None,
+                },
+                "__expert_generation_profiles": {
+                    "expert_generate": extract_profile_id,
+                    "expert_review": review_profile_id,
+                    "expert_program_support": None,
+                },
+            },
+        )
+
+    monkeypatch.setattr(routes, "upsert_project_model_policy", _fake_upsert)
+
+    payload = ProjectModelPolicyUpsertRequest(
+        expert_ingest_profiles=ingest_profiles,
+        expert_generation_profiles=generation_profiles,
+    )
+    response = routes.put_model_policy_api(project_id, payload)
+
+    assert captured["expert_ingest_profiles"] == ingest_profiles
+    assert captured["expert_generation_profiles"] == generation_profiles
+    assert response.expert_ingest_profiles["ocr_vision"] == extract_profile_id
+    assert response.expert_generation_profiles["expert_review"] == review_profile_id
+    assert "__expert_ingest_profiles" not in response.concurrency_limits
+    assert "__expert_generation_profiles" not in response.concurrency_limits

@@ -61,6 +61,13 @@ _STRUCTURED_CATEGORY_MAP = {
 }
 
 _CONVERSION_STAGE_DIR = "08_conversion_sessions"
+_THRESHOLD_KEYS: tuple[str, ...] = (
+    "low_confidence",
+    "strong_review_confidence",
+    "max_section_pages",
+    "max_chunk_tokens",
+    "chunk_overlap_tokens",
+)
 
 
 @dataclass
@@ -313,19 +320,30 @@ def _write_pipeline_run_log(
     _save_json(run_dir / f"{stamp}_run01.json", payload)
 
 
-def _load_thresholds(layout) -> dict[str, float]:
-    defaults: dict[str, float] = {
+def _threshold_defaults() -> dict[str, float]:
+    return {
         "low_confidence": 0.60,
         "strong_review_confidence": 0.75,
         "max_section_pages": 20.0,
         "max_chunk_tokens": float(settings.expert_chunk_max_tokens),
         "chunk_overlap_tokens": float(settings.expert_chunk_overlap_tokens),
     }
-    config_path = layout.root / "00_config" / "pipeline" / "thresholds.v1.yaml"
-    if not config_path.exists():
-        return defaults
 
-    for raw_line in config_path.read_text(encoding="utf-8").splitlines():
+
+def _threshold_paths(layout) -> tuple[Path, Path]:
+    pipeline_dir = layout.root / "00_config" / "pipeline"
+    return pipeline_dir / "thresholds.v1.yaml", pipeline_dir / "thresholds.runtime.yaml"
+
+
+def _threshold_go_live_path(layout) -> Path:
+    pipeline_dir = layout.root / "00_config" / "pipeline"
+    return pipeline_dir / "thresholds.golive.yaml"
+
+
+def _apply_threshold_file(defaults: dict[str, float], path: Path) -> None:
+    if not path.exists():
+        return
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
         line = raw_line.strip()
         if not line or line.startswith("#") or ":" not in line:
             continue
@@ -338,7 +356,128 @@ def _load_thresholds(layout) -> dict[str, float]:
             defaults[key] = float(value)
         except ValueError:
             continue
+
+
+def _load_thresholds(layout) -> dict[str, float]:
+    defaults = _threshold_defaults()
+    base_path, runtime_path = _threshold_paths(layout)
+    _apply_threshold_file(defaults, base_path)
+    _apply_threshold_file(defaults, runtime_path)
     return defaults
+
+
+def _load_go_live_thresholds(layout) -> dict[str, float]:
+    defaults = _threshold_defaults()
+    base_path, _ = _threshold_paths(layout)
+    go_live_path = _threshold_go_live_path(layout)
+    _apply_threshold_file(defaults, base_path)
+    _apply_threshold_file(defaults, go_live_path)
+    return defaults
+
+
+def _validate_threshold_updates(payload: dict[str, float]) -> dict[str, float]:
+    if not isinstance(payload, dict):
+        raise ValueError("threshold updates must be an object")
+    normalized: dict[str, float] = {}
+    for key, raw_value in payload.items():
+        token = str(key).strip()
+        if token not in _THRESHOLD_KEYS:
+            raise ValueError(f"unsupported threshold key: {token}")
+        try:
+            value = float(raw_value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"invalid threshold value for {token}") from exc
+        normalized[token] = value
+
+    low = normalized.get("low_confidence")
+    if low is not None and not 0.0 <= low <= 1.0:
+        raise ValueError("low_confidence must be in [0,1]")
+    strong = normalized.get("strong_review_confidence")
+    if strong is not None and not 0.0 <= strong <= 1.0:
+        raise ValueError("strong_review_confidence must be in [0,1]")
+    pages = normalized.get("max_section_pages")
+    if pages is not None and pages < 1:
+        raise ValueError("max_section_pages must be >= 1")
+    max_tokens = normalized.get("max_chunk_tokens")
+    if max_tokens is not None and max_tokens < 200:
+        raise ValueError("max_chunk_tokens must be >= 200")
+    overlap = normalized.get("chunk_overlap_tokens")
+    if overlap is not None and overlap < 0:
+        raise ValueError("chunk_overlap_tokens must be >= 0")
+    if max_tokens is not None and overlap is not None and overlap >= max_tokens:
+        raise ValueError("chunk_overlap_tokens must be less than max_chunk_tokens")
+    return normalized
+
+
+def get_expert_library_thresholds() -> dict[str, object]:
+    layout = ensure_expert_library_layout()
+    sync_enterprise_config_assets(layout)
+    values = _load_thresholds(layout)
+    base_path, runtime_path = _threshold_paths(layout)
+    return {
+        "values": values,
+        "source": {
+            "base_path": str(base_path),
+            "runtime_path": str(runtime_path),
+            "runtime_exists": runtime_path.exists(),
+        },
+    }
+
+
+def get_expert_library_go_live_thresholds() -> dict[str, object]:
+    layout = ensure_expert_library_layout()
+    sync_enterprise_config_assets(layout)
+    values = _load_go_live_thresholds(layout)
+    base_path, _ = _threshold_paths(layout)
+    go_live_path = _threshold_go_live_path(layout)
+    return {
+        "values": values,
+        "source": {
+            "base_path": str(base_path),
+            "go_live_path": str(go_live_path),
+            "go_live_exists": go_live_path.exists(),
+        },
+    }
+
+
+def update_expert_library_thresholds(updates: dict[str, float]) -> dict[str, object]:
+    layout = ensure_expert_library_layout()
+    sync_enterprise_config_assets(layout)
+    normalized_updates = _validate_threshold_updates(updates)
+    current = _load_thresholds(layout)
+    current.update(normalized_updates)
+    _, runtime_path = _threshold_paths(layout)
+    runtime_path.parent.mkdir(parents=True, exist_ok=True)
+    lines = [f"{key}: {current[key]}" for key in _THRESHOLD_KEYS]
+    runtime_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return get_expert_library_thresholds()
+
+
+def update_expert_library_go_live_thresholds(updates: dict[str, float]) -> dict[str, object]:
+    layout = ensure_expert_library_layout()
+    sync_enterprise_config_assets(layout)
+    normalized_updates = _validate_threshold_updates(updates)
+    current = _load_go_live_thresholds(layout)
+    current.update(normalized_updates)
+    go_live_path = _threshold_go_live_path(layout)
+    go_live_path.parent.mkdir(parents=True, exist_ok=True)
+    lines = [f"{key}: {current[key]}" for key in _THRESHOLD_KEYS]
+    go_live_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return get_expert_library_go_live_thresholds()
+
+
+def publish_expert_library_go_live_thresholds() -> dict[str, object]:
+    layout = ensure_expert_library_layout()
+    sync_enterprise_config_assets(layout)
+    go_live_path = _threshold_go_live_path(layout)
+    if not go_live_path.exists():
+        raise ValueError("go_live thresholds not found")
+    published = _load_go_live_thresholds(layout)
+    _, runtime_path = _threshold_paths(layout)
+    runtime_path.parent.mkdir(parents=True, exist_ok=True)
+    lines = [f"{key}: {published[key]}" for key in _THRESHOLD_KEYS]
+    runtime_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return get_expert_library_thresholds()
 
 
 def _fallback_chunks_from_blocks(
@@ -653,12 +792,44 @@ def _ingest_historical_with_blocks(
             db.flush()
             expert_doc_id = expert_doc.id
 
+            key_fields_filled = 0
+            if doc_metadata.voltage_level_kv is not None:
+                key_fields_filled += 1
+            if doc_metadata.project_type:
+                key_fields_filled += 1
+            if doc_metadata.region:
+                key_fields_filled += 1
+            if doc_metadata.core_equipment:
+                key_fields_filled += 1
+            key_field_completeness = round(key_fields_filled / 4.0, 4)
+
+            section_rows = merged.get("sections", []) if isinstance(merged, dict) else []
+            total_sections = len(section_rows) if isinstance(section_rows, list) else 0
+            covered_sections = 0
+            if isinstance(section_rows, list):
+                for section in section_rows:
+                    blocks = section.get("blocks") if isinstance(section, dict) else []
+                    if isinstance(blocks, list) and blocks:
+                        covered_sections += 1
+            evidence_coverage = round((covered_sections / total_sections) if total_sections else 0.0, 4)
+
+            quality_signals = {
+                "schema_passed": bool(total_sections > 0),
+                "key_field_completeness": key_field_completeness,
+                "fallback_triggered": "no_section_chunks_fallback_to_block_chunks" in set(warnings),
+                "manual_review_required": bool(exception_queue),
+                "exception_count": len(exception_queue),
+                "evidence_coverage": evidence_coverage,
+            }
+            ingest_metadata = dict(doc_metadata.to_dict())
+            ingest_metadata["quality_signals"] = quality_signals
+
             # v1.4 — Create KBIngestRun for state tracking
             kb_run = KBIngestRun(
                 expert_doc_id=expert_doc_id,
                 filename=filename,
                 current_step=KBIngestStep.CHUNKED,
-                metadata_json=doc_metadata.to_dict(),
+                metadata_json=ingest_metadata,
             )
             db.add(kb_run)
 

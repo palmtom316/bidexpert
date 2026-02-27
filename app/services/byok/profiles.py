@@ -35,6 +35,31 @@ from app.services.model_quality import evaluate_compliance_quality
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_CONCURRENCY_LIMITS = {
+    "extract": 2,
+    "generate": 3,
+    "review": 2,
+    "embed": 2,
+    "rerank": 2,
+    "query_rewrite": 2,
+    "program_support": 1,
+}
+_POLICY_META_EXPERT_INGEST_KEY = "__expert_ingest_profiles"
+_POLICY_META_EXPERT_GENERATION_KEY = "__expert_generation_profiles"
+_EXPERT_INGEST_PROFILE_KEYS = (
+    "ocr_vision",
+    "field_extract",
+    "field_extract_fallback",
+    "conflict_review",
+    "embedding",
+    "rerank",
+)
+_EXPERT_GENERATION_PROFILE_KEYS = (
+    "expert_generate",
+    "expert_review",
+    "expert_program_support",
+)
+
 
 def _try_uuid(value: str) -> uuid.UUID:
     try:
@@ -343,6 +368,8 @@ def upsert_project_model_policy(
     rerank_profile_id: str | None,
     query_rewrite_profile_id: str | None,
     program_support_profile_id: str | None,
+    expert_ingest_profiles: dict[str, str | None] | None = None,
+    expert_generation_profiles: dict[str, str | None] | None = None,
     enable_review: bool,
     token_budget_total: int | None,
     concurrency_limits: dict | None,
@@ -351,6 +378,28 @@ def upsert_project_model_policy(
 
     def _opt_uuid(value: str | None) -> uuid.UUID | None:
         return _try_uuid(value) if value else None
+
+    def _normalize_profile_binding_map(
+        payload: dict[str, str | None] | None,
+        *,
+        allowed_keys: tuple[str, ...],
+    ) -> dict[str, str | None] | None:
+        if payload is None:
+            return None
+        if not isinstance(payload, dict):
+            raise ValueError("expert profile bindings must be an object")
+        normalized: dict[str, str | None] = {}
+        for key in allowed_keys:
+            value = payload.get(key)
+            if value is None:
+                normalized[key] = None
+                continue
+            token = str(value).strip()
+            if not token:
+                normalized[key] = None
+                continue
+            normalized[key] = str(_opt_uuid(token))
+        return normalized
 
     with session_scope() as db:
         stmt = select(ProjectModelPolicy).where(ProjectModelPolicy.project_id == project_uuid)
@@ -368,8 +417,29 @@ def upsert_project_model_policy(
         policy.enable_review = enable_review
         if token_budget_total is not None:
             policy.token_budget_total = max(0, int(token_budget_total))
+        merged_limits: dict = {}
+        if isinstance(policy.concurrency_limits, dict):
+            merged_limits.update(policy.concurrency_limits)
+        if not merged_limits:
+            merged_limits.update(DEFAULT_CONCURRENCY_LIMITS)
         if concurrency_limits:
-            policy.concurrency_limits = concurrency_limits
+            for key, value in concurrency_limits.items():
+                if str(key).startswith("__"):
+                    continue
+                merged_limits[str(key)] = value
+        normalized_ingest = _normalize_profile_binding_map(
+            expert_ingest_profiles,
+            allowed_keys=_EXPERT_INGEST_PROFILE_KEYS,
+        )
+        if normalized_ingest is not None:
+            merged_limits[_POLICY_META_EXPERT_INGEST_KEY] = normalized_ingest
+        normalized_generation = _normalize_profile_binding_map(
+            expert_generation_profiles,
+            allowed_keys=_EXPERT_GENERATION_PROFILE_KEYS,
+        )
+        if normalized_generation is not None:
+            merged_limits[_POLICY_META_EXPERT_GENERATION_KEY] = normalized_generation
+        policy.concurrency_limits = merged_limits
         policy.updated_at = datetime.now(UTC)
         db.add(policy)
         db.commit()

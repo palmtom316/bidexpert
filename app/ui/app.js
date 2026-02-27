@@ -2440,6 +2440,20 @@ const ByokSettings = {
     $("#byokProfileList").addEventListener("click", guarded((event) => this.onProfileAction(event)));
     $("#btnByokTestOcrSettings").addEventListener("click", guarded(() => this.testOcrSettings()));
     $("#btnByokSaveOcrSettings").addEventListener("click", () => this.saveOcrSettings());
+    $("#btnByokRefreshQuality").addEventListener("click", guarded(() => this.loadQualityDashboard()));
+    $("#btnByokExportQualityCsv").addEventListener("click", guarded(() => this.exportQualityCsv()));
+    $("#btnByokLoadExpertThresholds").addEventListener("click", guarded(() => this.loadExpertThresholds()));
+    $("#btnByokLoadGoLiveThresholds").addEventListener("click", guarded(() => this.loadExpertGoLiveThresholds()));
+    $("#btnByokSuggestExpertThresholds").addEventListener("click", guarded(() => this.loadExpertThresholdRecommendations()));
+    $("#btnByokApplySuggestedThresholds").addEventListener("click", () => this.applySuggestedThresholds());
+    $("#btnByokSaveGoLiveThresholds").addEventListener("click", guarded(() => this.saveExpertGoLiveThresholds()));
+    $("#btnByokPublishGoLiveThresholds").addEventListener("click", guarded(() => this.publishExpertGoLiveThresholds()));
+    $("#btnByokSaveExpertThresholds").addEventListener("click", guarded(() => this.saveExpertThresholds()));
+    this.roleSelectIds().forEach((selector) => {
+      const select = $(selector);
+      if (!select) return;
+      select.addEventListener("change", () => this.renderExpertGenerationSummary());
+    });
     document.addEventListener("keydown", (event) => {
       if (event.key === "Escape" && !$("#drawerByok").classList.contains("hidden")) this.close();
     });
@@ -2447,6 +2461,7 @@ const ByokSettings = {
     this.applyQwen3Preset();
     this.syncOcrSettingsInputs();
     this.renderProfileOptions();
+    this.thresholdSuggestionCache = [];
     $("#btnRefreshUsage").addEventListener("click", guarded(() => this.loadUsageStats()));
   },
 
@@ -2457,6 +2472,10 @@ const ByokSettings = {
     $("#drawerByok").classList.remove("hidden");
     await this.loadProfiles();
     await this.loadPolicy();
+    await this.loadExpertThresholds();
+    await this.loadExpertGoLiveThresholds();
+    await this.loadExpertThresholdRecommendations();
+    await this.loadQualityDashboard();
     this.loadUsageStats(); // Load stats on open, but non-blocking
   },
 
@@ -2603,7 +2622,28 @@ const ByokSettings = {
       "#byokWorkflowBid",
       "#byokWorkflowReview",
       "#byokWorkflowPublish",
+      ...Object.values(this.expertIngestSelectMap()),
+      ...Object.values(this.expertGenerationSelectMap()),
     ];
+  },
+
+  expertIngestSelectMap() {
+    return {
+      ocr_vision: "#byokExpertIngestVision",
+      field_extract: "#byokExpertIngestField",
+      field_extract_fallback: "#byokExpertIngestFallback",
+      conflict_review: "#byokExpertIngestReview",
+      embedding: "#byokExpertIngestEmbed",
+      rerank: "#byokExpertIngestRerank",
+    };
+  },
+
+  expertGenerationSelectMap() {
+    return {
+      expert_generate: "#byokExpertGenerateMain",
+      expert_review: "#byokExpertGenerateReview",
+      expert_program_support: "#byokExpertGeneratePublish",
+    };
   },
 
   isEmbeddingProfile(profile) {
@@ -2618,13 +2658,42 @@ const ByokSettings = {
   },
 
   profilesForRole(selectId, profiles) {
-    if (selectId !== "#byokWorkflowEmbed") return profiles;
-    return profiles.filter((item) => this.isEmbeddingProfile(item));
+    if (selectId === "#byokWorkflowEmbed" || selectId === "#byokExpertIngestEmbed") {
+      return profiles.filter((item) => this.isEmbeddingProfile(item));
+    }
+    return profiles;
+  },
+
+  profileLabelById(profileId) {
+    const token = String(profileId || "").trim();
+    if (!token) return "系统默认";
+    const profile = (state.byokProfiles || []).find((item) => item.id === token);
+    if (!profile) return `已配置(${token.slice(0, 8)}...)`;
+    return `${profile.provider}:${profile.default_model}`;
+  },
+
+  renderExpertGenerationSummary(selection = null) {
+    const container = $("#byokExpertGenerationSummary");
+    if (!container) return;
+
+    const selectionMap = selection || {
+      expert_generate: $("#byokExpertGenerateMain")?.value || "",
+      expert_review: $("#byokExpertGenerateReview")?.value || "",
+      expert_program_support: $("#byokExpertGeneratePublish")?.value || "",
+    };
+    const lines = [
+      "专家库生成模型清单",
+      `- G1 生成: ${this.profileLabelById(selectionMap.expert_generate)}`,
+      `- G2 审查: ${this.profileLabelById(selectionMap.expert_review)}`,
+      `- G3 排版: ${this.profileLabelById(selectionMap.expert_program_support)}`,
+    ];
+    container.textContent = lines.join("\n");
   },
 
   renderProfileOptions(selected = {}) {
     const defaultLabelByRole = {
       "#byokWorkflowEmbed": "系统默认（Embedding 默认链路）",
+      "#byokExpertIngestEmbed": "系统默认（Embedding 默认链路）",
     };
     const defaultLabel = "系统默认（百炼 qwen3）";
     const profiles = state.byokProfiles || [];
@@ -2654,6 +2723,7 @@ const ByokSettings = {
         select.value = "";
       }
     });
+    this.renderExpertGenerationSummary();
 
     const list = $("#byokProfileList");
     if (!profiles.length) {
@@ -2783,8 +2853,22 @@ const ByokSettings = {
         "#byokWorkflowBid": "",
         "#byokWorkflowReview": "",
         "#byokWorkflowPublish": "",
+        "#byokExpertIngestVision": "",
+        "#byokExpertIngestField": "",
+        "#byokExpertIngestFallback": "",
+        "#byokExpertIngestReview": "",
+        "#byokExpertIngestEmbed": "",
+        "#byokExpertIngestRerank": "",
+        "#byokExpertGenerateMain": "",
+        "#byokExpertGenerateReview": "",
+        "#byokExpertGeneratePublish": "",
       });
       $("#byokResult").textContent = "当前项目尚未绑定流程模型策略，使用默认（通用：百炼 qwen3；Embedding：系统默认链路）";
+      this.renderExpertGenerationSummary({
+        expert_generate: "",
+        expert_review: "",
+        expert_program_support: "",
+      });
       return;
     }
     if (!response.ok) {
@@ -2792,6 +2876,8 @@ const ByokSettings = {
       throw new Error(text || `加载策略失败: ${response.status}`);
     }
     const policy = await response.json();
+    const ingestProfiles = policy.expert_ingest_profiles || {};
+    const generationProfiles = policy.expert_generation_profiles || {};
     this.renderProfileOptions({
       "#byokWorkflowExpert": policy.extract_profile_id || "",
       "#byokWorkflowEmbed": policy.embed_profile_id || "",
@@ -2799,7 +2885,17 @@ const ByokSettings = {
       "#byokWorkflowBid": policy.generate_profile_id || "",
       "#byokWorkflowReview": policy.review_profile_id || "",
       "#byokWorkflowPublish": policy.program_support_profile_id || "",
+      "#byokExpertIngestVision": ingestProfiles.ocr_vision || "",
+      "#byokExpertIngestField": ingestProfiles.field_extract || "",
+      "#byokExpertIngestFallback": ingestProfiles.field_extract_fallback || "",
+      "#byokExpertIngestReview": ingestProfiles.conflict_review || "",
+      "#byokExpertIngestEmbed": ingestProfiles.embedding || "",
+      "#byokExpertIngestRerank": ingestProfiles.rerank || "",
+      "#byokExpertGenerateMain": generationProfiles.expert_generate || "",
+      "#byokExpertGenerateReview": generationProfiles.expert_review || "",
+      "#byokExpertGeneratePublish": generationProfiles.expert_program_support || "",
     });
+    this.renderExpertGenerationSummary(generationProfiles);
     $("#byokResult").textContent = JSON.stringify(policy, null, 2);
   },
 
@@ -2811,6 +2907,19 @@ const ByokSettings = {
     const profileBid = $("#byokWorkflowBid").value || null;
     const profileReview = $("#byokWorkflowReview").value || null;
     const profilePublish = $("#byokWorkflowPublish").value || null;
+    const expertIngestProfiles = {
+      ocr_vision: $("#byokExpertIngestVision").value || null,
+      field_extract: $("#byokExpertIngestField").value || null,
+      field_extract_fallback: $("#byokExpertIngestFallback").value || null,
+      conflict_review: $("#byokExpertIngestReview").value || null,
+      embedding: $("#byokExpertIngestEmbed").value || null,
+      rerank: $("#byokExpertIngestRerank").value || null,
+    };
+    const expertGenerationProfiles = {
+      expert_generate: $("#byokExpertGenerateMain").value || null,
+      expert_review: $("#byokExpertGenerateReview").value || null,
+      expert_program_support: $("#byokExpertGeneratePublish").value || null,
+    };
 
     const payload = {
       extract_profile_id: profileExpert,
@@ -2819,6 +2928,8 @@ const ByokSettings = {
       generate_profile_id: profileBid,
       review_profile_id: profileReview,
       program_support_profile_id: profilePublish,
+      expert_ingest_profiles: expertIngestProfiles,
+      expert_generation_profiles: expertGenerationProfiles,
       enable_review: true,
     };
 
@@ -2828,11 +2939,444 @@ const ByokSettings = {
       body: JSON.stringify(payload),
     });
     $("#byokResult").textContent = JSON.stringify(res, null, 2);
+    this.renderExpertGenerationSummary(expertGenerationProfiles);
     Toast.success("流程模型策略已保存");
+  },
+
+  qualityScopeParams() {
+    const params = new URLSearchParams();
+    const projectId = (state.projectId || "").trim();
+    if (projectId) params.set("project_id", projectId);
+    const industryTag = (state.industryTag || "").trim();
+    if (industryTag) params.set("industry_tag", industryTag);
+    return params;
+  },
+
+  renderModelCompare(items = []) {
+    const container = $("#byokModelCompareContainer");
+    if (!container) return;
+    if (!Array.isArray(items) || !items.length) {
+      container.textContent = "暂无模型调用数据。";
+      return;
+    }
+    const rows = items.map((item) => `
+      <tr>
+        <td>${escapeHtml(item.model_name || "-")}</td>
+        <td>${escapeHtml(item.purpose || "-")}</td>
+        <td class="num">${Number(item.call_count || 0).toLocaleString()}</td>
+        <td class="num">${(Number(item.success_rate || 0) * 100).toFixed(1)}%</td>
+        <td>${escapeHtml(item.top_failure_type || "-")}</td>
+        <td class="num">${Number(item.failure_count || 0).toLocaleString()}</td>
+        <td class="num">${(Number(item.fallback_rate || 0) * 100).toFixed(1)}%</td>
+        <td class="num">${Number(item.avg_latency_ms || 0).toFixed(1)}</td>
+        <td class="num">${Number(item.avg_total_tokens || 0).toFixed(1)}</td>
+        <td class="num">$${Number(item.estimated_cost_usd || 0).toFixed(4)}</td>
+      </tr>
+    `).join("");
+    container.innerHTML = `
+      <table class="usage-table">
+        <thead>
+          <tr>
+            <th>模型</th>
+            <th>用途</th>
+            <th style="text-align:right">调用数</th>
+            <th style="text-align:right">成功率</th>
+            <th>主要失败类型</th>
+            <th style="text-align:right">失败数</th>
+            <th style="text-align:right">回退率</th>
+            <th style="text-align:right">平均延迟(ms)</th>
+            <th style="text-align:right">平均总Tokens</th>
+            <th style="text-align:right">估算成本(USD)</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    `;
+  },
+
+  renderModelWindowCompare(items = []) {
+    const container = $("#byokModelWindowCompareContainer");
+    if (!container) return;
+    if (!Array.isArray(items) || !items.length) {
+      container.textContent = "暂无窗口对比数据。";
+      return;
+    }
+    const rows = items.map((item) => `
+      <tr>
+        <td>${escapeHtml(item.model_name || "-")}</td>
+        <td>${escapeHtml(item.purpose || "-")}</td>
+        <td class="num">${(Number(item.delta_success_rate || 0) * 100).toFixed(2)}%</td>
+        <td class="num">${Number(item.delta_avg_latency_ms || 0).toFixed(2)}</td>
+        <td class="num">$${Number(item.delta_estimated_cost_usd || 0).toFixed(4)}</td>
+        <td>${escapeHtml(item.current_top_failure_type || "-")} / ${escapeHtml(item.baseline_top_failure_type || "-")}</td>
+      </tr>
+    `).join("");
+    container.innerHTML = `
+      <table class="usage-table">
+        <thead>
+          <tr>
+            <th>模型</th>
+            <th>用途</th>
+            <th style="text-align:right">成功率变化</th>
+            <th style="text-align:right">延迟变化(ms)</th>
+            <th style="text-align:right">成本变化(USD)</th>
+            <th>失败类型(当前/基线)</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    `;
+  },
+
+  renderDocTypeBreakdown(items = []) {
+    const container = $("#byokQualityDocTypeContainer");
+    if (!container) return;
+    if (!Array.isArray(items) || !items.length) {
+      container.textContent = "暂无文档类型明细。";
+      return;
+    }
+    const rows = items.map((item) => `
+      <tr>
+        <td>${escapeHtml(item.doc_type || "-")}</td>
+        <td class="num">${Number(item.doc_count || 0).toLocaleString()}</td>
+        <td class="num">${Number(item.chunk_count || 0).toLocaleString()}</td>
+        <td class="num">${Number(item.avg_quality_score || 0).toFixed(2)}</td>
+        <td class="num">${Number(item.low_quality_chunk_count || 0).toLocaleString()}</td>
+        <td class="num">${(Number(item.low_quality_rate || 0) * 100).toFixed(2)}%</td>
+      </tr>
+    `).join("");
+    container.innerHTML = `
+      <table class="usage-table">
+        <thead>
+          <tr>
+            <th>文档类型</th>
+            <th style="text-align:right">文档数</th>
+            <th style="text-align:right">切片数</th>
+            <th style="text-align:right">平均质量分</th>
+            <th style="text-align:right">低质量切片</th>
+            <th style="text-align:right">低质量率</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    `;
+  },
+
+  renderIngestStepBreakdown(items = []) {
+    const container = $("#byokQualityIngestStepContainer");
+    if (!container) return;
+    if (!Array.isArray(items) || !items.length) {
+      container.textContent = "暂无入库阶段明细。";
+      return;
+    }
+    const rows = items.map((item) => `
+      <tr>
+        <td>${escapeHtml(item.step || "-")}</td>
+        <td class="num">${Number(item.run_count || 0).toLocaleString()}</td>
+        <td class="num">${(Number(item.ratio || 0) * 100).toFixed(2)}%</td>
+      </tr>
+    `).join("");
+    container.innerHTML = `
+      <table class="usage-table">
+        <thead>
+          <tr>
+            <th>入库阶段</th>
+            <th style="text-align:right">次数</th>
+            <th style="text-align:right">占比</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    `;
+  },
+
+  async loadQualityDashboard() {
+    const summary = $("#byokQualitySummary");
+    if (summary) summary.textContent = "质量指标加载中...";
+    const params = this.qualityScopeParams();
+    const days = Number($("#byokCompareWindowDays")?.value || 30) || 30;
+    const baselineDays = Number($("#byokCompareBaselineDays")?.value || 90) || 90;
+    const qualityRes = await api(`/stats/expert-quality?${params.toString()}`);
+    const detailParams = this.qualityScopeParams();
+    detailParams.set("days", String(Math.max(1, Math.min(days, 365))));
+    const detailRes = await api(`/stats/expert-quality-detail?${detailParams.toString()}`);
+    const windowParams = this.qualityScopeParams();
+    windowParams.set("days", String(Math.max(1, Math.min(days, 365))));
+    windowParams.set("baseline_days", String(Math.max(1, Math.min(baselineDays, 365))));
+    const windowRes = await api(`/stats/expert-model-compare-window?${windowParams.toString()}`);
+
+    const stats = qualityRes.stats || {};
+    const thresholds = qualityRes.thresholds || {};
+    const source = qualityRes.threshold_source || {};
+    if (summary) {
+      summary.textContent = [
+        "专家库质量看板",
+        `- 文档数: ${Number(stats.doc_count || 0).toLocaleString()}`,
+        `- 切片数: ${Number(stats.chunk_count || 0).toLocaleString()}`,
+        `- 平均质量分: ${Number(stats.avg_quality_score || 0).toFixed(2)}`,
+        `- 低质量切片: ${Number(stats.low_quality_chunk_count || 0).toLocaleString()} (${(Number(stats.low_quality_rate || 0) * 100).toFixed(2)}%)`,
+        `- 含报价敏感标记切片: ${Number(stats.pricing_related_chunk_count || 0).toLocaleString()}`,
+        `- KB_READY / FAILED: ${Number(stats.kb_ready_count || 0)} / ${Number(stats.kb_failed_count || 0)}`,
+        `- schema通过率: ${(Number(stats.schema_pass_rate || 0) * 100).toFixed(2)}%`,
+        `- 关键字段完整率: ${(Number(stats.key_field_completeness_rate || 0) * 100).toFixed(2)}%`,
+        `- 回退触发率: ${(Number(stats.fallback_trigger_rate || 0) * 100).toFixed(2)}%`,
+        `- 人工复核率: ${(Number(stats.manual_review_rate || 0) * 100).toFixed(2)}%`,
+        `- 证据覆盖率: ${(Number(stats.evidence_coverage_rate || 0) * 100).toFixed(2)}%`,
+        `- 阈值(low_confidence): ${Number(stats.low_quality_threshold || 0).toFixed(2)}`,
+        `- 阈值文件(runtime): ${source.runtime_path || "-"}`,
+        `- 当前阈值: ${JSON.stringify(thresholds)}`,
+      ].join("\n");
+    }
+    this.renderDocTypeBreakdown(detailRes.by_doc_type || []);
+    this.renderIngestStepBreakdown(detailRes.by_ingest_step || []);
+    this.renderModelCompare(detailRes.by_model || []);
+    this.renderModelWindowCompare(windowRes.items || []);
+  },
+
+  async exportQualityCsv() {
+    const params = this.qualityScopeParams();
+    const days = Number($("#byokCompareWindowDays")?.value || 30) || 30;
+    params.set("days", String(Math.max(1, Math.min(days, 365))));
+    const headers = new Headers();
+    if (state.apiKey) headers.set("X-API-Key", state.apiKey);
+    const response = await fetch(`/stats/expert-quality-export?${params.toString()}`, {
+      method: "GET",
+      headers,
+    });
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(text || `导出失败: HTTP ${response.status}`);
+    }
+    const csvText = await response.text();
+    const disposition = response.headers.get("Content-Disposition") || "";
+    const matched = disposition.match(/filename=\"?([^\";]+)\"?/i);
+    const filename = matched?.[1] || `expert_quality_detail_${Date.now()}.csv`;
+    const blob = new Blob([csvText], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    Toast.success(`已导出 ${filename}`);
+  },
+
+  thresholdInputMap() {
+    return {
+      low_confidence: "#thresholdLowConfidence",
+      strong_review_confidence: "#thresholdStrongReviewConfidence",
+      max_section_pages: "#thresholdMaxSectionPages",
+      max_chunk_tokens: "#thresholdMaxChunkTokens",
+      chunk_overlap_tokens: "#thresholdChunkOverlapTokens",
+    };
+  },
+
+  applyThresholdValues(values = {}) {
+    const mappings = this.thresholdInputMap();
+    Object.entries(mappings).forEach(([key, selector]) => {
+      const input = $(selector);
+      if (!input) return;
+      const raw = values[key];
+      if (raw === undefined || raw === null || Number.isNaN(Number(raw))) {
+        input.value = "";
+        return;
+      }
+      input.value = String(raw);
+    });
+  },
+
+  renderThresholdSuggestions(items = []) {
+    const container = $("#byokThresholdSuggestTable");
+    if (!container) return;
+    if (!Array.isArray(items) || !items.length) {
+      container.textContent = "暂无建议值，请先点击“生成建议值”。";
+      return;
+    }
+    const rows = items.map((item) => `
+      <tr>
+        <td>${escapeHtml(item.key || "-")}</td>
+        <td class="num">${Number(item.current_value || 0).toFixed(4)}</td>
+        <td class="num">${Number(item.suggested_value || 0).toFixed(4)}</td>
+        <td class="num">${Number(item.go_live_value || 0).toFixed(4)}</td>
+        <td>${escapeHtml(item.reason || "-")}</td>
+      </tr>
+    `).join("");
+    container.innerHTML = `
+      <table class="usage-table">
+        <thead>
+          <tr>
+            <th>阈值项</th>
+            <th style="text-align:right">当前值</th>
+            <th style="text-align:right">建议值</th>
+            <th style="text-align:right">上线值</th>
+            <th>建议原因</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    `;
+  },
+
+  async loadExpertThresholds() {
+    const res = await api("/stats/expert-thresholds");
+    this.applyThresholdValues(res.values || {});
+    const result = $("#byokThresholdResult");
+    if (result) {
+      result.textContent = [
+        "已加载阈值",
+        `values=${JSON.stringify(res.values || {})}`,
+        `source=${JSON.stringify(res.source || {})}`,
+      ].join("\n");
+    }
+  },
+
+  collectThresholdPayload() {
+    const mappings = this.thresholdInputMap();
+    const payload = {};
+    Object.entries(mappings).forEach(([key, selector]) => {
+      const raw = ($(selector)?.value || "").trim();
+      if (!raw) return;
+      payload[key] = Number(raw);
+    });
+    if (!Object.keys(payload).length) {
+      throw new Error("请至少输入一个阈值");
+    }
+    return payload;
+  },
+
+  async loadExpertGoLiveThresholds() {
+    const res = await api("/stats/expert-threshold-go-live");
+    const table = $("#byokThresholdSuggestTable");
+    if (table && Array.isArray(this.thresholdSuggestionCache) && this.thresholdSuggestionCache.length) {
+      this.thresholdSuggestionCache = this.thresholdSuggestionCache.map((item) => ({
+        ...item,
+        go_live_value: Number((res.values || {})[item.key] ?? item.go_live_value ?? item.current_value ?? 0),
+      }));
+      this.renderThresholdSuggestions(this.thresholdSuggestionCache);
+    }
+    const result = $("#byokThresholdResult");
+    if (result) {
+      result.textContent = [
+        "已加载上线值",
+        `values=${JSON.stringify(res.values || {})}`,
+        `source=${JSON.stringify(res.source || {})}`,
+      ].join("\n");
+    }
+  },
+
+  async loadExpertThresholdRecommendations() {
+    const params = this.qualityScopeParams();
+    const days = Number($("#byokCompareWindowDays")?.value || 30) || 30;
+    params.set("days", String(Math.max(1, Math.min(days, 365))));
+    const res = await api(`/stats/expert-threshold-recommendation?${params.toString()}`);
+    this.thresholdSuggestionCache = Array.isArray(res.suggestions) ? res.suggestions : [];
+    this.renderThresholdSuggestions(this.thresholdSuggestionCache);
+    const result = $("#byokThresholdResult");
+    if (result) {
+      result.textContent = [
+        "阈值建议已生成",
+        `low_quality_rate=${Number(res.low_quality_rate || 0).toFixed(4)}`,
+        `kb_failed_count=${Number(res.kb_failed_count || 0)}`,
+        `items=${this.thresholdSuggestionCache.length}`,
+      ].join("\n");
+    }
+    Toast.success("阈值建议已生成");
+  },
+
+  applySuggestedThresholds() {
+    const items = Array.isArray(this.thresholdSuggestionCache) ? this.thresholdSuggestionCache : [];
+    if (!items.length) {
+      throw new Error("暂无建议值，请先点击“生成建议值”");
+    }
+    const mappings = this.thresholdInputMap();
+    items.forEach((item) => {
+      const key = item?.key;
+      const selector = mappings[key];
+      if (!selector) return;
+      const input = $(selector);
+      if (!input) return;
+      const value = Number(item?.suggested_value);
+      if (Number.isFinite(value)) input.value = String(value);
+    });
+    Toast.success("已回填建议值，请确认后保存");
+  },
+
+  async saveExpertGoLiveThresholds() {
+    const payload = this.collectThresholdPayload();
+    const res = await api("/stats/expert-threshold-go-live", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const result = $("#byokThresholdResult");
+    if (result) {
+      result.textContent = [
+        "上线值保存成功",
+        `values=${JSON.stringify(res.values || {})}`,
+        `source=${JSON.stringify(res.source || {})}`,
+      ].join("\n");
+    }
+    if (Array.isArray(this.thresholdSuggestionCache) && this.thresholdSuggestionCache.length) {
+      this.thresholdSuggestionCache = this.thresholdSuggestionCache.map((item) => ({
+        ...item,
+        go_live_value: Number((res.values || {})[item.key] ?? item.go_live_value ?? item.current_value ?? 0),
+      }));
+      this.renderThresholdSuggestions(this.thresholdSuggestionCache);
+    }
+    Toast.success("上线值已保存");
+  },
+
+  async publishExpertGoLiveThresholds() {
+    const reasonInput = (window.prompt("请输入发布原因（可选）：", "运营确认后发布上线阈值") || "").trim();
+    const params = this.qualityScopeParams();
+    const res = await api(`/stats/expert-threshold-go-live/publish?${params.toString()}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        actor_user_id: "operator-ui",
+        reason: reasonInput || "manual_publish_from_ui",
+      }),
+    });
+    this.applyThresholdValues(res.values || {});
+    const result = $("#byokThresholdResult");
+    if (result) {
+      result.textContent = [
+        "上线值已发布到运行阈值",
+        `runtime_values=${JSON.stringify(res.values || {})}`,
+        `source=${JSON.stringify(res.source || {})}`,
+      ].join("\n");
+    }
+    Toast.success("已发布上线值");
+    await this.loadQualityDashboard();
+    await this.loadExpertThresholdRecommendations();
+  },
+
+  async saveExpertThresholds() {
+    const payload = this.collectThresholdPayload();
+    const res = await api("/stats/expert-thresholds", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    this.applyThresholdValues(res.values || {});
+    const result = $("#byokThresholdResult");
+    if (result) {
+      result.textContent = [
+        "阈值保存成功",
+        `values=${JSON.stringify(res.values || {})}`,
+        `source=${JSON.stringify(res.source || {})}`,
+      ].join("\n");
+    }
+    Toast.success("阈值已保存");
+    await this.loadQualityDashboard();
+    await this.loadExpertThresholdRecommendations();
   },
 
   async loadUsageStats() {
     const container = $("#usageStatsContainer");
+    if (!container) return;
     container.innerHTML = '<p class="hint">加载中...</p>';
 
     try {
